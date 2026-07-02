@@ -1,2 +1,2 @@
 print("Hello cường l")
-cường ăn l
+print("hello nghĩa")
