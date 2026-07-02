@@ -3,4 +3,6 @@ def greet(name: str) -> str:
 
 
 if __name__ == "__main__":
-    print(greet("mọi người"))
+    print(greet("mọi người")) 
+
+print("Hello, welcome to the chatbot AI project!")

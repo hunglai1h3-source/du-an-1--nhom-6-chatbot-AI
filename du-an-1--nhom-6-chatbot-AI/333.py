@@ -1,0 +1,1 @@
+print("Hello mọi người:")
