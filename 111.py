@@ -1,1 +1,1 @@
-print("Hello mọi người:")
+print("Hello nhóm 6")
