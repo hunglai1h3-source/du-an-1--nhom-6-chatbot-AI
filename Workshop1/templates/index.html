@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Assistant AI</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Chat Header -->
+        <header class="chat-header">
+            <div class="header-info">
+                <div class="bot-avatar">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <div>
+                    <h1>chatbot hỗ trợ tư vấn sức khỏe</h1>
+                    <span class="status-online"><i class="fa-solid fa-circle"></i> Trực tuyến</span>
+                </div>
+            </div>
+            <button id="clear-btn" class="clear-btn" title="Xóa hội thoại">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </header>
+
+        <!-- Chat Messages Area -->
+        <main class="chat-messages" id="chat-messages">
+            <!-- Welcome Message -->
+            <div class="message bot-message">
+                <div class="message-content">
+                    Xin chào! Mình là **chatbot hỗ trợ tư vấn sức khỏe**. Mình có thể giúp bạn giải đáp các thắc mắc về học tập, lập trình hoặc ôn thi. Bạn cần hỗ trợ gì hôm nay?
+                </div>
+                <div class="message-time">Hệ thống</div>
+            </div>
+        </main>
+
+        <!-- Chat Input Area -->
+        <footer class="chat-input-area">
+            <form id="chat-form" onsubmit="event.preventDefault();">
+                <input type="text" id="user-input" placeholder="Nhập câu hỏi của bạn tại đây..." autocomplete="off" required>
+                <button type="submit" id="send-btn">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <!-- Script -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
