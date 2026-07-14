@@ -4,11 +4,15 @@ import os
 from dotenv import load_dotenv
 import webbrowser
 from threading import Timer
+import time
 
 # Load variables from .env file
 load_dotenv()
-print(os.getenv("OPENAI_API_KEY"))
+
 app = Flask(__name__)
+@app.route("/")
+def index():
+    return render_template("index.html")
 
 # Initialize OpenAI client with Google Gemini's OpenAI-compatible endpoint
 # This allows using the Gemini API Key (AIzaSy...) with the openai python package.
@@ -49,60 +53,57 @@ Các thông tin cần hỏi gồm:
 Không hỏi nhiều câu trong cùng một lần.
 """
 }
-@app.route("/")
-def index():
-    return render_template("index.html")
-
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.json
-    user_message = data.get("message", "")
+    data = request.get_json(silent=True) or {}
+
+    user_message = data.get("message", "").strip()
     history = data.get("history", [])
 
     if not user_message:
-        return jsonify({"error": "Message is empty"}), 400
+        return jsonify({
+            "error": "Vui lòng nhập nội dung cần tư vấn."
+        }), 400
 
     try:
-        # Build the conversation history for context
         messages = [SYSTEM_PROMPT]
-        
-        # Append previous conversation history
-        for msg in history:
-            messages.append({
-                "role": msg.get("role"),
-                "content": msg.get("content")
-            })
-            
-        # Append the new user message
-        messages.append({"role": "user", "content": user_message})
 
-        # Call the API using gemini-3.5-flash model
+        # Chỉ lấy 12 tin nhắn gần nhất
+        for msg in history[-12:]:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role in ["user", "assistant"] and content:
+                messages.append({
+                    "role": role,
+                    "content": content
+                })
+
+        messages.append({
+            "role": "user",
+            "content": user_message
+        })
+
+        
         response = client.chat.completions.create(
-            model="gemini-3.5-flash",
-            messages=messages,
-            temperature=0.7
-        )
+    model="gemini-3.5-flash",
+    messages=messages
+)
 
         reply = response.choices[0].message.content
-        return jsonify({"reply": reply})
 
-    except Exception as e:
-        print(f"Error calling AI API: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "reply": reply
+        })
+
+    except Exception as error:
+        print(f"Lỗi gọi AI API: {error}")
+
+        return jsonify({
+            "error": "Hệ thống đang gặp lỗi. Vui lòng thử lại."
+        }), 500
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
-if __name__ == "__main__":
-    webbrowser.open("http://127.0.0.1:5000")
-    app.run(debug=True)
-    import webbrowser
-from threading import Timer
+    start_time = time.perf_counter()
 
-chrome_path = "C:/Program Files/Google/Chrome/Application/chrome.exe %s"
-
-def open_browser():
-    webbrowser.open("http://127.0.0.1:5000")
-
-if __name__ == "__main__":
-    Timer(1, open_browser).start()
-    app.run(debug=True, port=5000)

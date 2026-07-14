@@ -2,56 +2,247 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Study Assistant AI</title>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Custom Style -->
-    <link rel="stylesheet" href="/static/style.css">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>MediCare AI - Tư vấn sức khỏe</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
 </head>
+
 <body>
-    <div class="chat-container">
-        <!-- Chat Header -->
-        <header class="chat-header">
-            <div class="header-info">
-                <div class="bot-avatar">
-                    <i class="fa-solid fa-graduation-cap"></i>
-                </div>
-                <div>
-                    <h1>chatbot hỗ trợ tư vấn sức khỏe</h1>
-                    <span class="status-online"><i class="fa-solid fa-circle"></i> Trực tuyến</span>
-                </div>
-            </div>
-            <button id="clear-btn" class="clear-btn" title="Xóa hội thoại">
-                <i class="fa-solid fa-trash-can"></i>
-            </button>
-        </header>
 
-        <!-- Chat Messages Area -->
-        <main class="chat-messages" id="chat-messages">
-            <!-- Welcome Message -->
-            <div class="message bot-message">
-                <div class="message-content">
-                    Xin chào! Mình là **chatbot hỗ trợ tư vấn sức khỏe**. Mình có thể giúp bạn giải đáp các thắc mắc về vấn đề sức khỏe. Bạn cần hỗ trợ gì hôm nay?
-                </div>
-                <div class="message-time">Hệ thống</div>
-            </div>
-        </main>
+    <header class="top-header">
+        <div class="brand">
+            <div class="brand-logo">✚</div>
 
-        <!-- Chat Input Area -->
-        <footer class="chat-input-area">
-            <form id="chat-form" onsubmit="event.preventDefault();">
-                <input type="text" id="user-input" placeholder="Nhập câu hỏi của bạn tại đây..." autocomplete="off" required>
-                <button type="submit" id="send-btn">
-                    <i class="fa-solid fa-paper-plane"></i>
+            <div>
+                <h1>MediCare AI</h1>
+                <p>Trợ lý hỗ trợ tư vấn sức khỏe ban đầu</p>
+            </div>
+        </div>
+
+        <div class="online-status">
+            <span class="online-dot"></span>
+            Đang hoạt động
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <!-- Cột thông tin bên trái -->
+        <aside class="sidebar">
+
+            <section class="sidebar-card">
+                <h2>Chúng tôi có thể hỗ trợ</h2>
+
+                <ul>
+                    <li>Phân tích triệu chứng ban đầu</li>
+                    <li>Gợi ý chuyên khoa phù hợp</li>
+                    <li>Giải thích thông tin sức khỏe</li>
+                    <li>Nhận diện dấu hiệu nguy hiểm</li>
+                </ul>
+            </section>
+
+            <section class="emergency-card">
+                <h3>Trường hợp khẩn cấp</h3>
+
+                <p>
+                    Nếu bạn đang khó thở, đau ngực, co giật,
+                    bất tỉnh hoặc yếu liệt đột ngột, hãy gọi
+                    cấp cứu ngay.
+                </p>
+
+                <a href="tel:115" class="emergency-button">
+                    Gọi 115
+                </a>
+            </section>
+
+            <section class="privacy-card">
+                <h3>Bảo vệ thông tin</h3>
+
+                <p>
+                    Không gửi số căn cước, địa chỉ nhà,
+                    hồ sơ bệnh án hoặc thông tin cá nhân
+                    nhạy cảm.
+                </p>
+            </section>
+
+        </aside>
+
+        <!-- Khung chatbot -->
+        <section class="chat-container">
+
+            <div class="chat-header">
+
+                <div class="doctor-avatar">
+                    AI
+                </div>
+
+                <div class="chat-header-info">
+                    <h2>Trợ lý sức khỏe MediCare</h2>
+
+                    <p>
+                        Hỗ trợ cung cấp thông tin sức khỏe ban đầu
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    id="clearChatButton"
+                    class="clear-button"
+                    title="Xóa cuộc trò chuyện"
+                >
+                    Xóa chat
                 </button>
-            </form>
-        </footer>
-    </div>
 
-    <!-- Script -->
-    <script src="/static/app.js"></script>
+            </div>
+
+            <!-- Các câu hỏi gợi ý -->
+            <div class="quick-questions">
+
+                <button
+                    type="button"
+                    class="quick-question"
+                    data-message="Tôi bị đau đầu từ sáng"
+                >
+                    Tôi bị đau đầu
+                </button>
+
+                <button
+                    type="button"
+                    class="quick-question"
+                    data-message="Tôi bị sốt và mệt"
+                >
+                    Tôi bị sốt
+                </button>
+
+                <button
+                    type="button"
+                    class="quick-question"
+                    data-message="Tôi bị đau bụng sau khi ăn"
+                >
+                    Tôi bị đau bụng
+                </button>
+
+                <button
+                    type="button"
+                    class="quick-question"
+                    data-message="Tôi muốn hỏi về kết quả xét nghiệm"
+                >
+                    Kết quả xét nghiệm
+                </button>
+
+            </div>
+
+            <!-- Nội dung hội thoại -->
+            <div id="chatBox" class="chat-box">
+
+                <div class="message-row bot-row">
+
+                    <div class="message-avatar">
+                        AI
+                    </div>
+
+                    <div class="message-content">
+
+                        <div class="message bot-message">
+                            Xin chào! Tôi là MediCare AI.
+                            Bạn đang gặp vấn đề sức khỏe gì?
+                        </div>
+
+                        <span class="message-time">
+                            Vừa xong
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Xem trước ảnh -->
+            <div
+                id="imagePreviewContainer"
+                class="image-preview-container"
+                hidden
+            >
+
+                <img
+                    id="imagePreview"
+                    alt="Ảnh đã chọn"
+                >
+
+                <div class="preview-information">
+                    <span>Ảnh đã chọn</span>
+                    <small>JPG, PNG hoặc WEBP</small>
+                </div>
+
+                <button
+                    type="button"
+                    id="removeImageButton"
+                    class="remove-image-button"
+                    title="Xóa ảnh"
+                >
+                    ×
+                </button>
+
+            </div>
+
+            <!-- Khu vực nhập -->
+            <div class="input-container">
+
+                <input
+                    type="file"
+                    id="imageInput"
+                    accept="image/jpeg,image/png,image/webp"
+                    hidden
+                >
+
+                <button
+                    type="button"
+                    id="imageButton"
+                    class="icon-button"
+                    title="Thêm ảnh"
+                >
+                    📎
+                </button>
+
+                <textarea
+                    id="messageInput"
+                    rows="1"
+                    placeholder="Mô tả triệu chứng hoặc nhập câu hỏi..."
+                ></textarea>
+
+                <button
+                    type="button"
+                    id="sendButton"
+                    class="send-button"
+                >
+                    <span>Gửi</span>
+                    <span>➤</span>
+                </button>
+
+            </div>
+
+            <div class="chat-disclaimer">
+                MediCare AI không thay thế bác sĩ và không đưa ra
+                chẩn đoán hoặc đơn thuốc.
+            </div>
+
+        </section>
+
+    </main>
+
+    <script
+        src="{{ url_for('static', filename='app.js') }}"
+    ></script>
+
 </body>
 </html>
