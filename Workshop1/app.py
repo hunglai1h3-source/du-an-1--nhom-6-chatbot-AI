@@ -1,19 +1,8 @@
 from flask import Flask, jsonify, render_template, request
 from openai import OpenAI
 from dotenv import load_dotenv
-
 from pathlib import Path
 from threading import Timer
-import time
-
-# Load variables from .env file
-load_dotenv()
-
-app = Flask(__name__)
-@app.route("/")
-def index():
-    return render_template("index.html")
-
 import os
 import random
 import time
@@ -45,15 +34,16 @@ if not API_KEY:
         "OPENAI_API_KEY=API_KEY_GEMINI_CUA_BAN"
     )
 
-# Giữ model cũ theo yêu cầu.
-# Có thể đổi trong .env bằng: MODEL_NAME=ten-model-khac
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash").strip()
+MODEL_NAME = os.getenv(
+    "MODEL_NAME",
+    "gemini-2.5-flash-lite"
+).strip()
 
 client = OpenAI(
     api_key=API_KEY,
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-    timeout=45.0,
-    max_retries=0,  # Tự retry bằng hàm bên dưới để kiểm soát rõ hơn
+    timeout=20.0,
+    max_retries=0
 )
 
 
@@ -154,11 +144,13 @@ Sau khi đủ thông tin, câu trả lời cần có:
 7. Một câu hỏi tiếp theo nếu còn thiếu thông tin quan trọng.
 
 Không nói:
+
 - "Bạn chắc chắn bị..."
 - "Đây chính xác là..."
 - "Tôi chẩn đoán bạn mắc..."
 
 Hãy dùng:
+
 - "Có thể liên quan đến..."
 - "Một số khả năng thường gặp gồm..."
 - "Chưa đủ thông tin để kết luận..."
@@ -249,6 +241,7 @@ Không đề xuất:
 Nếu người dùng dưới 18 tuổi, đang mang thai, đang cho con bú,
 có bệnh nền nặng, BMI quá thấp hoặc có dấu hiệu rối loạn ăn uống,
 không lập kế hoạch hạn chế calo cứng nhắc.
+
 Hãy khuyến nghị gặp bác sĩ hoặc chuyên gia dinh dưỡng.
 
 =========================================================
@@ -355,77 +348,21 @@ Không viết quá dài nếu người dùng không yêu cầu chi tiết.
 """
 }
 
-@app.route("/chat", methods=["POST"])
-def chat():
-    data = request.get_json(silent=True) or {}
-
-    user_message = data.get("message", "").strip()
-    history = data.get("history", [])
-
-    if not user_message:
-        return jsonify({
-            "error": "Vui lòng nhập nội dung cần tư vấn."
-        }), 400
-
-    try:
-        messages = [SYSTEM_PROMPT]
-
-        # Chỉ lấy 12 tin nhắn gần nhất
-        for msg in history[-12:]:
-            role = msg.get("role")
-            content = msg.get("content")
-
-            if role in ["user", "assistant"] and content:
-                messages.append({
-                    "role": role,
-                    "content": content
-                })
-
-        messages.append({
-            "role": "user",
-            "content": user_message
-        })
-
-        
-        response = client.chat.completions.create(
-    model="gemini-3.5-flash",
-    messages=messages
-)
-
-        reply = response.choices[0].message.content
-
-        return jsonify({
-            "reply": reply
-        })
-
-    except Exception as error:
-        print(f"Lỗi gọi AI API: {error}")
-
-        return jsonify({
-            "error": "Hệ thống đang gặp lỗi. Vui lòng thử lại."
-        }), 500
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
-    start_time = time.perf_counter()
-
-
 
 # =========================================================
 # 4. HÀM TIỆN ÍCH
 # =========================================================
 
 def clean_history(history):
-    """
-    Làm sạch lịch sử từ frontend và giới hạn số lượng token gửi lên API.
-    """
+    """Làm sạch và giới hạn lịch sử hội thoại."""
+
     if not isinstance(history, list):
         return []
 
     cleaned = []
 
-    # Chỉ giữ 16 tin nhắn gần nhất để hạn chế lỗi quota/token.
-    for item in history[-16:]:
+    # Chỉ giữ 12 tin nhắn gần nhất để tiết kiệm token.
+    for item in history[-12:]:
         if not isinstance(item, dict):
             continue
 
@@ -445,16 +382,15 @@ def clean_history(history):
 
         cleaned.append({
             "role": role,
-            "content": content[:2500]
+            "content": content[:2000]
         })
 
     return cleaned
 
 
 def get_error_status(error):
-    """
-    Lấy HTTP status code từ lỗi API nếu thư viện cung cấp.
-    """
+    """Lấy HTTP status code của lỗi API."""
+
     status_code = getattr(error, "status_code", None)
 
     if isinstance(status_code, int):
@@ -469,79 +405,20 @@ def get_error_status(error):
     return None
 
 
-def is_retryable_error(error):
-    """
-    Chỉ retry với lỗi tạm thời: 429, 500, 502, 503, 504 hoặc timeout/kết nối.
-    """
-    status_code = get_error_status(error)
+def call_ai(messages):
+    """Gọi Gemini qua endpoint tương thích OpenAI."""
 
-    if status_code in {429, 500, 502, 503, 504}:
-        return True
-
-    error_text = str(error).lower()
-
-    retry_keywords = (
-        "429",
-        "resource_exhausted",
-        "rate limit",
-        "too many requests",
-        "temporarily unavailable",
-        "service unavailable",
-        "timeout",
-        "timed out",
-        "connection error",
-        "connection reset",
+    return client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        temperature=0.3,
+        max_tokens=600
     )
-
-    return any(keyword in error_text for keyword in retry_keywords)
-
-
-def call_ai_with_retry(messages, max_retries=3):
-    """
-    Gọi Gemini qua endpoint tương thích OpenAI.
-    Tự thử lại khi gặp lỗi tạm thời.
-    """
-    last_error = None
-
-    for attempt in range(max_retries):
-        try:
-            return client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                temperature=0.3,
-                max_tokens=1200,
-            )
-
-        except Exception as error:
-            last_error = error
-
-            if not is_retryable_error(error):
-                raise
-
-            if attempt >= max_retries - 1:
-                break
-
-            # Exponential backoff: khoảng 2s, 4s...
-            wait_seconds = (2 ** (attempt + 1)) + random.uniform(0, 0.8)
-
-            print(
-                f"API tạm thời quá tải. "
-                f"Thử lại lần {attempt + 2}/{max_retries} "
-                f"sau {wait_seconds:.1f} giây..."
-            )
-
-            time.sleep(wait_seconds)
-
-    if last_error is not None:
-        raise last_error
-
-    raise RuntimeError("Không nhận được phản hồi từ dịch vụ AI.")
 
 
 def build_error_response(error):
-    """
-    Chuyển lỗi kỹ thuật thành thông báo dễ hiểu cho giao diện.
-    """
+    """Chuyển lỗi API thành thông báo dễ hiểu."""
+
     status_code = get_error_status(error)
     error_text = str(error).lower()
 
@@ -555,9 +432,8 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Gemini API đang vượt giới hạn sử dụng hoặc đã hết quota. "
-                "Vui lòng chờ một lúc rồi thử lại. Nếu lỗi kéo dài, "
-                "hãy kiểm tra quota hoặc billing của API key."
+                "Gemini API đã vượt giới hạn sử dụng hoặc hết quota. "
+                "Bạn hãy chờ quota được đặt lại hoặc đổi sang model còn lượt."
             ),
             "error_code": "RATE_LIMIT"
         }), 429
@@ -571,7 +447,7 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "API key không hợp lệ, hết quyền hoặc chưa được cấu hình đúng "
+                "API key không hợp lệ hoặc chưa được cấu hình đúng "
                 "trong file .env."
             ),
             "error_code": "INVALID_API_KEY"
@@ -579,23 +455,22 @@ def build_error_response(error):
 
     if (
         status_code == 404
-        or "404" in error_text
         or "model not found" in error_text
         or "not found for api version" in error_text
     ):
         return jsonify({
             "error": (
-                f"Không tìm thấy hoặc không được phép dùng model '{MODEL_NAME}'. "
+                f"Không tìm thấy model '{MODEL_NAME}'. "
                 "Hãy kiểm tra MODEL_NAME trong file .env."
             ),
             "error_code": "MODEL_NOT_FOUND"
         }), 404
 
-    if status_code == 400 or "400" in error_text:
+    if status_code == 400:
         return jsonify({
             "error": (
                 "Yêu cầu gửi đến AI không hợp lệ. "
-                "Có thể lịch sử hội thoại hoặc tên model chưa đúng."
+                "Có thể lịch sử trò chuyện hoặc tên model chưa đúng."
             ),
             "error_code": "BAD_REQUEST"
         }), 400
@@ -604,7 +479,7 @@ def build_error_response(error):
         return jsonify({
             "error": (
                 "Dịch vụ AI đang tạm thời không ổn định. "
-                "Vui lòng thử lại sau ít phút."
+                "Vui lòng thử lại sau."
             ),
             "error_code": "SERVICE_UNAVAILABLE"
         }), 503
@@ -612,7 +487,7 @@ def build_error_response(error):
     return jsonify({
         "error": (
             "Không thể kết nối với hệ thống AI. "
-            "Vui lòng xem Terminal để biết lỗi kỹ thuật chi tiết."
+            "Vui lòng xem Terminal để kiểm tra lỗi chi tiết."
         ),
         "error_code": "API_ERROR"
     }), 500
@@ -667,7 +542,12 @@ def chat():
     ]
 
     try:
-        response = call_ai_with_retry(messages)
+        start_time = time.perf_counter()
+
+        response = call_ai(messages)
+
+        elapsed_time = time.perf_counter() - start_time
+        print(f"Thời gian Gemini phản hồi: {elapsed_time:.2f} giây")
 
         if not response.choices:
             return jsonify({
@@ -686,7 +566,11 @@ def chat():
         })
 
     except Exception as error:
-        print(f"Gemini API error: {type(error).__name__}: {error}")
+        print(
+            f"Gemini API error: "
+            f"{type(error).__name__}: {error}"
+        )
+
         return build_error_response(error)
 
 
@@ -695,10 +579,12 @@ def chat():
 # =========================================================
 
 def open_browser():
-    webbrowser.open_new("http://127.0.0.1:5000")
+    webbrowser.open_new("http://127.0.0.1:5000/")
 
 
 if __name__ == "__main__":
+    print(app.url_map)
+
     Timer(1.2, open_browser).start()
 
     app.run(
