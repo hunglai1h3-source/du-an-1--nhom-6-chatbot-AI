@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 
 from pathlib import Path
 from threading import Timer
-<<<<<<< HEAD
 import time
 
 # Load variables from .env file
@@ -14,7 +13,7 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     return render_template("index.html")
-=======
+
 import os
 import random
 import time
@@ -49,7 +48,6 @@ if not API_KEY:
 # Giữ model cũ theo yêu cầu.
 # Có thể đổi trong .env bằng: MODEL_NAME=ten-model-khac
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash").strip()
->>>>>>> e399649 (upload project)
 
 client = OpenAI(
     api_key=API_KEY,
@@ -356,7 +354,7 @@ Không viết quá dài nếu người dùng không yêu cầu chi tiết.
 Ưu tiên nội dung thực tế, có thể áp dụng.
 """
 }
-<<<<<<< HEAD
+
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
@@ -411,7 +409,6 @@ if __name__ == "__main__":
     app.run(debug=True, port=5000)
     start_time = time.perf_counter()
 
-=======
 
 
 # =========================================================
@@ -710,4 +707,3 @@ if __name__ == "__main__":
         debug=True,
         use_reloader=False
     )
->>>>>>> e399649 (upload project)
