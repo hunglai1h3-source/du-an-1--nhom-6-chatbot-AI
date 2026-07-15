@@ -1,330 +1,492 @@
-const chatBox = document.getElementById("chatBox");
-const messageInput = document.getElementById("messageInput");
-const sendButton = document.getElementById("sendButton");
-const clearChatButton = document.getElementById("clearChatButton");
+const chatForm = document.getElementById("chatForm");
+const chatInput = document.getElementById("chatInput");
+const chatBody = document.getElementById("chatBody");
+const sendBtn = document.getElementById("sendBtn");
 
 const imageInput = document.getElementById("imageInput");
-const imageButton = document.getElementById("imageButton");
+const attachImageBtn = document.getElementById("attachImageBtn");
+const imagePreviewPanel = document.getElementById("imagePreviewPanel");
 const imagePreview = document.getElementById("imagePreview");
-const imagePreviewContainer = document.getElementById(
-    "imagePreviewContainer"
-);
-const removeImageButton = document.getElementById(
-    "removeImageButton"
-);
+const imageFileName = document.getElementById("imageFileName");
+const removeImageBtn = document.getElementById("removeImageBtn");
 
-const quickQuestions = document.querySelectorAll(
-    ".quick-question"
-);
+const openLoginBtn = document.getElementById("openLoginBtn");
+const closeLoginBtn = document.getElementById("closeLoginBtn");
+const loginModal = document.getElementById("loginModal");
+const loginForm = document.getElementById("loginForm");
+const loginMessage = document.getElementById("loginMessage");
 
-let selectedImage = null;
+const openRegisterBtn = document.getElementById("openRegisterBtn");
+const closeRegisterBtn = document.getElementById("closeRegisterBtn");
+const registerModal = document.getElementById("registerModal");
+const registerForm = document.getElementById("registerForm");
+const registerMessage = document.getElementById("registerMessage");
+const backToLoginBtn = document.getElementById("backToLoginBtn");
+
+const logoutBtn = document.getElementById("logoutBtn");
+const userName = document.getElementById("userName");
+
+const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+const navLinks = document.getElementById("navLinks");
+const dropdown = document.querySelector(".dropdown");
+const dropdownTrigger = document.querySelector(".dropdown-trigger");
+
 let conversationHistory = [];
+let selectedImage = null;
+let selectedImageUrl = null;
+let isSending = false;
 
-const allowedImageTypes = [
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = value;
+  return div.innerHTML;
+}
+
+function formatMessage(value) {
+  return escapeHtml(value)
+    .replace(/\n/g, "<br>")
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+}
+
+function getCurrentTime() {
+  return new Intl.DateTimeFormat("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date());
+}
+
+function scrollChatToBottom() {
+  chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+function appendMessage(content, role, imageUrl = null) {
+  const row = document.createElement("div");
+  row.className = `message-row ${role}`;
+
+  if (role === "assistant") {
+    const avatar = document.createElement("div");
+    avatar.className = "small-avatar";
+    avatar.textContent = "🤖";
+    row.appendChild(avatar);
+  }
+
+  const bubble = document.createElement("div");
+  bubble.className = "message-bubble";
+
+  if (imageUrl) {
+    const image = document.createElement("img");
+    image.className = "message-image";
+    image.src = imageUrl;
+    image.alt = "Ảnh người dùng gửi";
+    bubble.appendChild(image);
+  }
+
+  if (content) {
+    const text = document.createElement("div");
+    text.innerHTML = formatMessage(content);
+    bubble.appendChild(text);
+  }
+
+  const time = document.createElement("time");
+  time.textContent = `${getCurrentTime()}${role === "user" ? " ✓✓" : ""}`;
+  bubble.appendChild(time);
+
+  row.appendChild(bubble);
+  chatBody.appendChild(row);
+  scrollChatToBottom();
+}
+
+function appendTypingIndicator() {
+  const row = document.createElement("div");
+  row.className = "message-row assistant";
+
+  row.innerHTML = `
+    <div class="small-avatar">🤖</div>
+    <div class="message-bubble typing-bubble">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  `;
+
+  chatBody.appendChild(row);
+  scrollChatToBottom();
+
+  return row;
+}
+
+function autoResizeTextarea() {
+  chatInput.style.height = "auto";
+  chatInput.style.height = `${Math.min(chatInput.scrollHeight, 130)}px`;
+}
+
+function clearSelectedImage() {
+  selectedImage = null;
+
+  if (selectedImageUrl) {
+    URL.revokeObjectURL(selectedImageUrl);
+    selectedImageUrl = null;
+  }
+
+  imageInput.value = "";
+  imagePreview.src = "";
+  imageFileName.textContent = "";
+  imagePreviewPanel.classList.add("hidden");
+}
+
+attachImageBtn.addEventListener("click", () => {
+  imageInput.click();
+});
+
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files[0];
+
+  if (!file) return;
+
+  const allowedTypes = [
     "image/jpeg",
     "image/png",
     "image/webp"
-];
+  ];
 
-const maximumImageSize = 5 * 1024 * 1024;
-
-
-function getCurrentTime() {
-    return new Date().toLocaleTimeString("vi-VN", {
-        hour: "2-digit",
-        minute: "2-digit"
-    });
-}
-
-
-function createMessage(role, text, imageData = null) {
-    const messageRow = document.createElement("div");
-
-    messageRow.className =
-        role === "user"
-            ? "message-row user-row"
-            : "message-row bot-row";
-
-    if (role !== "user") {
-        const avatar = document.createElement("div");
-
-        avatar.className = "message-avatar";
-        avatar.textContent = "AI";
-
-        messageRow.appendChild(avatar);
-    }
-
-    const content = document.createElement("div");
-    content.className = "message-content";
-
-    const message = document.createElement("div");
-
-    message.className =
-        role === "user"
-            ? "message user-message"
-            : "message bot-message";
-
-    if (imageData) {
-        const image = document.createElement("img");
-
-        image.src = imageData;
-        image.alt = "Ảnh người dùng gửi";
-        image.className = "message-image";
-
-        message.appendChild(image);
-    }
-
-    if (text) {
-        const textNode = document.createElement("div");
-
-        textNode.textContent = text;
-        message.appendChild(textNode);
-    }
-
-    const time = document.createElement("span");
-
-    time.className = "message-time";
-    time.textContent = getCurrentTime();
-
-    content.appendChild(message);
-    content.appendChild(time);
-    messageRow.appendChild(content);
-
-    chatBox.appendChild(messageRow);
-    scrollToBottom();
-}
-
-
-function scrollToBottom() {
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-
-function showTypingIndicator() {
-    const row = document.createElement("div");
-
-    row.id = "typingIndicator";
-    row.className = "message-row bot-row";
-
-    row.innerHTML = `
-        <div class="message-avatar">AI</div>
-
-        <div class="message-content">
-            <div class="message bot-message">
-                <div class="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-        </div>
-    `;
-
-    chatBox.appendChild(row);
-    scrollToBottom();
-}
-
-
-function removeTypingIndicator() {
-    const typingIndicator =
-        document.getElementById("typingIndicator");
-
-    if (typingIndicator) {
-        typingIndicator.remove();
-    }
-}
-
-
-function clearSelectedImage() {
-    selectedImage = null;
-    imageInput.value = "";
-    imagePreview.src = "";
-    imagePreviewContainer.hidden = true;
-}
-
-
-imageButton.addEventListener("click", () => {
-    imageInput.click();
-});
-
-
-imageInput.addEventListener("change", () => {
-    const file = imageInput.files[0];
-
-    if (!file) {
-        return;
-    }
-
-    if (!allowedImageTypes.includes(file.type)) {
-        alert("Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.");
-        clearSelectedImage();
-        return;
-    }
-
-    if (file.size > maximumImageSize) {
-        alert("Dung lượng ảnh không được vượt quá 5 MB.");
-        clearSelectedImage();
-        return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = event => {
-        selectedImage = event.target.result;
-        imagePreview.src = selectedImage;
-        imagePreviewContainer.hidden = false;
-    };
-
-    reader.readAsDataURL(file);
-});
-
-
-removeImageButton.addEventListener("click", () => {
+  if (!allowedTypes.includes(file.type)) {
+    alert("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.");
     clearSelectedImage();
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert("Ảnh không được vượt quá 5 MB.");
+    clearSelectedImage();
+    return;
+  }
+
+  selectedImage = file;
+  selectedImageUrl = URL.createObjectURL(file);
+
+  imagePreview.src = selectedImageUrl;
+  imageFileName.textContent = file.name;
+  imagePreviewPanel.classList.remove("hidden");
 });
 
-
-quickQuestions.forEach(button => {
-    button.addEventListener("click", () => {
-        messageInput.value = button.dataset.message;
-        messageInput.focus();
-    });
-});
-
-
-messageInput.addEventListener("input", () => {
-    messageInput.style.height = "auto";
-
-    messageInput.style.height =
-        Math.min(messageInput.scrollHeight, 120) + "px";
-});
-
+removeImageBtn.addEventListener("click", clearSelectedImage);
 
 async function sendMessage() {
-    const message = messageInput.value.trim();
+  if (isSending) return;
 
-    if (!message && !selectedImage) {
-        messageInput.focus();
-        return;
-    }
+  const message = chatInput.value.trim();
 
-    const currentImage = selectedImage;
+  if (!message && !selectedImage) {
+    chatInput.focus();
+    return;
+  }
 
-    const userText =
-        message || "Hãy hỗ trợ phân tích ảnh này.";
+  const imageToSend = selectedImage;
+  const imageUrlForMessage = selectedImageUrl;
 
-    createMessage(
-        "user",
-        userText,
-        currentImage
+  appendMessage(
+    message || "Tôi gửi một ảnh cần tư vấn.",
+    "user",
+    imageUrlForMessage
+  );
+
+  chatInput.value = "";
+  autoResizeTextarea();
+
+  selectedImage = null;
+  imageInput.value = "";
+  imagePreview.src = "";
+  imageFileName.textContent = "";
+  imagePreviewPanel.classList.add("hidden");
+
+  isSending = true;
+  sendBtn.disabled = true;
+  sendBtn.textContent = "…";
+
+  const typingIndicator = appendTypingIndicator();
+
+  try {
+    const formData = new FormData();
+
+    formData.append("message", message);
+    formData.append(
+      "history",
+      JSON.stringify(conversationHistory)
     );
 
-    messageInput.value = "";
-    messageInput.style.height = "auto";
-
-    clearSelectedImage();
-
-    sendButton.disabled = true;
-    imageButton.disabled = true;
-
-    showTypingIndicator();
-
-    try {
-        const response = await fetch("/chat", {
-            method: "POST",
-
-            headers: {
-                "Content-Type": "application/json"
-            },
-
-            body: JSON.stringify({
-                message: userText,
-                image: currentImage,
-                history: conversationHistory
-            })
-        });
-
-        const data = await response.json();
-
-        removeTypingIndicator();
-
-        if (!response.ok) {
-            throw new Error(
-                data.error ||
-                "Không thể kết nối với hệ thống."
-            );
-        }
-
-        createMessage("assistant", data.reply);
-
-        conversationHistory.push({
-            role: "user",
-            content: userText
-        });
-
-        conversationHistory.push({
-            role: "assistant",
-            content: data.reply
-        });
-
-    } catch (error) {
-        removeTypingIndicator();
-
-        createMessage(
-            "assistant",
-            "Hệ thống đang gặp lỗi. Vui lòng thử lại sau."
-        );
-
-        console.error(error);
-
-    } finally {
-        sendButton.disabled = false;
-        imageButton.disabled = false;
-        messageInput.focus();
+    if (imageToSend) {
+      formData.append("image", imageToSend);
     }
+
+    const response = await fetch("/chat", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await response.json();
+
+    typingIndicator.remove();
+
+    if (!response.ok) {
+      appendMessage(
+        data.error || "Không thể kết nối với hệ thống AI.",
+        "assistant"
+      );
+      return;
+    }
+
+    appendMessage(data.reply, "assistant");
+
+    conversationHistory.push(
+      {
+        role: "user",
+        content: message || "Người dùng đã gửi một ảnh sức khỏe."
+      },
+      {
+        role: "assistant",
+        content: data.reply
+      }
+    );
+
+    conversationHistory = conversationHistory.slice(-12);
+
+  } catch (error) {
+    typingIndicator.remove();
+
+    appendMessage(
+      "Không thể kết nối với máy chủ Flask.",
+      "assistant"
+    );
+
+    console.error(error);
+
+  } finally {
+    isSending = false;
+    sendBtn.disabled = false;
+    sendBtn.textContent = "➤";
+    chatInput.focus();
+  }
 }
 
-
-sendButton.addEventListener("click", sendMessage);
-
-
-messageInput.addEventListener("keydown", event => {
-    if (
-        event.key === "Enter" &&
-        !event.shiftKey
-    ) {
-        event.preventDefault();
-        sendMessage();
-    }
+chatForm.addEventListener("submit", event => {
+  event.preventDefault();
+  sendMessage();
 });
 
+chatInput.addEventListener("input", autoResizeTextarea);
 
-clearChatButton.addEventListener("click", () => {
-    const confirmClear = confirm(
-        "Bạn có muốn xóa toàn bộ cuộc trò chuyện không?"
-    );
+chatInput.addEventListener("keydown", event => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+});
 
-    if (!confirmClear) {
-        return;
+document.querySelectorAll("[data-question]").forEach(button => {
+  button.addEventListener("click", () => {
+    chatInput.value = button.dataset.question;
+    autoResizeTextarea();
+    chatInput.focus();
+  });
+});
+
+document.querySelectorAll("[data-specialty]").forEach(button => {
+  button.addEventListener("click", () => {
+    const specialty = button.dataset.specialty;
+
+    chatInput.value =
+      `Tôi muốn được tư vấn về chuyên khoa ${specialty}.`;
+
+    autoResizeTextarea();
+    chatInput.focus();
+
+    document.getElementById("tu-van").scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+  });
+});
+
+function openModal(modal) {
+  modal.classList.add("show");
+  document.body.classList.add("modal-open");
+}
+
+function closeModal(modal) {
+  modal.classList.remove("show");
+  document.body.classList.remove("modal-open");
+}
+
+openLoginBtn.addEventListener("click", () => {
+  loginMessage.textContent = "";
+  openModal(loginModal);
+});
+
+closeLoginBtn.addEventListener("click", () => {
+  closeModal(loginModal);
+});
+
+openRegisterBtn.addEventListener("click", () => {
+  closeModal(loginModal);
+  registerMessage.textContent = "";
+  openModal(registerModal);
+});
+
+closeRegisterBtn.addEventListener("click", () => {
+  closeModal(registerModal);
+});
+
+backToLoginBtn.addEventListener("click", () => {
+  closeModal(registerModal);
+  openModal(loginModal);
+});
+
+registerForm.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  registerMessage.textContent = "Đang đăng ký...";
+  registerMessage.className = "form-message";
+
+  const payload = {
+    full_name: document.getElementById("registerName").value.trim(),
+    email: document.getElementById("registerEmail").value.trim(),
+    phone: document.getElementById("registerPhone").value.trim(),
+    password: document.getElementById("registerPassword").value,
+    confirm_password:
+      document.getElementById("registerConfirmPassword").value
+  };
+
+  try {
+    const response = await fetch("/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      registerMessage.textContent =
+        data.error || "Đăng ký không thành công.";
+
+      registerMessage.className =
+        "form-message error";
+
+      return;
     }
 
-    conversationHistory = [];
-    clearSelectedImage();
+    registerMessage.textContent =
+      "Đăng ký thành công.";
 
-    chatBox.innerHTML = `
-        <div class="message-row bot-row">
-            <div class="message-avatar">AI</div>
+    registerMessage.className =
+      "form-message success";
 
-            <div class="message-content">
-                <div class="message bot-message">
-                    Cuộc trò chuyện đã được làm mới.
-                    Bạn đang gặp vấn đề sức khỏe gì?
-                </div>
+    registerForm.reset();
 
-                <span class="message-time">
-                    ${getCurrentTime()}
-                </span>
-            </div>
-        </div>
-    `;
+    setTimeout(() => {
+      closeModal(registerModal);
+      document.getElementById("loginAccount").value = payload.email;
+      openModal(loginModal);
+    }, 800);
+
+  } catch (error) {
+    registerMessage.textContent =
+      "Không thể kết nối với máy chủ.";
+
+    registerMessage.className =
+      "form-message error";
+  }
 });
+
+loginForm.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  loginMessage.textContent = "Đang đăng nhập...";
+  loginMessage.className = "form-message";
+
+  const payload = {
+    account: document.getElementById("loginAccount").value.trim(),
+    password: document.getElementById("loginPassword").value
+  };
+
+  try {
+    const response = await fetch("/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      loginMessage.textContent =
+        data.error || "Đăng nhập không thành công.";
+
+      loginMessage.className =
+        "form-message error";
+
+      return;
+    }
+
+    loginMessage.textContent = "Đăng nhập thành công.";
+    loginMessage.className = "form-message success";
+
+    updateUserInterface(data.user);
+
+    setTimeout(() => {
+      closeModal(loginModal);
+    }, 600);
+
+  } catch (error) {
+    loginMessage.textContent =
+      "Không thể kết nối với máy chủ.";
+
+    loginMessage.className =
+      "form-message error";
+  }
+});
+
+function updateUserInterface(user) {
+  if (user) {
+    openLoginBtn.classList.add("hidden");
+    logoutBtn.classList.remove("hidden");
+    userName.classList.remove("hidden");
+    userName.textContent = `Xin chào, ${user.full_name}`;
+  } else {
+    openLoginBtn.classList.remove("hidden");
+    logoutBtn.classList.add("hidden");
+    userName.classList.add("hidden");
+    userName.textContent = "";
+  }
+}
+
+async function checkCurrentUser() {
+  const response = await fetch("/current-user");
+  const data = await response.json();
+
+  updateUserInterface(
+    data.logged_in ? data.user : null
+  );
+}
+
+logoutBtn.addEventListener("click", async () => {
+  await fetch("/logout", {
+    method: "POST"
+  });
+
+  updateUserInterface(null);
+});
+
+mobileMenuBtn.addEventListener("click", () => {
+  navLinks.classList.toggle("show");
+});
+
+dropdownTrigger.addEventListener("click", () => {
+  dropdown.classList.toggle("open");
+});
+
+checkCurrentUser();
