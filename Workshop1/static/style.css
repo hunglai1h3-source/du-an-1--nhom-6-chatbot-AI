@@ -984,3 +984,37 @@ footer {
   }
 }
 
+
+
+/* ===== FIX CHATBOT TEXT ALIGNMENT ===== */
+
+.message-bubble {
+  max-width: min(78%, 510px);
+  padding: 16px 18px;
+  border-radius: 16px;
+  color: #2d3748;
+  background: white;
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  text-align: left;
+  line-height: 1.7;
+}
+
+.message-row.assistant .message-bubble {
+  text-align: left;
+}
+
+.message-bubble p,
+.message-bubble div {
+  margin: 0;
+  text-align: left;
+}
+
+.message-bubble time {
+  display: block;
+  margin-top: 8px;
+  color: #8a94a4;
+  font-size: 11px;
+  text-align: right;
+}
