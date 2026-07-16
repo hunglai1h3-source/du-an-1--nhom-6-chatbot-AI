@@ -706,7 +706,7 @@ def chat():
         return jsonify({
             "error": (
                 "Chưa cấu hình Gemini API key. "
-                "Đăng ký và đăng nhập vẫn sử dụng được."
+                "Đăng ký và đăng nhập vẫn sử dụng được.."
             )
         }), 503
 

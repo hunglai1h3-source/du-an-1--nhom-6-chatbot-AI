@@ -883,3 +883,138 @@ footer {
     align-items: flex-start;
   }
 }
+
+/* ===== Header đăng nhập: giữ màu và nằm cùng một dòng ===== */
+
+.navbar {
+  gap: 18px;
+}
+
+.nav-links {
+  gap: 22px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Tên người dùng vẫn giữ màu xanh */
+.user-name {
+  display: inline-flex;
+  align-items: center;
+  color: var(--green);
+  font-weight: 750;
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Nút đăng xuất vẫn viền xanh, nền trắng */
+#logoutBtn {
+  min-width: 116px;
+  padding: 12px 20px;
+  color: var(--green);
+  border: 1px solid #b8c2cc;
+  background: var(--white);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Nút bắt đầu tư vấn vẫn giữ màu cam */
+.desktop-consult {
+  min-width: 180px;
+  padding: 13px 22px;
+  color: var(--white);
+  background: var(--orange);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Giữ hiệu ứng khi rê chuột */
+#logoutBtn:hover {
+  color: var(--green-dark);
+  border-color: var(--green);
+  background: var(--green-pale);
+}
+
+.desktop-consult:hover {
+  color: var(--white);
+  background: var(--orange-dark);
+}
+
+/* Màn hình vừa: thu gọn để không bị xuống dòng */
+@media (max-width: 1250px) and (min-width: 1081px) {
+  .container {
+    width: min(1260px, calc(100% - 24px));
+  }
+
+  .navbar {
+    gap: 12px;
+  }
+
+  .nav-links {
+    gap: 15px;
+    font-size: 14px;
+  }
+
+  .header-actions {
+    gap: 7px;
+  }
+
+  .user-name {
+    font-size: 14px;
+  }
+
+  #logoutBtn {
+    min-width: 102px;
+    padding: 11px 15px;
+  }
+
+  .desktop-consult {
+    min-width: 158px;
+    padding: 12px 16px;
+  }
+}
+
+
+
+/* ===== FIX CHATBOT TEXT ALIGNMENT ===== */
+
+.message-bubble {
+  max-width: min(78%, 510px);
+  padding: 16px 18px;
+  border-radius: 16px;
+  color: #2d3748;
+  background: white;
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  text-align: left;
+  line-height: 1.7;
+}
+
+.message-row.assistant .message-bubble {
+  text-align: left;
+}
+
+.message-bubble p,
+.message-bubble div {
+  margin: 0;
+  text-align: left;
+}
+
+.message-bubble time {
+  display: block;
+  margin-top: 8px;
+  color: #8a94a4;
+  font-size: 11px;
+  text-align: right;
+}
