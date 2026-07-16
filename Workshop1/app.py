@@ -1602,7 +1602,7 @@ Dữ liệu:
 - Ghi chú sức khỏe: {profile['medical_notes'] or 'không khai báo'}
 - Yêu cầu thêm: {user_constraints or 'không có'}
 
-Yêu cầu bắt buộc:
+Yêu cầu bắt buộc: 1
 - Không chẩn đoán, không kê thuốc và không thay đổi liều thuốc.
 - Không đưa kế hoạch giảm cân cực đoan.
 - Không coi BMI, BMR hoặc TDEE là kết luận y khoa.
