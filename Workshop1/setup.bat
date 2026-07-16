@@ -1,78 +1,278 @@
 @echo off
-:: Setup script for AI Chatbot Project
-:: Developed for Students
+setlocal EnableExtensions EnableDelayedExpansion
 
-chcp 65001 > nul
+chcp 65001 >nul
 title Cài đặt dự án AI Chatbot
 
-echo =======================================================
-echo     HỆ THỐNG CÀI ĐẶT TỰ ĐỘNG - AI CHATBOT WORKSHOP
-echo =======================================================
+cd /d "%~dp0"
+
+echo ========================================================
+echo       HỆ THỐNG CÀI ĐẶT TỰ ĐỘNG - AI CHATBOT
+echo ========================================================
+echo.
+echo Thư mục dự án:
+echo %CD%
 echo.
 
-:: 1. Kiểm tra Python đã cài đặt chưa
+:: ==========================================================
+:: 1. KIỂM TRA FILE DỰ ÁN
+:: ==========================================================
+
+echo [1/7] Đang kiểm tra cấu trúc dự án...
+
+if not exist "app.py" (
+    echo [LỖI] Không tìm thấy file app.py.
+    echo Hãy đặt setup.bat cùng thư mục với app.py.
+    goto :error
+)
+
+if not exist "requirements.txt" (
+    echo [LỖI] Không tìm thấy file requirements.txt.
+    goto :error
+)
+
+if not exist ".env.example" (
+    echo [CẢNH BÁO] Không tìm thấy file .env.example.
+)
+
+echo [OK] Cấu trúc dự án hợp lệ.
+echo.
+
+:: ==========================================================
+:: 2. TÌM PYTHON
+:: ==========================================================
+
+echo [2/7] Đang kiểm tra Python...
+
+set "PYTHON_CMD="
+
 python --version >nul 2>&1
-if errorlevel 1 (
-    echo [LỖI] Không tìm thấy Python trên hệ thống của bạn!
-    echo Vui lòng tải và cài đặt Python từ: https://www.python.org/downloads/
-    echo Lưu ý: Hãy tích chọn "Add Python to PATH" khi cài đặt.
-    echo.
-    pause
-    exit /b
+if not errorlevel 1 (
+    set "PYTHON_CMD=python"
 )
 
-:: 2. Khởi tạo môi trường ảo venv nếu chưa có
-if not exist venv (
-    echo [1/4] Đang khởi tạo môi trường ảo Python (venv)...
-    python -m venv venv
-    if errorlevel 1 (
-        echo [LỖI] Không thể tạo thư mục venv.
-        pause
-        exit /b
+if not defined PYTHON_CMD (
+    py --version >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON_CMD=py"
     )
-    echo [OK] Đã tạo thành công thư mục venv.
-) else (
-    echo [1/4] Thư mục venv đã tồn tại. Bỏ qua bước tạo mới.
 )
+
+if not defined PYTHON_CMD (
+    echo [LỖI] Không tìm thấy Python trên máy.
+    echo.
+    echo Hãy cài Python từ:
+    echo https://www.python.org/downloads/
+    echo.
+    echo Khi cài, nhớ chọn:
+    echo Add Python to PATH
+    goto :error
+)
+
+for /f "tokens=*" %%i in ('%PYTHON_CMD% --version 2^>^&1') do (
+    echo [OK] Đã tìm thấy %%i
+)
+
 echo.
 
-:: 3. Tạo file cấu hình .env nếu chưa có
-if not exist .env (
-    echo [2/4] Đang tạo file cấu hình .env từ .env.example...
-    copy .env.example .env
-    echo [OK] Đã tạo file .env. Hãy nhớ mở file .env lên và điền API Key của bạn vào nhé!
-) else (
-    echo [2/4] File cấu hình .env đã tồn tại.
+:: ==========================================================
+:: 3. KIỂM TRA DUNG LƯỢNG Ổ ĐĨA
+:: ==========================================================
+
+echo [3/7] Đang kiểm tra dung lượng ổ đĩa...
+
+for %%D in ("%CD%") do set "PROJECT_DRIVE=%%~dD"
+
+for /f "tokens=3" %%A in (
+    'dir /-c "%PROJECT_DRIVE%\" ^| find "bytes free"'
+) do (
+    set "FREE_BYTES=%%A"
 )
+
+if defined FREE_BYTES (
+    set /a FREE_MB=!FREE_BYTES!/1024/1024 2>nul
+
+    echo Dung lượng trống ước tính: !FREE_MB! MB
+
+    if !FREE_MB! LSS 1500 (
+        echo.
+        echo [CẢNH BÁO] Ổ đĩa còn dưới 1.5 GB.
+        echo Việc tạo venv và cài thư viện có thể thất bại.
+        echo Hãy giải phóng dung lượng trước khi tiếp tục.
+        echo.
+        set /p CONTINUE_LOW_SPACE="Vẫn tiếp tục? (Y/N): "
+
+        if /i not "!CONTINUE_LOW_SPACE!"=="Y" (
+            goto :cancelled
+        )
+    )
+) else (
+    echo [CẢNH BÁO] Không thể xác định dung lượng trống.
+)
+
 echo.
 
-:: 4. Kích hoạt venv và cài đặt thư viện
-echo [3/4] Đang kích hoạt môi trường ảo và cài đặt thư viện...
-call venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+:: ==========================================================
+:: 4. TẠO MÔI TRƯỜNG ẢO
+:: ==========================================================
+
+echo [4/7] Đang chuẩn bị môi trường Python...
+
+if exist "venv\Scripts\python.exe" (
+    echo [OK] Môi trường venv đã tồn tại.
+) else (
+    if exist "venv" (
+        echo [CẢNH BÁO] Thư mục venv tồn tại nhưng không hợp lệ.
+        echo Đang xóa venv lỗi...
+        rmdir /s /q "venv"
+
+        if exist "venv" (
+            echo [LỖI] Không thể xóa thư mục venv.
+            echo Hãy đóng các Terminal đang sử dụng venv rồi thử lại.
+            goto :error
+        )
+    )
+
+    echo Đang tạo môi trường ảo...
+    %PYTHON_CMD% -m venv venv
+
+    if errorlevel 1 (
+        echo [LỖI] Không thể tạo môi trường ảo.
+        echo.
+        echo Nguyên nhân có thể:
+        echo - Ổ đĩa không đủ dung lượng.
+        echo - Python cài đặt bị lỗi.
+        echo - Không có quyền ghi vào thư mục.
+        goto :error
+    )
+
+    echo [OK] Đã tạo môi trường venv.
+)
+
+set "VENV_PYTHON=%CD%\venv\Scripts\python.exe"
+
+if not exist "%VENV_PYTHON%" (
+    echo [LỖI] Không tìm thấy Python trong venv.
+    goto :error
+)
+
+echo.
+
+:: ==========================================================
+:: 5. TẠO FILE .ENV
+:: ==========================================================
+
+echo [5/7] Đang kiểm tra cấu hình môi trường...
+
+if exist ".env" (
+    echo [OK] File .env đã tồn tại.
+) else (
+    if exist ".env.example" (
+        copy /y ".env.example" ".env" >nul
+
+        if errorlevel 1 (
+            echo [LỖI] Không thể tạo file .env.
+            goto :error
+        )
+
+        echo [OK] Đã tạo file .env từ .env.example.
+        echo [QUAN TRỌNG] Hãy mở .env và điền API key.
+    ) else (
+        echo [CẢNH BÁO] Không có .env.example nên chưa thể tạo .env.
+    )
+)
+
+echo.
+
+:: ==========================================================
+:: 6. CÀI THƯ VIỆN
+:: ==========================================================
+
+echo [6/7] Đang cài đặt thư viện...
+echo Quá trình này có thể mất vài phút.
+echo.
+
+"%VENV_PYTHON%" -m pip --version >nul 2>&1
+
 if errorlevel 1 (
-    echo [LỖI] Quá trình cài đặt thư viện gặp lỗi. Vui lòng kiểm tra kết nối mạng của bạn.
-    pause
-    exit /b
+    echo Đang cài pip vào môi trường ảo...
+    "%VENV_PYTHON%" -m ensurepip --upgrade
+
+    if errorlevel 1 (
+        echo [LỖI] Không thể cài pip.
+        goto :error
+    )
 )
-echo [OK] Cài đặt các thư viện thành công.
+
+"%VENV_PYTHON%" -m pip install -r requirements.txt
+
+if errorlevel 1 (
+    echo.
+    echo [LỖI] Không thể cài đầy đủ thư viện.
+    echo.
+    echo Hãy kiểm tra:
+    echo - Kết nối Internet.
+    echo - Dung lượng ổ đĩa.
+    echo - Phiên bản Python.
+    echo - Nội dung requirements.txt.
+    goto :error
+)
+
+echo.
+echo [OK] Đã cài đặt thư viện thành công.
 echo.
 
-:: 5. Hoàn tất và chạy thử ứng dụng
-echo [4/4] Quá trình chuẩn bị đã hoàn tất!
-echo =======================================================
+:: ==========================================================
+:: 7. HOÀN TẤT
+:: ==========================================================
+
+echo [7/7] Cài đặt hoàn tất.
+echo ========================================================
 echo.
-set /p choice="Bạn có muốn khởi chạy ứng dụng Chatbot ngay bây giờ không? (Y/N): "
-if /i "%choice%"=="Y" (
-    echo Đang chạy ứng dụng app.py...
-    echo Vui lòng mở trình duyệt và truy cập: http://127.0.0.1:5000
-    python app.py
+echo Lệnh chạy ứng dụng:
+echo "%VENV_PYTHON%" app.py
+echo.
+
+set /p CHOICE="Bạn có muốn chạy Chatbot ngay bây giờ không? (Y/N): "
+
+if /i "%CHOICE%"=="Y" (
+    echo.
+    echo Đang khởi động ứng dụng...
+    echo Địa chỉ: http://127.0.0.1:5000
+    echo Nhấn Ctrl + C để dừng máy chủ.
+    echo.
+
+    "%VENV_PYTHON%" app.py
+
+    if errorlevel 1 (
+        echo.
+        echo [LỖI] Ứng dụng đã dừng do có lỗi.
+        echo Hãy đọc thông báo lỗi phía trên.
+        goto :error
+    )
 ) else (
     echo.
-    echo Bạn có thể khởi chạy ứng dụng sau bằng cách mở Command Prompt, chạy:
-    echo     venv\Scripts\activate
-    echo     python app.py
+    echo Cài đặt đã xong.
+    echo Khi cần chạy lại, hãy mở Terminal tại thư mục dự án và dùng:
     echo.
-    pause
+    echo venv\Scripts\python.exe app.py
 )
+
+echo.
+pause
+exit /b 0
+
+:error
+echo.
+echo ========================================================
+echo CÀI ĐẶT KHÔNG HOÀN TẤT
+echo ========================================================
+echo.
+pause
+exit /b 1
+
+:cancelled
+echo.
+echo Đã hủy cài đặt.
+pause
+exit /b 0
