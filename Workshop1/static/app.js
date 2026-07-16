@@ -2,6 +2,8 @@ const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const chatBody = document.getElementById("chatBody");
 const sendBtn = document.getElementById("sendBtn");
+let controller = null;
+let isGenerating = false;
 
 const imageInput = document.getElementById("imageInput");
 const attachImageBtn = document.getElementById("attachImageBtn");
@@ -36,6 +38,9 @@ let selectedImage = null;
 let selectedImageUrl = null;
 let isSending = false;
 
+let abortController = null;
+let typingIndicator = null;
+
 function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = value;
@@ -43,9 +48,64 @@ function escapeHtml(value) {
 }
 
 function formatMessage(value) {
-  return escapeHtml(value)
-    .replace(/\n/g, "<br>")
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+
+  let html = escapeHtml(value);
+
+
+  // tiêu đề
+  html = html.replace(
+    /^### (.*)$/gm,
+    "<h3>$1</h3>"
+  );
+
+
+  html = html.replace(
+    /^## (.*)$/gm,
+    "<h2>$1</h2>"
+  );
+
+
+  html = html.replace(
+    /^# (.*)$/gm,
+    "<h1>$1</h1>"
+  );
+
+
+  // danh sách
+  html = html.replace(
+    /^- (.*)$/gm,
+    "<li>$1</li>"
+  );
+
+
+  html = html.replace(
+    /(<li>.*<\/li>)/gs,
+    "<ul>$1</ul>"
+  );
+
+
+  // in đậm
+  html = html.replace(
+    /\*\*(.*?)\*\*/g,
+    "<strong>$1</strong>"
+  );
+
+
+  // code
+  html = html.replace(
+    /`(.*?)`/g,
+    "<code>$1</code>"
+  );
+
+
+  html = html.replace(
+    /\n/g,
+    "<br>"
+  );
+
+
+  return html;
+
 }
 
 function getCurrentTime() {
@@ -82,10 +142,58 @@ function appendMessage(content, role, imageUrl = null) {
   }
 
   if (content) {
+
     const text = document.createElement("div");
-    text.innerHTML = formatMessage(content);
+
+    text.className = "ai-content";
+
+    text.innerHTML =
+        formatMessage(content);
+
+
     bubble.appendChild(text);
-  }
+
+
+    if(role === "assistant"){
+
+        const copyBtn =
+        document.createElement("button");
+
+
+        copyBtn.className =
+        "copy-btn";
+
+
+        copyBtn.innerHTML =
+        "📋 Sao chép";
+
+
+        copyBtn.onclick = () => {
+
+
+            navigator.clipboard.writeText(content);
+
+
+            copyBtn.innerHTML =
+            "✅ Đã sao chép";
+
+
+            setTimeout(()=>{
+
+                copyBtn.innerHTML =
+                "📋 Sao chép";
+
+            },1500);
+
+
+        };
+
+
+        bubble.appendChild(copyBtn);
+
+    }
+
+}
 
   const time = document.createElement("time");
   time.textContent = `${getCurrentTime()}${role === "user" ? " ✓✓" : ""}`;
@@ -172,17 +280,38 @@ imageInput.addEventListener("change", () => {
 removeImageBtn.addEventListener("click", clearSelectedImage);
 
 async function sendMessage() {
-  if (isSending) return;
 
-  const message = chatInput.value.trim();
+  if (isGenerating) {
 
-  if (!message && !selectedImage) {
-    chatInput.focus();
+    if (controller) {
+      controller.abort();
+    }
+
+    isGenerating = false;
+    sendBtn.innerHTML = "➤";
+    sendBtn.classList.remove("stop");
+
     return;
   }
 
+
+  const message = chatInput.value.trim();
+
+  if (!message && !selectedImage) return;
+
+
+  isGenerating = true;
+
+  sendBtn.innerHTML = "■";
+  sendBtn.classList.add("stop");
+
+
+  controller = new AbortController();
+
+
   const imageToSend = selectedImage;
   const imageUrlForMessage = selectedImageUrl;
+
 
   appendMessage(
     message || "Tôi gửi một ảnh cần tư vấn.",
@@ -190,82 +319,163 @@ async function sendMessage() {
     imageUrlForMessage
   );
 
-  chatInput.value = "";
+
+  chatInput.value="";
   autoResizeTextarea();
 
-  selectedImage = null;
-  imageInput.value = "";
-  imagePreview.src = "";
-  imageFileName.textContent = "";
-  imagePreviewPanel.classList.add("hidden");
 
-  isSending = true;
-  sendBtn.disabled = true;
-  sendBtn.textContent = "…";
+  clearSelectedImage();
+
 
   const typingIndicator = appendTypingIndicator();
 
+
   try {
+
+
     const formData = new FormData();
 
-    formData.append("message", message);
+
+    formData.append(
+      "message",
+      message
+    );
+
+
     formData.append(
       "history",
       JSON.stringify(conversationHistory)
     );
 
-    if (imageToSend) {
-      formData.append("image", imageToSend);
+
+    if(imageToSend){
+
+      formData.append(
+        "image",
+        imageToSend
+      );
+
     }
 
-    const response = await fetch("/chat", {
-      method: "POST",
-      body: formData
+
+
+    const response = await fetch("/chat",{
+
+      method:"POST",
+
+      body:formData,
+
+      signal:controller.signal
+
     });
+
+
 
     const data = await response.json();
 
+
     typingIndicator.remove();
 
-    if (!response.ok) {
+
+
+    if(!response.ok){
+
       appendMessage(
-        data.error || "Không thể kết nối với hệ thống AI.",
+        data.error || "AI đang lỗi.",
         "assistant"
       );
+
       return;
+
     }
 
-    appendMessage(data.reply, "assistant");
 
-    conversationHistory.push(
-      {
-        role: "user",
-        content: message || "Người dùng đã gửi một ảnh sức khỏe."
-      },
-      {
-        role: "assistant",
-        content: data.reply
-      }
-    );
-
-    conversationHistory = conversationHistory.slice(-12);
-
-  } catch (error) {
-    typingIndicator.remove();
 
     appendMessage(
-      "Không thể kết nối với máy chủ Flask.",
+      data.reply,
       "assistant"
     );
 
-    console.error(error);
 
-  } finally {
-    isSending = false;
-    sendBtn.disabled = false;
-    sendBtn.textContent = "➤";
-    chatInput.focus();
+
+    conversationHistory.push({
+
+      role:"user",
+
+      content:message
+
+    });
+
+
+    conversationHistory.push({
+
+      role:"assistant",
+
+      content:data.reply
+
+    });
+
+
+
+    conversationHistory =
+      conversationHistory.slice(-12);
+
+
+
   }
+
+
+  catch(error){
+
+
+    typingIndicator.remove();
+
+
+    if(error.name==="AbortError"){
+
+
+      appendMessage(
+        "Đã dừng trả lời.",
+        "assistant"
+      );
+
+
+    }else{
+
+
+      console.error(error);
+
+
+      appendMessage(
+        "Không thể kết nối với máy chủ Flask.",
+        "assistant"
+      );
+
+
+    }
+
+
+  }
+
+
+  finally{
+
+
+    isGenerating=false;
+
+
+    sendBtn.innerHTML="➤";
+
+
+    sendBtn.classList.remove("stop");
+
+
+    controller=null;
+
+
+  }
+
+
 }
 
 chatForm.addEventListener("submit", event => {
@@ -490,3 +700,4 @@ dropdownTrigger.addEventListener("click", () => {
 });
 
 checkCurrentUser();
+

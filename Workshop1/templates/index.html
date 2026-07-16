@@ -46,11 +46,34 @@
       </nav>
 
       <div class="header-actions">
-        <span class="user-name hidden" id="userName"></span>
-        <button class="btn btn-outline" id="openLoginBtn">Đăng nhập</button>
-        <button class="btn btn-outline hidden" id="logoutBtn">Đăng xuất</button>
-        <a class="btn btn-orange desktop-consult" href="#tu-van">💬 Bắt đầu tư vấn</a>
-      </div>
+
+    <button 
+        class="theme-btn" 
+        id="themeBtn"
+        type="button"
+        title="Đổi giao diện">
+        🌙
+    </button>
+
+    <span class="user-name hidden" id="userName"></span>
+
+    <button class="btn btn-outline" id="openLoginBtn">
+        Đăng nhập
+    </button>
+
+    <button 
+        class="btn btn-outline hidden" 
+        id="logoutBtn">
+        Đăng xuất
+    </button>
+
+    <a 
+        class="btn btn-orange desktop-consult" 
+        href="#tu-van">
+        💬 Bắt đầu tư vấn
+    </a>
+
+</div>
     </div>
   </header>
 
@@ -122,7 +145,28 @@
               </div>
             </div>
           </div>
+          <div class="chat-tools">
 
+    <button 
+        id="newChatBtn"
+        class="chat-tool-btn"
+        type="button">
+
+        🆕 Cuộc trò chuyện mới
+
+    </button>
+
+
+    <button 
+        id="stopBtn"
+        class="chat-tool-btn stop-btn hidden"
+        type="button">
+
+        ⏹ Dừng trả lời
+
+    </button>
+
+</div>
           <div class="suggested-questions" id="suggestedQuestions">
             <button data-question="Tôi bị đau họng và sốt nhẹ nên làm gì?">Đau họng và sốt nhẹ</button>
             <button data-question="Tôi nên khám chuyên khoa nào?">Chọn chuyên khoa</button>
@@ -341,5 +385,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <div id="toastMessage"></div>
 </body>
 </html>
