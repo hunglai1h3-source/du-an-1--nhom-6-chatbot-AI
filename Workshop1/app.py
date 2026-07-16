@@ -3,6 +3,9 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
 from threading import Timer
+from datetime import datetime, date
+from functools import wraps
+import math
 from werkzeug.security import generate_password_hash, check_password_hash
 import base64
 import json
@@ -89,6 +92,78 @@ def initialize_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS health_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL UNIQUE,
+            sex TEXT NOT NULL,
+            birth_date TEXT,
+            age INTEGER,
+            height_cm REAL NOT NULL,
+            activity_level TEXT NOT NULL DEFAULT 'sedentary',
+            goal TEXT NOT NULL DEFAULT 'maintain',
+            diet_preference TEXT,
+            allergies TEXT,
+            medical_notes TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS weight_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            weight_kg REAL NOT NULL,
+            note TEXT,
+            logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS water_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            amount_ml INTEGER NOT NULL,
+            logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            reminder_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT,
+            time_of_day TEXT NOT NULL,
+            days_of_week TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
+            medicine_name TEXT,
+            dosage_note TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_triggered_date TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_weight_user_date
+        ON weight_logs(user_id, logged_at)
+    """)
+
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_water_user_date
+        ON water_logs(user_id, logged_at)
+    """)
+
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_reminder_user_active
+        ON reminders(user_id, is_active)
+    """)
+
     connection.commit()
     connection.close()
 
@@ -464,7 +539,40 @@ def chat():
                 "error": "Nội dung quá dài. Vui lòng nhập dưới 4.000 ký tự."
             }), 400
 
-        messages = [SYSTEM_PROMPT, *history]
+        messages = [SYSTEM_PROMPT]
+
+        if "user_id" in session:
+            connection = get_database()
+            profile = connection.execute(
+                "SELECT * FROM health_profiles WHERE user_id = ?",
+                (session["user_id"],),
+            ).fetchone()
+            latest_weight = get_latest_weight(connection, session["user_id"])
+            connection.close()
+
+            if profile:
+                profile_context = {
+                    "age": profile["age"],
+                    "sex": profile["sex"],
+                    "height_cm": profile["height_cm"],
+                    "latest_weight_kg": latest_weight,
+                    "activity_level": profile["activity_level"],
+                    "goal": profile["goal"],
+                    "diet_preference": profile["diet_preference"],
+                    "allergies": profile["allergies"],
+                    "medical_notes": profile["medical_notes"],
+                }
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "HỒ SƠ SỨC KHỎE DO NGƯỜI DÙNG TỰ KHAI:\n"
+                        + json.dumps(profile_context, ensure_ascii=False)
+                        + "\nChỉ dùng hồ sơ này để cá nhân hóa an toàn. "
+                          "Không coi dữ liệu tự khai là chẩn đoán."
+                    ),
+                })
+
+        messages.extend(history)
 
         if image_file:
             data_url = image_to_data_url(image_file)
@@ -526,6 +634,719 @@ def chat():
 
     except Exception as error:
         print(f"Gemini API error: {type(error).__name__}: {error}")
+        return build_error_response(error)
+
+
+
+# =========================
+# HEALTH & WELLNESS MODULES
+# =========================
+
+ACTIVITY_MULTIPLIERS = {
+    "sedentary": 1.2,
+    "light": 1.375,
+    "moderate": 1.55,
+    "active": 1.725,
+    "very_active": 1.9,
+}
+
+GOAL_CALORIE_ADJUSTMENTS = {
+    "lose": -350,
+    "maintain": 0,
+    "gain": 300,
+}
+
+
+def login_required(view_function):
+    @wraps(view_function)
+    def wrapped(*args, **kwargs):
+        if "user_id" not in session:
+            return jsonify({"error": "Vui lòng đăng nhập để sử dụng tính năng này."}), 401
+        return view_function(*args, **kwargs)
+
+    return wrapped
+
+
+def parse_float(value, field_name, minimum=None, maximum=None):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} không hợp lệ.")
+
+    if not math.isfinite(number):
+        raise ValueError(f"{field_name} không hợp lệ.")
+
+    if minimum is not None and number < minimum:
+        raise ValueError(f"{field_name} phải từ {minimum} trở lên.")
+
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{field_name} không được vượt quá {maximum}.")
+
+    return number
+
+
+def calculate_age(birth_date_text=None, supplied_age=None):
+    if birth_date_text:
+        try:
+            born = datetime.strptime(birth_date_text, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Ngày sinh phải có định dạng YYYY-MM-DD.")
+
+        today = date.today()
+        age = today.year - born.year - (
+            (today.month, today.day) < (born.month, born.day)
+        )
+    else:
+        try:
+            age = int(supplied_age)
+        except (TypeError, ValueError):
+            raise ValueError("Vui lòng nhập ngày sinh hoặc tuổi hợp lệ.")
+
+    if age < 18 or age > 100:
+        raise ValueError(
+            "Bộ tính BMI/BMR/TDEE này hiện chỉ dành cho người từ 18 đến 100 tuổi."
+        )
+
+    return age
+
+
+def bmi_category(bmi):
+    if bmi < 18.5:
+        return "Thiếu cân"
+    if bmi < 25:
+        return "Cân nặng khỏe mạnh"
+    if bmi < 30:
+        return "Thừa cân"
+    if bmi < 35:
+        return "Béo phì độ I"
+    if bmi < 40:
+        return "Béo phì độ II"
+    return "Béo phì độ III"
+
+
+def calculate_health_metrics(sex, age, height_cm, weight_kg, activity_level, goal):
+    sex = str(sex).strip().lower()
+    if sex not in {"male", "female"}:
+        raise ValueError("Giới tính sinh học phải là male hoặc female.")
+
+    if activity_level not in ACTIVITY_MULTIPLIERS:
+        raise ValueError("Mức vận động không hợp lệ.")
+
+    if goal not in GOAL_CALORIE_ADJUSTMENTS:
+        raise ValueError("Mục tiêu không hợp lệ.")
+
+    height_cm = parse_float(height_cm, "Chiều cao", 100, 250)
+    weight_kg = parse_float(weight_kg, "Cân nặng", 25, 350)
+
+    height_m = height_cm / 100
+    bmi = weight_kg / (height_m ** 2)
+
+    # Mifflin–St Jeor estimate for adults.
+    sex_constant = 5 if sex == "male" else -161
+    bmr = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) + sex_constant
+    tdee = bmr * ACTIVITY_MULTIPLIERS[activity_level]
+    target_calories = max(1200, tdee + GOAL_CALORIE_ADJUSTMENTS[goal])
+
+    healthy_weight_min = 18.5 * (height_m ** 2)
+    healthy_weight_max = 24.9 * (height_m ** 2)
+
+    # This is a tracking target, not a prescription.
+    water_target_ml = round(weight_kg * 30)
+    water_target_ml = min(max(water_target_ml, 1500), 3500)
+
+    return {
+        "bmi": round(bmi, 1),
+        "bmi_category": bmi_category(bmi),
+        "bmr_kcal": round(bmr),
+        "tdee_kcal": round(tdee),
+        "suggested_calorie_target_kcal": round(target_calories),
+        "healthy_weight_range_kg": {
+            "min": round(healthy_weight_min, 1),
+            "max": round(healthy_weight_max, 1),
+        },
+        "water_tracking_target_ml": water_target_ml,
+        "disclaimer": (
+            "Các con số chỉ là ước tính sàng lọc cho người trưởng thành, "
+            "không thay thế đánh giá của bác sĩ hoặc chuyên gia dinh dưỡng."
+        ),
+    }
+
+
+def get_latest_weight(connection, user_id):
+    row = connection.execute(
+        """
+        SELECT weight_kg
+        FROM weight_logs
+        WHERE user_id = ?
+        ORDER BY logged_at DESC, id DESC
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+
+    return float(row["weight_kg"]) if row else None
+
+
+def serialize_row(row):
+    return dict(row) if row is not None else None
+
+
+@app.route("/api/health/profile", methods=["GET", "PUT"])
+@login_required
+def health_profile():
+    user_id = session["user_id"]
+    connection = get_database()
+
+    if request.method == "GET":
+        profile = connection.execute(
+            "SELECT * FROM health_profiles WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        latest_weight = get_latest_weight(connection, user_id)
+        connection.close()
+
+        return jsonify({
+            "profile": serialize_row(profile),
+            "latest_weight_kg": latest_weight,
+        })
+
+    data = request.get_json(silent=True) or {}
+
+    try:
+        sex = str(data.get("sex", "")).strip().lower()
+        if sex not in {"male", "female"}:
+            raise ValueError("Giới tính sinh học phải là male hoặc female.")
+
+        birth_date = str(data.get("birth_date", "")).strip() or None
+        supplied_age = data.get("age")
+        age = calculate_age(birth_date, supplied_age)
+        height_cm = parse_float(data.get("height_cm"), "Chiều cao", 100, 250)
+
+        activity_level = str(
+            data.get("activity_level", "sedentary")
+        ).strip().lower()
+        if activity_level not in ACTIVITY_MULTIPLIERS:
+            raise ValueError("Mức vận động không hợp lệ.")
+
+        goal = str(data.get("goal", "maintain")).strip().lower()
+        if goal not in GOAL_CALORIE_ADJUSTMENTS:
+            raise ValueError("Mục tiêu không hợp lệ.")
+
+        connection.execute(
+            """
+            INSERT INTO health_profiles (
+                user_id, sex, birth_date, age, height_cm, activity_level,
+                goal, diet_preference, allergies, medical_notes, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET
+                sex = excluded.sex,
+                birth_date = excluded.birth_date,
+                age = excluded.age,
+                height_cm = excluded.height_cm,
+                activity_level = excluded.activity_level,
+                goal = excluded.goal,
+                diet_preference = excluded.diet_preference,
+                allergies = excluded.allergies,
+                medical_notes = excluded.medical_notes,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                user_id,
+                sex,
+                birth_date,
+                age,
+                height_cm,
+                activity_level,
+                goal,
+                str(data.get("diet_preference", "")).strip()[:300],
+                str(data.get("allergies", "")).strip()[:500],
+                str(data.get("medical_notes", "")).strip()[:1000],
+            ),
+        )
+        connection.commit()
+        connection.close()
+
+        return jsonify({"message": "Đã cập nhật hồ sơ sức khỏe."})
+
+    except ValueError as error:
+        connection.close()
+        return jsonify({"error": str(error)}), 400
+
+
+@app.post("/api/health/calculate")
+@login_required
+def calculate_health():
+    data = request.get_json(silent=True) or {}
+    user_id = session["user_id"]
+    connection = get_database()
+
+    try:
+        profile = connection.execute(
+            "SELECT * FROM health_profiles WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+
+        sex = data.get("sex") or (profile["sex"] if profile else None)
+        birth_date = data.get("birth_date") or (
+            profile["birth_date"] if profile else None
+        )
+        supplied_age = data.get("age")
+        if supplied_age is None and profile:
+            supplied_age = profile["age"]
+
+        age = calculate_age(birth_date, supplied_age)
+        height_cm = data.get("height_cm") or (
+            profile["height_cm"] if profile else None
+        )
+        activity_level = data.get("activity_level") or (
+            profile["activity_level"] if profile else "sedentary"
+        )
+        goal = data.get("goal") or (
+            profile["goal"] if profile else "maintain"
+        )
+        weight_kg = data.get("weight_kg")
+        if weight_kg is None:
+            weight_kg = get_latest_weight(connection, user_id)
+
+        if weight_kg is None:
+            raise ValueError("Vui lòng nhập hoặc ghi lại cân nặng trước.")
+
+        metrics = calculate_health_metrics(
+            sex=sex,
+            age=age,
+            height_cm=height_cm,
+            weight_kg=weight_kg,
+            activity_level=str(activity_level).strip().lower(),
+            goal=str(goal).strip().lower(),
+        )
+        connection.close()
+        return jsonify(metrics)
+
+    except ValueError as error:
+        connection.close()
+        return jsonify({"error": str(error)}), 400
+
+
+@app.route("/api/health/weight", methods=["GET", "POST"])
+@login_required
+def weight_logs():
+    user_id = session["user_id"]
+    connection = get_database()
+
+    if request.method == "GET":
+        limit = min(max(request.args.get("limit", 30, type=int), 1), 365)
+        rows = connection.execute(
+            """
+            SELECT id, weight_kg, note, logged_at
+            FROM weight_logs
+            WHERE user_id = ?
+            ORDER BY logged_at DESC, id DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+        connection.close()
+        return jsonify({"items": [dict(row) for row in rows]})
+
+    data = request.get_json(silent=True) or {}
+
+    try:
+        weight_kg = parse_float(data.get("weight_kg"), "Cân nặng", 25, 350)
+        note = str(data.get("note", "")).strip()[:500]
+        logged_at = str(data.get("logged_at", "")).strip() or None
+
+        if logged_at:
+            try:
+                datetime.fromisoformat(logged_at.replace("Z", "+00:00"))
+            except ValueError:
+                raise ValueError("Thời gian ghi cân không hợp lệ.")
+
+        cursor = connection.execute(
+            """
+            INSERT INTO weight_logs (user_id, weight_kg, note, logged_at)
+            VALUES (?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+            """,
+            (user_id, weight_kg, note, logged_at),
+        )
+        connection.commit()
+        log_id = cursor.lastrowid
+        connection.close()
+
+        return jsonify({
+            "message": "Đã ghi lại cân nặng.",
+            "id": log_id,
+            "weight_kg": weight_kg,
+        }), 201
+
+    except ValueError as error:
+        connection.close()
+        return jsonify({"error": str(error)}), 400
+
+
+@app.route("/api/health/water", methods=["GET", "POST"])
+@login_required
+def water_logs():
+    user_id = session["user_id"]
+    connection = get_database()
+
+    if request.method == "GET":
+        day_text = request.args.get("date", date.today().isoformat())
+        try:
+            datetime.strptime(day_text, "%Y-%m-%d")
+        except ValueError:
+            connection.close()
+            return jsonify({"error": "Ngày phải có định dạng YYYY-MM-DD."}), 400
+
+        rows = connection.execute(
+            """
+            SELECT id, amount_ml, logged_at
+            FROM water_logs
+            WHERE user_id = ? AND DATE(logged_at) = ?
+            ORDER BY logged_at ASC
+            """,
+            (user_id, day_text),
+        ).fetchall()
+
+        total_ml = sum(int(row["amount_ml"]) for row in rows)
+        connection.close()
+
+        return jsonify({
+            "date": day_text,
+            "total_ml": total_ml,
+            "items": [dict(row) for row in rows],
+        })
+
+    data = request.get_json(silent=True) or {}
+
+    try:
+        amount_ml = int(data.get("amount_ml"))
+        if amount_ml < 50 or amount_ml > 2000:
+            raise ValueError("Mỗi lần ghi nước phải từ 50 đến 2.000 ml.")
+
+        cursor = connection.execute(
+            """
+            INSERT INTO water_logs (user_id, amount_ml)
+            VALUES (?, ?)
+            """,
+            (user_id, amount_ml),
+        )
+        connection.commit()
+        log_id = cursor.lastrowid
+        connection.close()
+
+        return jsonify({
+            "message": "Đã ghi lượng nước.",
+            "id": log_id,
+            "amount_ml": amount_ml,
+        }), 201
+
+    except (TypeError, ValueError):
+        connection.close()
+        return jsonify({
+            "error": "Lượng nước phải là số nguyên từ 50 đến 2.000 ml."
+        }), 400
+
+
+@app.route("/api/reminders", methods=["GET", "POST"])
+@login_required
+def reminders():
+    user_id = session["user_id"]
+    connection = get_database()
+
+    if request.method == "GET":
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM reminders
+            WHERE user_id = ?
+            ORDER BY is_active DESC, time_of_day ASC
+            """,
+            (user_id,),
+        ).fetchall()
+        connection.close()
+        return jsonify({"items": [dict(row) for row in rows]})
+
+    data = request.get_json(silent=True) or {}
+
+    reminder_type = str(data.get("reminder_type", "")).strip().lower()
+    if reminder_type not in {"water", "medicine", "weight", "exercise", "meal"}:
+        connection.close()
+        return jsonify({"error": "Loại lời nhắc không hợp lệ."}), 400
+
+    title = str(data.get("title", "")).strip()
+    message = str(data.get("message", "")).strip()[:500]
+    time_of_day = str(data.get("time_of_day", "")).strip()
+    days_of_week = str(
+        data.get("days_of_week", "0,1,2,3,4,5,6")
+    ).strip()
+    medicine_name = str(data.get("medicine_name", "")).strip()[:200]
+    dosage_note = str(data.get("dosage_note", "")).strip()[:300]
+
+    if not title or len(title) > 150:
+        connection.close()
+        return jsonify({"error": "Tiêu đề lời nhắc không hợp lệ."}), 400
+
+    try:
+        datetime.strptime(time_of_day, "%H:%M")
+    except ValueError:
+        connection.close()
+        return jsonify({"error": "Giờ nhắc phải có định dạng HH:MM."}), 400
+
+    try:
+        days = sorted({int(item) for item in days_of_week.split(",")})
+    except ValueError:
+        connection.close()
+        return jsonify({"error": "Danh sách ngày trong tuần không hợp lệ."}), 400
+
+    if not days or any(day < 0 or day > 6 for day in days):
+        connection.close()
+        return jsonify({
+            "error": "Ngày trong tuần phải nằm trong khoảng 0 đến 6."
+        }), 400
+
+    if reminder_type == "medicine" and not medicine_name:
+        connection.close()
+        return jsonify({
+            "error": "Vui lòng nhập tên thuốc do bác sĩ hoặc dược sĩ hướng dẫn."
+        }), 400
+
+    cursor = connection.execute(
+        """
+        INSERT INTO reminders (
+            user_id, reminder_type, title, message, time_of_day,
+            days_of_week, medicine_name, dosage_note
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            reminder_type,
+            title,
+            message,
+            time_of_day,
+            ",".join(str(day) for day in days),
+            medicine_name or None,
+            dosage_note or None,
+        ),
+    )
+    connection.commit()
+    reminder_id = cursor.lastrowid
+    connection.close()
+
+    return jsonify({
+        "message": "Đã tạo lời nhắc.",
+        "id": reminder_id,
+        "safety_note": (
+            "Ứng dụng chỉ nhắc theo lịch bạn nhập, không tự thay đổi liều "
+            "hoặc hướng dẫn xử trí khi quên liều."
+        ),
+    }), 201
+
+
+@app.route("/api/reminders/<int:reminder_id>", methods=["PUT", "DELETE"])
+@login_required
+def reminder_detail(reminder_id):
+    user_id = session["user_id"]
+    connection = get_database()
+
+    reminder = connection.execute(
+        "SELECT * FROM reminders WHERE id = ? AND user_id = ?",
+        (reminder_id, user_id),
+    ).fetchone()
+
+    if reminder is None:
+        connection.close()
+        return jsonify({"error": "Không tìm thấy lời nhắc."}), 404
+
+    if request.method == "DELETE":
+        connection.execute(
+            "DELETE FROM reminders WHERE id = ? AND user_id = ?",
+            (reminder_id, user_id),
+        )
+        connection.commit()
+        connection.close()
+        return jsonify({"message": "Đã xóa lời nhắc."})
+
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title", reminder["title"])).strip()
+    message = str(data.get("message", reminder["message"] or "")).strip()[:500]
+    time_of_day = str(
+        data.get("time_of_day", reminder["time_of_day"])
+    ).strip()
+    is_active = 1 if bool(data.get("is_active", reminder["is_active"])) else 0
+
+    try:
+        datetime.strptime(time_of_day, "%H:%M")
+    except ValueError:
+        connection.close()
+        return jsonify({"error": "Giờ nhắc phải có định dạng HH:MM."}), 400
+
+    connection.execute(
+        """
+        UPDATE reminders
+        SET title = ?, message = ?, time_of_day = ?, is_active = ?
+        WHERE id = ? AND user_id = ?
+        """,
+        (title, message, time_of_day, is_active, reminder_id, user_id),
+    )
+    connection.commit()
+    connection.close()
+
+    return jsonify({"message": "Đã cập nhật lời nhắc."})
+
+
+@app.get("/api/reminders/due")
+@login_required
+def due_reminders():
+    user_id = session["user_id"]
+    now = datetime.now()
+    current_time = now.strftime("%H:%M")
+    current_day = str(now.weekday())
+    current_date = now.date().isoformat()
+
+    connection = get_database()
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM reminders
+        WHERE user_id = ?
+          AND is_active = 1
+          AND time_of_day <= ?
+          AND (last_triggered_date IS NULL OR last_triggered_date <> ?)
+        """,
+        (user_id, current_time, current_date),
+    ).fetchall()
+
+    due = []
+    for row in rows:
+        days = {item.strip() for item in row["days_of_week"].split(",")}
+        if current_day not in days:
+            continue
+
+        due.append(dict(row))
+        connection.execute(
+            """
+            UPDATE reminders
+            SET last_triggered_date = ?
+            WHERE id = ? AND user_id = ?
+            """,
+            (current_date, row["id"], user_id),
+        )
+
+    connection.commit()
+    connection.close()
+
+    return jsonify({
+        "items": due,
+        "browser_notification_note": (
+            "Frontend nên gọi endpoint này định kỳ và dùng Notification API "
+            "để hiển thị lời nhắc khi trang đang mở."
+        ),
+    })
+
+
+@app.post("/api/health/recommendations")
+@login_required
+def health_recommendations():
+    if client is None:
+        return jsonify({"error": "Chưa cấu hình Gemini API key."}), 503
+
+    data = request.get_json(silent=True) or {}
+    request_type = str(data.get("type", "daily_plan")).strip().lower()
+
+    if request_type not in {
+        "nutrition", "meals", "exercise", "daily_plan"
+    }:
+        return jsonify({"error": "Loại tư vấn không hợp lệ."}), 400
+
+    user_id = session["user_id"]
+    connection = get_database()
+    profile = connection.execute(
+        "SELECT * FROM health_profiles WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    latest_weight = get_latest_weight(connection, user_id)
+    connection.close()
+
+    if profile is None or latest_weight is None:
+        return jsonify({
+            "error": (
+                "Vui lòng hoàn thiện hồ sơ sức khỏe và ghi cân nặng "
+                "trước khi nhận gợi ý."
+            )
+        }), 400
+
+    try:
+        age = calculate_age(profile["birth_date"], profile["age"])
+        metrics = calculate_health_metrics(
+            profile["sex"],
+            age,
+            profile["height_cm"],
+            latest_weight,
+            profile["activity_level"],
+            profile["goal"],
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    user_constraints = str(data.get("notes", "")).strip()[:1000]
+
+    prompt = f"""
+Hãy tạo gợi ý {request_type} an toàn, thực tế và dễ làm cho người trưởng thành.
+
+Dữ liệu:
+- Tuổi: {age}
+- Giới tính sinh học: {profile['sex']}
+- Chiều cao: {profile['height_cm']} cm
+- Cân nặng gần nhất: {latest_weight} kg
+- BMI: {metrics['bmi']} ({metrics['bmi_category']})
+- BMR ước tính: {metrics['bmr_kcal']} kcal/ngày
+- TDEE ước tính: {metrics['tdee_kcal']} kcal/ngày
+- Mục tiêu năng lượng tham khảo: {metrics['suggested_calorie_target_kcal']} kcal/ngày
+- Mục tiêu: {profile['goal']}
+- Chế độ ăn mong muốn: {profile['diet_preference'] or 'không khai báo'}
+- Dị ứng: {profile['allergies'] or 'không khai báo'}
+- Ghi chú sức khỏe: {profile['medical_notes'] or 'không khai báo'}
+- Yêu cầu thêm: {user_constraints or 'không có'}
+
+Yêu cầu bắt buộc:
+- Không chẩn đoán, không kê thuốc và không thay đổi liều thuốc.
+- Không đưa kế hoạch giảm cân cực đoan.
+- Không coi BMI, BMR hoặc TDEE là kết luận y khoa.
+- Tôn trọng dị ứng và chế độ ăn đã khai báo.
+- Với bài tập, đưa mức nhẹ và cách tăng dần; có khởi động và thả lỏng.
+- Nếu ghi chú có thai, bệnh thận, bệnh tim, tiểu đường, rối loạn ăn uống,
+  chấn thương hoặc bệnh mạn tính, phải khuyên hỏi bác sĩ/chuyên gia trước.
+- Gợi ý món ăn bằng thực phẩm phổ biến tại Việt Nam.
+- Trả lời ngắn gọn theo các mục rõ ràng.
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                SYSTEM_PROMPT,
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=1400,
+            reasoning_effort="low",
+        )
+
+        if not response.choices:
+            return jsonify({"error": "AI không trả về nội dung."}), 502
+
+        reply = response.choices[0].message.content
+        if not isinstance(reply, str) or not reply.strip():
+            return jsonify({"error": "AI trả về nội dung trống."}), 502
+
+        return jsonify({
+            "reply": reply.strip(),
+            "metrics": metrics,
+        })
+
+    except Exception as error:
         return build_error_response(error)
 
 

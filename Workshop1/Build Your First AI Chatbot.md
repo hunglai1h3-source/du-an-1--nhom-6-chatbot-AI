@@ -4,7 +4,7 @@ Workshop thực hành xây dựng Chatbot AI bằng **Python**, **Flask** và **
 
 ---
 
-# 🎯 Mục tiêu
+# Mục tiêu
 
 Sau khi hoàn thành workshop, sinh viên có thể:
 
