@@ -1312,3 +1312,47 @@ body.dark-mode .btn-outline {
 
 
 }
+.chat-history{
+
+padding:12px;
+
+border-bottom:1px solid #ddd;
+
+}
+
+
+.history-title{
+
+font-weight:700;
+
+margin-bottom:10px;
+
+}
+
+
+.history-item{
+
+width:100%;
+
+padding:8px;
+
+margin-bottom:6px;
+
+border-radius:8px;
+
+border:1px solid #ddd;
+
+background:white;
+
+cursor:pointer;
+
+text-align:left;
+
+}
+
+
+.history-item:hover{
+
+background:#eaf8ef;
+
+}

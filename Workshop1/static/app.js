@@ -4,6 +4,11 @@ const chatBody = document.getElementById("chatBody");
 const sendBtn = document.getElementById("sendBtn");
 let controller = null;
 let isGenerating = false;
+let chatSessions = JSON.parse(
+    localStorage.getItem("chatSessions")
+) || [];
+
+let currentChatId = Date.now();
 
 const imageInput = document.getElementById("imageInput");
 const attachImageBtn = document.getElementById("attachImageBtn");
@@ -34,6 +39,8 @@ const dropdown = document.querySelector(".dropdown");
 const dropdownTrigger = document.querySelector(".dropdown-trigger");
 
 let conversationHistory = [];
+
+
 let selectedImage = null;
 let selectedImageUrl = null;
 let isSending = false;
@@ -706,19 +713,26 @@ if (newChatBtn) {
     newChatBtn.addEventListener("click", () => {
 
 
-        // Xóa nội dung chat
+        // Lưu cuộc trò chuyện hiện tại
+        saveCurrentChat();
+
+
+
+        // Tạo cuộc trò chuyện mới
+
         chatBody.innerHTML = "";
 
 
-        // Xóa lịch sử hội thoại
         conversationHistory = [];
 
 
-        // Xóa ảnh đang chọn
+        currentChatId = Date.now();
+
+
         clearSelectedImage();
 
 
-        // Hiện lời chào mới
+
         appendMessage(
             "Xin chào! Tôi là MediCare AI. Bạn muốn được hỗ trợ về triệu chứng sức khỏe, dinh dưỡng, vận động hay giấc ngủ?",
             "assistant"
@@ -733,6 +747,117 @@ if (newChatBtn) {
     });
 
 }
+function saveCurrentChat(){
+
+    if(chatBody.innerHTML.trim()===""){
+        return;
+    }
+
+
+    const existing =
+        chatSessions.find(
+            chat => chat.id === currentChatId
+        );
+
+
+    if(existing){
+
+        existing.content =
+            chatBody.innerHTML;
+
+    }else{
+
+
+        chatSessions.push({
+
+            id: currentChatId,
+
+            title:
+            "Cuộc trò chuyện " +
+            new Date().toLocaleString(),
+
+            content:
+            chatBody.innerHTML
+
+        });
+
+    }
+
+
+    localStorage.setItem(
+        "chatSessions",
+        JSON.stringify(chatSessions)
+    );
+
+
+    loadHistory();
+
+}
+// =============================
+// LỊCH SỬ TRÒ CHUYỆN
+// =============================
+
+
+
+
+
+
+function loadHistory(){
+
+    const historyList =
+    document.getElementById("historyList");
+
+
+    if(!historyList){
+        return;
+    }
+
+
+    historyList.innerHTML = "";
+
+
+    chatSessions.forEach(chat=>{
+
+
+        const item =
+        document.createElement("button");
+
+
+        item.className =
+        "history-item";
+
+
+        item.innerText =
+        chat.title;
+
+
+        item.onclick = ()=>{
+
+
+            chatBody.innerHTML =
+            chat.content;
+
+
+            currentChatId =
+            chat.id;
+
+
+        };
+
+
+        historyList.appendChild(item);
+
+
+    });
+
+}// =============================
+// LỊCH SỬ TRÒ CHUYỆN
+// =============================
+
+
+
+loadHistory();
+
 checkCurrentUser();
 
 
