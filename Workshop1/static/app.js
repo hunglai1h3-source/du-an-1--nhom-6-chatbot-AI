@@ -698,6 +698,41 @@ mobileMenuBtn.addEventListener("click", () => {
 dropdownTrigger.addEventListener("click", () => {
   dropdown.classList.toggle("open");
 });
+// Tạo cuộc trò chuyện mới
+const newChatBtn = document.getElementById("newChatBtn");
 
+if (newChatBtn) {
+
+    newChatBtn.addEventListener("click", () => {
+
+
+        // Xóa nội dung chat
+        chatBody.innerHTML = "";
+
+
+        // Xóa lịch sử hội thoại
+        conversationHistory = [];
+
+
+        // Xóa ảnh đang chọn
+        clearSelectedImage();
+
+
+        // Hiện lời chào mới
+        appendMessage(
+            "Xin chào! Tôi là MediCare AI. Bạn muốn được hỗ trợ về triệu chứng sức khỏe, dinh dưỡng, vận động hay giấc ngủ?",
+            "assistant"
+        );
+
+
+        chatInput.value = "";
+
+        autoResizeTextarea();
+
+
+    });
+
+}
 checkCurrentUser();
+
 
