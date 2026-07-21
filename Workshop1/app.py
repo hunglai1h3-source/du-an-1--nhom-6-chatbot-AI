@@ -9,6 +9,7 @@ import math
 from werkzeug.security import generate_password_hash, check_password_hash
 import base64
 import json
+import re
 import os
 import sqlite3
 import time
@@ -27,12 +28,21 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+
+# Model dùng cho các câu hỏi chỉ có văn bản.
 MODEL_NAME = os.getenv(
     "MODEL_NAME",
     "llama-3.3-70b-versatile"
 ).strip()
 
-print("MODEL ĐANG DÙNG:", MODEL_NAME)
+# Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
+VISION_MODEL_NAME = os.getenv(
+    "VISION_MODEL_NAME",
+    "qwen/qwen3.6-27b"
+).strip()
+
+print("MODEL VĂN BẢN ĐANG DÙNG:", MODEL_NAME)
+print("MODEL HÌNH ẢNH ĐANG DÙNG:", VISION_MODEL_NAME)
 
 if API_KEY:
     client = OpenAI(
@@ -53,7 +63,6 @@ SYSTEM_PROMPT = {
     "content": """
 Bạn là MediCare AI, trợ lý hỗ trợ thông tin sức khỏe bằng tiếng Việt.
 
-<<<<<<< HEAD
 Bạn hỗ trợ các nhóm nhu cầu sau:
 
 1. Thu thập và phân tích triệu chứng ban đầu.
@@ -343,7 +352,6 @@ Sau khi đủ thông tin, trình bày rõ theo tiêu đề:
 
 Không viết quá dài nếu người dùng không yêu cầu chi tiết.
 Ưu tiên nội dung thực tế, có thể áp dụng.
-=======
 Nguyên tắc:
 - Không thay thế bác sĩ và không khẳng định chẩn đoán chắc chắn.
 - Không kê thuốc kê đơn, không tự đề xuất kháng sinh.
@@ -361,7 +369,6 @@ Nguyên tắc:
 - Không hiển thị quá trình suy luận.
 - Không viết các từ như Refining, Thinking, Analysis hoặc Draft.
 - Trả lời đầy đủ bằng tiếng Việt.
->>>>>>> 2496b64aa920179a07e79681f20c187362f0993b
 """
 }
 
@@ -543,7 +550,7 @@ def build_error_response(error):
         ):
             return jsonify({
                 "error": (
-                    "Gemini đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
+                    "Groq đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
                     "Vui lòng chờ hạn mức được đặt lại."
                 )
             }), 429
@@ -574,7 +581,7 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Hệ thống Gemini đang quá tải hoặc tạm thời không khả dụng. "
+                "Hệ thống Groq đang quá tải hoặc tạm thời không khả dụng. "
                 "Vui lòng đợi một lúc rồi thử lại."
             )
         }), 503
@@ -587,8 +594,9 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                f"Không thể sử dụng model {MODEL_NAME}. "
-                "Hãy kiểm tra tên model trong file .env."
+                "Không thể sử dụng model Groq đã cấu hình. "
+                f"Text model: {MODEL_NAME}; vision model: {VISION_MODEL_NAME}. "
+                "Hãy kiểm tra MODEL_NAME và VISION_MODEL_NAME trong file .env."
             )
         }), 404
 
@@ -608,7 +616,7 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Không thể kết nối tới máy chủ Gemini. "
+                "Không thể kết nối tới máy chủ Groq. "
                 "Hãy kiểm tra mạng Internet rồi thử lại."
             )
         }), 503
@@ -630,7 +638,8 @@ def index():
 def health():
     return jsonify({
         "status": "ok",
-        "model": MODEL_NAME
+        "text_model": MODEL_NAME,
+        "vision_model": VISION_MODEL_NAME,
     })
 
 
@@ -825,7 +834,9 @@ def chat():
 
             image_file = None
 
-        if not user_message and not image_file:
+        has_image = bool(image_file and image_file.filename)
+
+        if not user_message and not has_image:
             return jsonify({
                 "error": "Bạn chưa nhập câu hỏi hoặc chọn ảnh."
             }), 400
@@ -839,11 +850,17 @@ def chat():
 
         if "user_id" in session:
             connection = get_database()
+
             profile = connection.execute(
                 "SELECT * FROM health_profiles WHERE user_id = ?",
                 (session["user_id"],),
             ).fetchone()
-            latest_weight = get_latest_weight(connection, session["user_id"])
+
+            latest_weight = get_latest_weight(
+                connection,
+                session["user_id"]
+            )
+
             connection.close()
 
             if profile:
@@ -858,26 +875,43 @@ def chat():
                     "allergies": profile["allergies"],
                     "medical_notes": profile["medical_notes"],
                 }
+
                 messages.append({
                     "role": "system",
                     "content": (
                         "HỒ SƠ SỨC KHỎE DO NGƯỜI DÙNG TỰ KHAI:\n"
-                        + json.dumps(profile_context, ensure_ascii=False)
+                        + json.dumps(
+                            profile_context,
+                            ensure_ascii=False
+                        )
                         + "\nChỉ dùng hồ sơ này để cá nhân hóa an toàn. "
-                          "Không coi dữ liệu tự khai là chẩn đoán."
+                        "Không coi dữ liệu tự khai là chẩn đoán."
                     ),
                 })
 
         messages.extend(history)
 
-        if image_file:
+        if has_image:
             data_url = image_to_data_url(image_file)
 
             prompt_text = user_message or (
-                "Hãy xem ảnh này và mô tả những dấu hiệu sức khỏe "
-                "có thể quan sát được. Không chẩn đoán chắc chắn "
-                "và hãy hỏi thêm thông tin cần thiết."
+                "Hãy phân tích ảnh này. "
+                "Nếu đây là hộp thuốc, vỉ thuốc, lọ thuốc hoặc nhãn thuốc, "
+                "hãy đọc tên thuốc, hoạt chất, hàm lượng, dạng bào chế "
+                "và nhà sản xuất nếu nhìn thấy rõ."
             )
+
+            prompt_text += """
+
+Yêu cầu bắt buộc:
+- Chỉ nêu thông tin thực sự nhìn thấy trong ảnh.
+- Nếu là thuốc, ưu tiên đọc chữ trên bao bì hoặc vỉ thuốc.
+- Không xác định viên thuốc rời chỉ bằng màu sắc hoặc hình dạng.
+- Nếu không chắc chắn, ghi rõ "Không xác định".
+- Không tự đưa liều dùng hoặc thay đổi đơn thuốc.
+- Chỉ trả lời kết quả cuối cùng bằng tiếng Việt.
+- Không hiển thị thẻ <think> hoặc quá trình suy luận.
+"""
 
             messages.append({
                 "role": "user",
@@ -894,6 +928,7 @@ def chat():
                     }
                 ]
             })
+
         else:
             messages.append({
                 "role": "user",
@@ -902,33 +937,58 @@ def chat():
 
         start_time = time.perf_counter()
 
+        selected_model = (
+            VISION_MODEL_NAME
+            if has_image
+            else MODEL_NAME
+        )
+
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=selected_model,
             messages=messages,
             temperature=0.3,
-            max_tokens=1000,
+            max_completion_tokens=1000,
         )
 
         print(
-            f"Thời gian Gemini phản hồi: "
+            f"Thời gian Groq phản hồi bằng {selected_model}: "
             f"{time.perf_counter() - start_time:.2f} giây"
         )
 
         if not response.choices:
-            return jsonify({"error": "AI không trả về nội dung."}), 502
+            return jsonify({
+                "error": "AI không trả về nội dung."
+            }), 502
 
-        reply = response.choices[0].message.content
+        reply = response.choices[0].message.content or ""
 
-        if not isinstance(reply, str) or not reply.strip():
-            return jsonify({"error": "AI trả về nội dung trống."}), 502
+        reply = re.sub(
+            r"<think>.*?</think>\s*",
+            "",
+            reply,
+            flags=re.DOTALL | re.IGNORECASE
+        ).strip()
 
-        return jsonify({"reply": reply.strip()})
+        if not reply:
+            return jsonify({
+                "error": "AI trả về nội dung trống."
+            }), 502
+
+        return jsonify({
+            "reply": reply
+        })
 
     except ValueError as error:
-        return jsonify({"error": str(error)}), 400
+        return jsonify({
+            "error": str(error)
+        }), 400
 
     except Exception as error:
-        print(f"Groq API error: {type(error).__name__}: {error}")
+        print(
+            f"Groq API error: "
+            f"{type(error).__name__}: {error}"
+        )
+
         return build_error_response(error)
 
 
@@ -1630,7 +1690,7 @@ Yêu cầu bắt buộc: 1
                 },
             ],
             temperature=0.3,
-            max_tokens=1400,
+            max_completion_tokens=1400,
         )
 
         if not response.choices:
