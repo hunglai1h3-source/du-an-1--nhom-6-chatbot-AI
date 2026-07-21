@@ -373,6 +373,7 @@ Nguyên tắc:
 }
 
 DATABASE_PATH = BASE_DIR / "users.db"
+MEDICAL_DATABASE_PATH = BASE_DIR / "database" / "medical.db"
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
@@ -381,6 +382,149 @@ def get_database():
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
     return connection
+
+
+MEDICAL_SEARCH_STOPWORDS = {
+    "tôi", "mình", "em", "anh", "chị", "bạn", "bác", "sĩ",
+    "là", "bị", "có", "và", "hoặc", "thì", "nên", "phải",
+    "làm", "sao", "gì", "như", "thế", "nào", "được", "không",
+    "cho", "với", "của", "đang", "đã", "rồi", "một", "những",
+}
+
+
+def normalize_search_text(value):
+    """Chuẩn hóa nhẹ văn bản để tìm kiếm câu hỏi y tế."""
+    value = str(value or "").strip().lower()
+    value = re.sub(r"[^0-9a-zà-ỹđ\s]", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def search_medical_database(user_question, limit=3):
+    """
+    Tìm các câu hỏi liên quan trong medical.db.
+
+    Đây là tìm kiếm từ khóa có chấm điểm, phù hợp để chạy thử RAG
+    với SQLite mà chưa cần FAISS hoặc ChromaDB.
+    """
+    normalized_question = normalize_search_text(user_question)
+
+    keywords = [
+        word for word in normalized_question.split()
+        if len(word) >= 2 and word not in MEDICAL_SEARCH_STOPWORDS
+    ]
+
+    # Loại từ lặp nhưng vẫn giữ đúng thứ tự.
+    keywords = list(dict.fromkeys(keywords))[:10]
+
+    if not keywords or not MEDICAL_DATABASE_PATH.is_file():
+        return []
+
+    connection = None
+
+    try:
+        connection = sqlite3.connect(MEDICAL_DATABASE_PATH)
+        connection.row_factory = sqlite3.Row
+
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(medical_qa)"
+            ).fetchall()
+        }
+
+        if not {"question", "answer"}.issubset(columns):
+            print("Bảng medical_qa thiếu cột question hoặc answer.")
+            return []
+
+        source_select = "source" if "source" in columns else "'' AS source"
+
+        conditions = []
+        parameters = []
+
+        for keyword in keywords:
+            conditions.append(
+                "(LOWER(question) LIKE ? OR LOWER(answer) LIKE ?)"
+            )
+            pattern = f"%{keyword}%"
+            parameters.extend([pattern, pattern])
+
+        sql = f"""
+            SELECT question, answer, {source_select}
+            FROM medical_qa
+            WHERE {" OR ".join(conditions)}
+            LIMIT 60
+        """
+
+        rows = connection.execute(sql, parameters).fetchall()
+
+        scored_results = []
+
+        for row in rows:
+            database_question = normalize_search_text(row["question"])
+            database_answer = normalize_search_text(row["answer"])
+
+            question_words = set(database_question.split())
+            answer_words = set(database_answer.split())
+
+            score = 0
+
+            for keyword in keywords:
+                if keyword in question_words:
+                    score += 4
+                elif keyword in database_question:
+                    score += 2
+
+                if keyword in answer_words:
+                    score += 1
+
+            # Ưu tiên mạnh khi câu người dùng gần giống câu hỏi trong database.
+            if normalized_question == database_question:
+                score += 20
+            elif normalized_question in database_question:
+                score += 8
+
+            if score > 0:
+                scored_results.append({
+                    "question": row["question"],
+                    "answer": row["answer"],
+                    "source": row["source"] or "medical_qa",
+                    "score": score,
+                })
+
+        scored_results.sort(
+            key=lambda item: item["score"],
+            reverse=True
+        )
+
+        return scored_results[:max(1, min(int(limit), 5))]
+
+    except (sqlite3.Error, OSError, ValueError) as error:
+        print("Lỗi tìm kiếm medical.db:", error)
+        return []
+
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def build_medical_context(user_question, limit=3):
+    """Định dạng kết quả tìm kiếm để đưa vào system message."""
+    results = search_medical_database(user_question, limit=limit)
+
+    if not results:
+        return ""
+
+    sections = []
+
+    for index, item in enumerate(results, start=1):
+        sections.append(
+            f"Tài liệu {index}:\n"
+            f"Câu hỏi tham khảo: {item['question']}\n"
+            f"Nội dung tham khảo: {item['answer']}\n"
+            f"Nguồn: {item['source']}"
+        )
+
+    return "\n\n".join(sections)
 
 
 def initialize_database():
@@ -888,6 +1032,39 @@ def chat():
                         "Không coi dữ liệu tự khai là chẩn đoán."
                     ),
                 })
+
+        # Chỉ truy xuất kho kiến thức cho câu hỏi văn bản.
+        # Không dùng database để suy đoán nội dung của ảnh.
+        if user_message and not has_image:
+            medical_context = build_medical_context(
+                user_message,
+                limit=3
+            )
+
+            if medical_context:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "DỮ LIỆU THAM KHẢO TRUY XUẤT TỪ KHO Y TẾ:\n"
+                        f"{medical_context}\n\n"
+                        "Quy tắc sử dụng:\n"
+                        "- Chỉ dùng khi thực sự liên quan đến câu hỏi hiện tại.\n"
+                        "- Không sao chép máy móc và không coi đây là chẩn đoán.\n"
+                        "- Nếu dữ liệu mâu thuẫn hoặc không đủ, ưu tiên trả lời "
+                        "thận trọng và khuyên người dùng đi khám khi cần.\n"
+                        "- Không nói với người dùng về điểm tìm kiếm nội bộ."
+                    ),
+                })
+
+                print(
+                    "Đã tìm thấy dữ liệu y tế tham khảo cho:",
+                    user_message[:100]
+                )
+            else:
+                print(
+                    "Không tìm thấy dữ liệu y tế phù hợp cho:",
+                    user_message[:100]
+                )
 
         messages.extend(history)
 
