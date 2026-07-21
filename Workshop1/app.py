@@ -26,21 +26,25 @@ app.config["SECRET_KEY"] = os.getenv(
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash").strip()
+API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+MODEL_NAME = os.getenv(
+    "MODEL_NAME",
+    "llama-3.3-70b-versatile"
+).strip()
+
 print("MODEL ĐANG DÙNG:", MODEL_NAME)
 
 if API_KEY:
     client = OpenAI(
-    api_key=API_KEY,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-    timeout=90.0,
-    max_retries=1
-)
+        api_key=API_KEY,
+        base_url="https://api.groq.com/openai/v1",
+        timeout=90.0,
+        max_retries=1,
+    )
 else:
     client = None
     print(
-        "CẢNH BÁO: Chưa có Gemini API key. "
+        "CẢNH BÁO: Chưa có Groq API key. "
         "Đăng ký và đăng nhập vẫn hoạt động."
     )
 
@@ -527,22 +531,22 @@ def build_error_response(error):
     status_code = get_error_status(error)
     error_text = str(error).lower()
 
-    print("CHI TIẾT LỖI GEMINI:", repr(error))
+    print("CHI TIẾT LỖI GROQ:", repr(error))
     print("STATUS CODE:", status_code)
 
     if (
-        status_code == 429
-        or "429" in error_text
-        or "quota" in error_text
-        or "rate limit" in error_text
-        or "resource_exhausted" in error_text
-    ):
-        return jsonify({
-            "error": (
-                "Gemini đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
-                "Vui lòng chờ hạn mức được đặt lại."
-            )
-        }), 429
+            status_code == 429
+            or "429" in error_text
+            or "quota" in error_text
+            or "rate limit" in error_text
+            or "resource_exhausted" in error_text
+        ):
+            return jsonify({
+                "error": (
+                    "Gemini đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
+                    "Vui lòng chờ hạn mức được đặt lại."
+                )
+            }), 429
 
     if (
         status_code in {401, 403}
@@ -594,7 +598,7 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Gemini phản hồi quá lâu. Vui lòng gửi lại câu hỏi."
+                "Groq phản hồi quá lâu. Vui lòng gửi lại câu hỏi."
             )
         }), 504
 
@@ -780,8 +784,8 @@ def chat():
     if client is None:
         return jsonify({
             "error": (
-                "Chưa cấu hình Gemini API key. "
-                "Đăng ký và đăng nhập vẫn sử dụng được.."
+                "Chưa cấu hình Groq API key. "
+                "Hãy kiểm tra file .env trong thư mục Workshop1."
             )
         }), 503
 
@@ -903,7 +907,6 @@ def chat():
             messages=messages,
             temperature=0.3,
             max_tokens=1000,
-            reasoning_effort="low"
         )
 
         print(
@@ -925,7 +928,7 @@ def chat():
         return jsonify({"error": str(error)}), 400
 
     except Exception as error:
-        print(f"Gemini API error: {type(error).__name__}: {error}")
+        print(f"Groq API error: {type(error).__name__}: {error}")
         return build_error_response(error)
 
 
@@ -1542,7 +1545,9 @@ def due_reminders():
 @login_required
 def health_recommendations():
     if client is None:
-        return jsonify({"error": "Chưa cấu hình Gemini API key."}), 503
+        return jsonify({
+            "error": "Chưa cấu hình Groq API key."
+        }), 503
 
     data = request.get_json(silent=True) or {}
     request_type = str(data.get("type", "daily_plan")).strip().lower()
@@ -1619,19 +1624,26 @@ Yêu cầu bắt buộc: 1
             model=MODEL_NAME,
             messages=[
                 SYSTEM_PROMPT,
-                {"role": "user", "content": prompt},
+                {
+                    "role": "user",
+                    "content": prompt
+                },
             ],
             temperature=0.3,
             max_tokens=1400,
-            reasoning_effort="low",
         )
 
         if not response.choices:
-            return jsonify({"error": "AI không trả về nội dung."}), 502
+            return jsonify({
+                "error": "AI không trả về nội dung."
+            }), 502
 
         reply = response.choices[0].message.content
+
         if not isinstance(reply, str) or not reply.strip():
-            return jsonify({"error": "AI trả về nội dung trống."}), 502
+            return jsonify({
+                "error": "AI trả về nội dung trống."
+            }), 502
 
         return jsonify({
             "reply": reply.strip(),
@@ -1639,6 +1651,7 @@ Yêu cầu bắt buộc: 1
         })
 
     except Exception as error:
+        print(f"Groq API error: {type(error).__name__}: {error}")
         return build_error_response(error)
 
 
