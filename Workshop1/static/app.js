@@ -793,64 +793,189 @@ function saveCurrentChat(){
     loadHistory();
 
 }
-// =============================
-// LỊCH SỬ TRÒ CHUYỆN
-// =============================
+function saveChatSessions() {
+  localStorage.setItem(
+    "chatSessions",
+    JSON.stringify(chatSessions)
+  );
+}
 
 
+function closeHistoryMenus() {
+  document
+    .querySelectorAll(".history-menu.show")
+    .forEach((menu) => {
+      menu.classList.remove("show");
+    });
+}
 
 
+function resetChatAfterDelete() {
+  chatBody.innerHTML = "";
+  conversationHistory = [];
+  currentChatId = Date.now();
+
+  clearSelectedImage();
+
+  appendMessage(
+    "Xin chào! Tôi là MediCare AI. Bạn muốn được hỗ trợ về triệu chứng sức khỏe, dinh dưỡng, vận động hay giấc ngủ?",
+    "assistant"
+  );
+
+  chatInput.value = "";
+  autoResizeTextarea();
+}
 
 
-function loadHistory(){
+function deleteChat(chatId) {
+  const selectedChat = chatSessions.find(
+    (chat) => chat.id === chatId
+  );
 
-    const historyList =
+  if (!selectedChat) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Bạn có chắc muốn xóa "${selectedChat.title}" không?\n\nHành động này không thể hoàn tác.`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  chatSessions = chatSessions.filter(
+    (chat) => chat.id !== chatId
+  );
+
+  saveChatSessions();
+
+  if (currentChatId === chatId) {
+    resetChatAfterDelete();
+  }
+
+  loadHistory();
+}
+
+
+function loadHistory() {
+  const historyList =
     document.getElementById("historyList");
 
+  if (!historyList) {
+    return;
+  }
 
-    if(!historyList){
-        return;
-    }
+  historyList.innerHTML = "";
 
+  if (chatSessions.length === 0) {
+    const emptyMessage =
+      document.createElement("div");
 
-    historyList.innerHTML = "";
+    emptyMessage.className = "history-empty";
+    emptyMessage.textContent =
+      "Chưa có cuộc trò chuyện nào.";
 
+    historyList.appendChild(emptyMessage);
+    return;
+  }
 
-    chatSessions.forEach(chat=>{
+  [...chatSessions]
+    .reverse()
+    .forEach((chat) => {
+      const row =
+        document.createElement("div");
 
+      row.className = "history-row";
 
-        const item =
+      if (chat.id === currentChatId) {
+        row.classList.add("active");
+      }
+
+      const openButton =
         document.createElement("button");
 
+      openButton.type = "button";
+      openButton.className = "history-item";
+      openButton.textContent = chat.title;
+      openButton.title = chat.title;
 
-        item.className =
-        "history-item";
+      openButton.addEventListener(
+        "click",
+        () => {
+          closeHistoryMenus();
 
+          chatBody.innerHTML = chat.content;
+          currentChatId = chat.id;
 
-        item.innerText =
-        chat.title;
+          loadHistory();
+        }
+      );
 
+      const moreButton =
+        document.createElement("button");
 
-        item.onclick = ()=>{
+      moreButton.type = "button";
+      moreButton.className = "history-more-btn";
+      moreButton.textContent = "⋯";
+      moreButton.title = "Tùy chọn";
 
+      const menu =
+        document.createElement("div");
 
-            chatBody.innerHTML =
-            chat.content;
+      menu.className = "history-menu";
 
+      const deleteButton =
+        document.createElement("button");
 
-            currentChatId =
-            chat.id;
+      deleteButton.type = "button";
+      deleteButton.className =
+        "history-delete-btn";
 
+      deleteButton.innerHTML = `
+        <span aria-hidden="true">🗑</span>
+        <span>Xóa</span>
+      `;
 
-        };
+      moreButton.addEventListener(
+        "click",
+        (event) => {
+          event.stopPropagation();
 
+          const shouldOpen =
+            !menu.classList.contains("show");
 
-        historyList.appendChild(item);
+          closeHistoryMenus();
 
+          if (shouldOpen) {
+            menu.classList.add("show");
+          }
+        }
+      );
 
+      deleteButton.addEventListener(
+        "click",
+        (event) => {
+          event.stopPropagation();
+          deleteChat(chat.id);
+        }
+      );
+
+      menu.appendChild(deleteButton);
+
+      row.appendChild(openButton);
+      row.appendChild(moreButton);
+      row.appendChild(menu);
+
+      historyList.appendChild(row);
     });
+}
 
-}// =============================
+
+document.addEventListener(
+  "click",
+  closeHistoryMenus
+);
 // LỊCH SỬ TRÒ CHUYỆN
 // =============================
 
@@ -859,5 +984,101 @@ function loadHistory(){
 loadHistory();
 
 checkCurrentUser();
+document.addEventListener("DOMContentLoaded", function () {
+  const body = document.body;
+
+  const sidebarOpenBtn =
+    document.getElementById("sidebarOpenBtn");
+
+  const sidebarCloseBtn =
+    document.getElementById("sidebarCloseBtn");
+
+  const sidebarOverlay =
+    document.getElementById("sidebarOverlay");
+
+  const sidebarNewChatBtn =
+    document.getElementById("sidebarNewChatBtn");
+
+  function setSidebarCollapsed(collapsed) {
+    body.classList.toggle(
+      "sidebar-collapsed",
+      collapsed
+    );
+
+    localStorage.setItem(
+      "medicareSidebarCollapsed",
+      String(collapsed)
+    );
+  }
+
+  /* Khôi phục trạng thái đóng/mở */
+  const savedState =
+    localStorage.getItem("medicareSidebarCollapsed");
+
+  const isMobile =
+    window.matchMedia("(max-width: 900px)").matches;
+
+  if (
+    savedState === "true" ||
+    (savedState === null && isMobile)
+  ) {
+    body.classList.add("sidebar-collapsed");
+  }
+
+  /* Mở sidebar */
+  sidebarOpenBtn?.addEventListener(
+    "click",
+    function () {
+      setSidebarCollapsed(false);
+    }
+  );
+
+  /* Đóng sidebar */
+  sidebarCloseBtn?.addEventListener(
+    "click",
+    function () {
+      setSidebarCollapsed(true);
+    }
+  );
+
+  /* Bấm ra ngoài để đóng */
+  sidebarOverlay?.addEventListener(
+    "click",
+    function () {
+      setSidebarCollapsed(true);
+    }
+  );
+
+  /* Nút cuộc trò chuyện mới trong sidebar */
+  sidebarNewChatBtn?.addEventListener(
+    "click",
+    function () {
+      const currentNewChatBtn =
+        document.getElementById("newChatBtn");
+
+      if (currentNewChatBtn) {
+        currentNewChatBtn.click();
+      }
+
+      if (
+        window.matchMedia(
+          "(max-width: 900px)"
+        ).matches
+      ) {
+        setSidebarCollapsed(true);
+      }
+    }
+  );
+
+  /* Nhấn Esc để đóng */
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (event.key === "Escape") {
+        setSidebarCollapsed(true);
+      }
+    }
+  );
+});
 
 

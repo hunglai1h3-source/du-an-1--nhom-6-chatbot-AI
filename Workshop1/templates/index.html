@@ -9,6 +9,62 @@
 </head>
 
 <body>
+   <!-- SIDEBAR LỊCH SỬ TRÒ CHUYỆN -->
+  <aside
+    class="conversation-sidebar"
+    id="conversationSidebar"
+    aria-label="Lịch sử trò chuyện"
+  >
+    <div class="conversation-sidebar-header">
+
+      <button
+        class="sidebar-new-chat"
+        id="sidebarNewChatBtn"
+        type="button"
+      >
+        <span>✎</span>
+        <span>Cuộc trò chuyện mới</span>
+      </button>
+
+      <button
+        class="sidebar-close-btn"
+        id="sidebarCloseBtn"
+        type="button"
+        title="Thu gọn lịch sử"
+        aria-label="Thu gọn lịch sử"
+      >
+        ‹
+      </button>
+
+    </div>
+
+    <div class="sidebar-history-title">
+      Lịch sử trò chuyện
+    </div>
+
+    <div class="sidebar-history-scroll">
+      <div id="historyList"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      MediCare AI
+    </div>
+  </aside>
+
+  <button
+    class="sidebar-open-btn"
+    id="sidebarOpenBtn"
+    type="button"
+    aria-label="Mở lịch sử trò chuyện"
+  >
+    ☰
+  </button>
+
+  <div
+    class="sidebar-overlay"
+    id="sidebarOverlay"
+  ></div>
+
   <header class="site-header">
     <div class="container navbar">
       <a class="logo" href="#trang-chu" aria-label="MediCare AI">
@@ -137,15 +193,7 @@
               <span></span> Đang hoạt động
             </div>
           </div>
-          <div class="chat-history">
-
-    <div class="history-title">
-        Lịch sử trò chuyện
-    </div>
-
-    <div id="historyList"></div>
-
-</div>
+          
           <div class="chat-body" id="chatBody">
             <div class="message-row assistant">
               <div class="small-avatar">🤖</div>
