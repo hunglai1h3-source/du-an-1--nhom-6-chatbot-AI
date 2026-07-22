@@ -2,21 +2,110 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="MediCare AI - Chatbot hỗ trợ tư vấn sức khỏe 24/7" />
-  <title>MediCare AI - Tư vấn sức khỏe 24/7</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link
+    rel="icon"
+    type="image/png"
+    href="{{ url_for('static', filename='images/images.jpg1.png') }}?v=2"
+  />
+
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <meta
+    name="description"
+    content="MediCare AI - Chatbot hỗ trợ tư vấn sức khỏe 24/7"
+  />
+
+  <title>
+    MediCare AI
+  </title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}"
+  />
+
+  <style>
+    .voice-status {
+      margin: 8px 14px 0;
+      padding: 8px 11px;
+      border-radius: 10px;
+      background: #eef8f1;
+      color: #08783e;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .voice-status.error {
+      background: #fff1f1;
+      color: #b42318;
+    }
+
+    .voice-button {
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .voice-button.recording {
+      background: #fee2e2 !important;
+      color: #dc2626 !important;
+      animation: voicePulse 1.1s infinite;
+    }
+
+    .voice-button.transcribing {
+      cursor: wait;
+      opacity: 0.72;
+    }
+
+    .message-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    @keyframes voicePulse {
+      0%,
+      100% {
+        box-shadow:
+          0 0 0 0
+          rgba(220, 38, 38, 0.32);
+      }
+
+      50% {
+        box-shadow:
+          0 0 0 7px
+          rgba(220, 38, 38, 0);
+      }
+    }
+
+    body.dark-mode .voice-status {
+      background: #163326;
+      color: #86efac;
+    }
+
+    body.dark-mode .voice-status.error {
+      background: #451f1f;
+      color: #fca5a5;
+    }
+  </style>
 </head>
 
 <body>
-   <!-- SIDEBAR LỊCH SỬ TRÒ CHUYỆN -->
+  <!-- SIDEBAR LỊCH SỬ -->
+
   <aside
     class="conversation-sidebar"
     id="conversationSidebar"
     aria-label="Lịch sử trò chuyện"
   >
-    <div class="conversation-sidebar-header">
-
+    <div
+      class="conversation-sidebar-header"
+    >
       <button
         class="sidebar-new-chat"
         id="sidebarNewChatBtn"
@@ -35,7 +124,6 @@
       >
         ‹
       </button>
-
     </div>
 
     <div class="sidebar-history-title">
@@ -65,262 +153,546 @@
     id="sidebarOverlay"
   ></div>
 
+  <!-- HEADER -->
+
   <header class="site-header">
     <div class="container navbar">
-      <a class="logo" href="#trang-chu" aria-label="MediCare AI">
-        <div class="logo-mark">+</div>
+      <a
+        class="logo"
+        href="#trang-chu"
+        aria-label="MediCare AI"
+      >
+        <div class="logo-mark">
+          +
+        </div>
+
         <div class="logo-copy">
-          <strong>MediCare <span>AI</span></strong>
-          <small>AI đồng hành cùng sức khỏe</small>
+          <strong>
+            MediCare
+            <span>AI</span>
+          </strong>
+
+          <small>
+            AI đồng hành cùng sức khỏe
+          </small>
         </div>
       </a>
 
-      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Mở menu">☰</button>
+      <button
+        class="mobile-menu-btn"
+        id="mobileMenuBtn"
+        type="button"
+        aria-label="Mở menu"
+      >
+        ☰
+      </button>
 
-      <nav class="nav-links" id="navLinks">
-        <a href="#trang-chu" class="active">Trang chủ</a>
-        <a href="#tu-van">Tư vấn AI</a>
+      <nav
+        class="nav-links"
+        id="navLinks"
+      >
+        <a
+          href="#trang-chu"
+          class="active"
+        >
+          Trang chủ
+        </a>
+
+        <a href="#tu-van">
+          Tư vấn AI
+        </a>
 
         <div class="dropdown">
-          <button class="dropdown-trigger" type="button">
-            Chuyên khoa <span>⌄</span>
+          <button
+            class="dropdown-trigger"
+            type="button"
+          >
+            Chuyên khoa
+            <span>⌄</span>
           </button>
 
           <div class="dropdown-menu">
-            <button data-specialty="Tai Mũi Họng"><span>👂</span> Tai Mũi Họng</button>
-            <button data-specialty="Tim mạch"><span>🫀</span> Tim mạch</button>
-            <button data-specialty="Cơ xương khớp"><span>🦴</span> Cơ xương khớp</button>
-            <button data-specialty="Thần kinh"><span>🧠</span> Thần kinh</button>
-            <button data-specialty="Nội tổng quát"><span>🩺</span> Nội tổng quát</button>
-            <button data-specialty="Da liễu"><span>🧴</span> Da liễu</button>
-            <button data-specialty="Dinh dưỡng"><span>🥗</span> Dinh dưỡng</button>
+            <button
+              type="button"
+              data-specialty="Tai Mũi Họng"
+            >
+              <span>👂</span>
+              Tai Mũi Họng
+            </button>
+
+            <button
+              type="button"
+              data-specialty="Tim mạch"
+            >
+              <span>🫀</span>
+              Tim mạch
+            </button>
+
+            <button
+              type="button"
+              data-specialty="Cơ xương khớp"
+            >
+              <span>🦴</span>
+              Cơ xương khớp
+            </button>
+
+            <button
+              type="button"
+              data-specialty="Thần kinh"
+            >
+              <span>🧠</span>
+              Thần kinh
+            </button>
+
+            <button
+              type="button"
+              data-specialty="Nội tổng quát"
+            >
+              <span>🩺</span>
+              Nội tổng quát
+            </button>
+
+            <button
+              type="button"
+              data-specialty="Da liễu"
+            >
+              <span>🧴</span>
+              Da liễu
+            </button>
+
+            <button
+              type="button"
+              data-specialty="Dinh dưỡng"
+            >
+              <span>🥗</span>
+              Dinh dưỡng
+            </button>
           </div>
         </div>
 
-        <a href="#tinh-nang">Tính năng</a>
-        <a href="#lien-he">Liên hệ</a>
+        <a href="#tinh-nang">
+          Tính năng
+        </a>
+
+        <a href="#lien-he">
+          Liên hệ
+        </a>
       </nav>
 
       <div class="header-actions">
+        <button
+          class="theme-btn"
+          id="themeBtn"
+          type="button"
+          title="Đổi giao diện"
+        >
+          🌙
+        </button>
 
-    <button 
-        class="theme-btn" 
-        id="themeBtn"
-        type="button"
-        title="Đổi giao diện">
-        🌙
-    </button>
+        <span
+          class="user-name hidden"
+          id="userName"
+        ></span>
 
-    <span class="user-name hidden" id="userName"></span>
+        <button
+          class="btn btn-outline"
+          id="openLoginBtn"
+          type="button"
+        >
+          Đăng nhập
+        </button>
 
-    <button class="btn btn-outline" id="openLoginBtn">
-        Đăng nhập
-    </button>
+        <button
+          class="btn btn-outline hidden"
+          id="logoutBtn"
+          type="button"
+        >
+          Đăng xuất
+        </button>
 
-    <button 
-        class="btn btn-outline hidden" 
-        id="logoutBtn">
-        Đăng xuất
-    </button>
-
-    <a 
-        class="btn btn-orange desktop-consult" 
-        href="#tu-van">
-        💬 Bắt đầu tư vấn
-    </a>
-
-</div>
+        <a
+          class="btn btn-orange desktop-consult"
+          href="#tu-van"
+        >
+          💬 Bắt đầu tư vấn
+        </a>
+      </div>
     </div>
   </header>
 
+  <!-- MAIN -->
+
   <main>
-    <section class="hero" id="trang-chu">
+    <section
+      class="hero"
+      id="trang-chu"
+    >
       <div class="container hero-grid">
         <div class="hero-content">
-          <div class="eyebrow">✦ AI TƯ VẤN SỨC KHỎE</div>
+          <div class="eyebrow">
+            ✦ AI TƯ VẤN SỨC KHỎE
+          </div>
 
           <h1>
-            <span class="orange">CHATBOT AI</span>
-            <span class="green">TƯ VẤN SỨC KHỎE 24/7</span>
+            <span class="orange">
+              CHATBOT AI
+            </span>
+
+            <span class="green">
+              TƯ VẤN SỨC KHỎE 24/7
+            </span>
           </h1>
 
           <p class="hero-description">
-            Hỗ trợ giải đáp câu hỏi sức khỏe thường gặp, gợi ý chăm sóc ban đầu
-            và định hướng chuyên khoa phù hợp nhanh chóng, dễ hiểu và an toàn.
+            Hỗ trợ giải đáp câu hỏi sức khỏe
+            thường gặp, gợi ý chăm sóc ban
+            đầu và định hướng chuyên khoa phù
+            hợp nhanh chóng, dễ hiểu và an toàn.
           </p>
 
           <div class="benefit-row">
             <div class="benefit-item">
-              <div class="benefit-icon">🛡</div>
+              <div class="benefit-icon">
+                🛡
+              </div>
+
               <div>
-                <strong>Tin cậy</strong>
-                <span>Dựa trên kiến thức y khoa</span>
+                <strong>
+                  Tin cậy
+                </strong>
+
+                <span>
+                  Dựa trên kiến thức y khoa
+                </span>
               </div>
             </div>
 
             <div class="benefit-item">
-              <div class="benefit-icon">🕒</div>
+              <div class="benefit-icon">
+                🕒
+              </div>
+
               <div>
-                <strong>24/7</strong>
-                <span>Luôn sẵn sàng hỗ trợ</span>
+                <strong>
+                  24/7
+                </strong>
+
+                <span>
+                  Luôn sẵn sàng hỗ trợ
+                </span>
               </div>
             </div>
           </div>
 
           <div class="medical-notice">
-            <div class="notice-icon">⚕</div>
+            <div class="notice-icon">
+              ⚕
+            </div>
+
             <div>
-              <strong>Lưu ý quan trọng</strong>
+              <strong>
+                Lưu ý quan trọng
+              </strong>
+
               <p>
-                AI không thay thế việc chẩn đoán của bác sĩ. Trong trường hợp khẩn cấp,
-                hãy gọi cấp cứu hoặc đến cơ sở y tế gần nhất.
+                AI không thay thế việc chẩn
+                đoán của bác sĩ. Trong trường
+                hợp khẩn cấp, hãy gọi cấp cứu
+                hoặc đến cơ sở y tế gần nhất.
               </p>
             </div>
           </div>
         </div>
 
-        <section class="chat-card" id="tu-van" aria-label="Chatbot tư vấn sức khỏe">
+        <!-- CHAT -->
+
+        <section
+          class="chat-card"
+          id="tu-van"
+          aria-label="Chatbot tư vấn sức khỏe"
+        >
           <div class="chat-header">
             <div class="assistant-profile">
-              <div class="bot-avatar">🤖</div>
+              <div class="bot-avatar">
+                🤖
+              </div>
+
               <div>
-                <strong>MediCare AI <span class="verified">✓</span></strong>
-                <small>Trợ lý sức khỏe AI của bạn</small>
+                <strong>
+                  MediCare AI
+                  <span class="verified">
+                    ✓
+                  </span>
+                </strong>
+
+                <small>
+                  Trợ lý sức khỏe AI của bạn
+                </small>
               </div>
             </div>
 
             <div class="online-status">
-              <span></span> Đang hoạt động
+              <span></span>
+              Đang hoạt động
             </div>
           </div>
+
           
-          <div class="chat-body" id="chatBody">
-            <div class="message-row assistant">
-              <div class="small-avatar">🤖</div>
-              <div class="message-bubble">Xin chào! Tôi là MediCare AI. Bạn muốn được hỗ trợ về triệu chứng sức khỏe,dinh dưỡng, vận động hay giấc ngủ?.
-              </div>
-            </div>
-          </div>
-          <div class="chat-tools">
+          <div
+class="chat-body" id="chatBody">
+  <div class="message-row assistant">
+    <div class="small-avatar">🤖</div>
 
-    <button 
-        id="newChatBtn"
-        class="chat-tool-btn"
-        type="button">
-
-        🆕 Cuộc trò chuyện mới
-
-    </button>
-
-
-    <button 
-        id="stopBtn"
-        class="chat-tool-btn stop-btn hidden"
-        type="button">
-
-        ⏹ Dừng trả lời
-
-    </button>
-
+    <div class="message-bubble">
+      <div class="ai-content">
+Xin chào! Tôi là MediCare AI. Bạn muốn được hỗ trợ về triệu chứng sức khỏe, dinh dưỡng, vận động hay giấc ngủ?
+      </div>
+    </div>
+  </div>
 </div>
-          <div class="suggested-questions" id="suggestedQuestions">
-            <button data-question="Tôi bị đau họng và sốt nhẹ nên làm gì?">Đau họng và sốt nhẹ</button>
-            <button data-question="Tôi nên khám chuyên khoa nào?">Chọn chuyên khoa</button>
-            <button data-question="Cách xử lý ban đầu khi đau dạ dày?">Đau dạ dày</button>
-          </div>
 
-          <div class="image-preview-panel hidden" id="imagePreviewPanel">
-            <img id="imagePreview" alt="Ảnh đã chọn">
-            <div class="image-preview-info">
-              <strong id="imageFileName"></strong>
-              <small>JPG, PNG hoặc WEBP · tối đa 5 MB</small>
-            </div>
-            <button type="button" id="removeImageBtn" aria-label="Xóa ảnh">×</button>
-          </div>
+<div class="chat-tools">
+  <button
+    id="stopBtn"
+    class="chat-tool-btn stop-btn hidden"
+    type="button"
+  >
+    ⏹ Dừng trả lời
+  </button>
+</div>
 
-          <form class="chat-input-area" id="chatForm">
-            <input
-              id="imageInput"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              hidden
-            >
+<div
+  class="suggested-questions"
+  id="suggestedQuestions"
+>
+  <button
+    type="button"
+    data-question="Tôi bị đau họng và sốt nhẹ nên làm gì?"
+  >
+    Đau họng và sốt nhẹ
+  </button>
 
-            <button
-              class="attach-button"
-              id="attachImageBtn"
-              type="button"
-              aria-label="Thêm ảnh"
-              title="Thêm ảnh"
-            >
-              📷
-            </button>
+  <button
+    type="button"
+    data-question="Tôi nên khám chuyên khoa nào?"
+  >
+    Chọn chuyên khoa
+  </button>
 
-            <textarea
-              id="chatInput"
-              rows="1"
-              maxlength="4000"
-              placeholder="Nhập câu hỏi sức khỏe của bạn..."
-              aria-label="Nhập câu hỏi sức khỏe"
-            ></textarea>
+  <button
+    type="button"
+    data-question="Cách xử lý ban đầu khi đau dạ dày?"
+  >
+    Đau dạ dày
+  </button>
+</div>
 
-            <button class="send-button" id="sendBtn" type="submit" aria-label="Gửi câu hỏi">
-              ➤
-            </button>
-          </form>
 
-          <p class="chat-disclaimer">
-            AI có thể mắc sai sót. Vui lòng tham khảo ý kiến bác sĩ khi cần.
-          </p>
-        </section>
+<div
+  class="image-preview-panel hidden"
+  id="imagePreviewPanel"
+>
+  <img
+    id="imagePreview"
+    alt="Ảnh đã chọn"
+  >
+
+  <div class="image-preview-info">
+    <strong id="imageFileName"></strong>
+
+    <small>
+      JPG, PNG hoặc WEBP · tối đa 5 MB
+    </small>
+  </div>
+
+  <button
+    type="button"
+    id="removeImageBtn"
+    aria-label="Xóa ảnh"
+  >
+    ×
+  </button>
+</div>
+
+<div
+  class="voice-status hidden"
+  id="voiceStatus"
+  role="status"
+  aria-live="polite"
+></div>
+
+<form
+  class="chat-input-area"
+  id="chatForm"
+>
+  <input
+    id="imageInput"
+    type="file"
+    accept="image/jpeg,image/png,image/webp"
+    hidden
+  >
+
+  <button
+    class="attach-button"
+    id="attachImageBtn"
+    type="button"
+    aria-label="Thêm ảnh"
+    title="Thêm ảnh"
+  >
+    📷
+  </button>
+
+  <button
+    class="attach-button voice-button"
+    id="voiceBtn"
+    type="button"
+    aria-label="Nhập bằng giọng nói"
+    aria-pressed="false"
+    title="Nhập bằng giọng nói"
+  >
+    🎤
+  </button>
+
+  <textarea
+    id="chatInput"
+    rows="1"
+    maxlength="4000"
+    placeholder="Nhập câu hỏi sức khỏe của bạn..."
+    aria-label="Nhập câu hỏi sức khỏe"
+  ></textarea>
+
+  <button
+    class="send-button"
+    id="sendBtn"
+    type="submit"
+    aria-label="Gửi câu hỏi"
+  >
+    ➤
+  </button>
+</form>
+
+<p class="chat-disclaimer">
+  AI có thể mắc sai sót. Vui lòng tham khảo ý kiến bác sĩ khi cần.
+</p>
+
+</section>
       </div>
     </section>
 
-    <section class="features-section" id="tinh-nang">
+    <!-- TÍNH NĂNG -->
+
+    <section
+      class="features-section"
+      id="tinh-nang"
+    >
       <div class="container">
         <div class="section-heading">
-          <span>HỖ TRỢ THIẾT THỰC</span>
-          <h2>Đồng hành cùng bạn trong chăm sóc sức khỏe</h2>
+          <span>
+            HỖ TRỢ THIẾT THỰC
+          </span>
+
+          <h2>
+            Đồng hành cùng bạn trong chăm sóc
+            sức khỏe
+          </h2>
+
           <p>
-            Giao diện được thiết kế tập trung vào tư vấn ban đầu,
-            dễ sử dụng trên cả máy tính và điện thoại.
+            Giao diện được thiết kế tập trung
+            vào tư vấn ban đầu, dễ sử dụng trên
+            cả máy tính và điện thoại.
           </p>
         </div>
 
         <div class="feature-grid">
           <article class="feature-card">
-            <div class="feature-icon">24/7</div>
-            <h3>Tư vấn mọi lúc</h3>
-            <p>Hỗ trợ giải đáp các câu hỏi sức khỏe phổ biến bất kể ngày hay đêm.</p>
+            <div class="feature-icon">
+              24/7
+            </div>
+
+            <h3>
+              Tư vấn mọi lúc
+            </h3>
+
+            <p>
+              Hỗ trợ giải đáp các câu hỏi sức
+              khỏe phổ biến bất kể ngày hay đêm.
+            </p>
           </article>
 
           <article class="feature-card">
-            <div class="feature-icon orange-bg">✚</div>
-            <h3>Chăm sóc ban đầu</h3>
-            <p>Gợi ý những bước theo dõi và chăm sóc tại nhà phù hợp, an toàn.</p>
+            <div
+              class="feature-icon orange-bg"
+            >
+              ✚
+            </div>
+
+            <h3>
+              Chăm sóc ban đầu
+            </h3>
+
+            <p>
+              Gợi ý những bước theo dõi và chăm
+              sóc tại nhà phù hợp, an toàn.
+            </p>
           </article>
 
           <article class="feature-card">
-            <div class="feature-icon blue-bg">🩺</div>
-            <h3>Định hướng chuyên khoa</h3>
-            <p>Hỗ trợ lựa chọn chuyên khoa dựa trên triệu chứng người dùng mô tả.</p>
+            <div
+              class="feature-icon blue-bg"
+            >
+              🩺
+            </div>
+
+            <h3>
+              Định hướng chuyên khoa
+            </h3>
+
+            <p>
+              Hỗ trợ lựa chọn chuyên khoa dựa
+              trên triệu chứng người dùng mô tả.
+            </p>
           </article>
 
           <article class="feature-card">
-            <div class="feature-icon light-green-bg">🔒</div>
-            <h3>Bảo mật thông tin</h3>
-            <p>Ưu tiên quyền riêng tư và hạn chế lưu trữ dữ liệu không cần thiết.</p>
+            <div
+              class="feature-icon light-green-bg"
+            >
+              🔒
+            </div>
+
+            <h3>
+              Bảo mật thông tin
+            </h3>
+
+            <p>
+              Ưu tiên quyền riêng tư và hạn chế
+              lưu trữ dữ liệu không cần thiết.
+            </p>
           </article>
         </div>
       </div>
     </section>
 
-    <section class="contact-section" id="lien-he">
+    <!-- LIÊN HỆ -->
+
+    <section
+      class="contact-section"
+      id="lien-he"
+    >
       <div class="container contact-box">
         <div>
-          <span class="contact-label">CẦN HỖ TRỢ THÊM?</span>
-          <h2>Liên hệ với đội ngũ hỗ trợ</h2>
-          <p>Trao đổi qua Zalo nếu bạn cần được hỗ trợ về cách sử dụng hệ thống.</p>
+          <span class="contact-label">
+            CẦN HỖ TRỢ THÊM?
+          </span>
+
+          <h2>
+            Liên hệ với đội ngũ hỗ trợ
+          </h2>
+
+          <p>
+            Trao đổi qua Zalo nếu bạn cần được
+            hỗ trợ về cách sử dụng hệ thống.
+          </p>
         </div>
 
         <a
@@ -329,22 +701,39 @@
           target="_blank"
           rel="noopener noreferrer"
         >
-          <span class="zalo-mini-logo">Zalo</span>
+          <span class="zalo-mini-logo">
+            Zalo
+          </span>
+
           Liên hệ Zalo
         </a>
       </div>
     </section>
   </main>
 
+  <!-- FOOTER -->
+
   <footer>
     <div class="container footer-content">
       <div>
-        <strong>MediCare AI</strong>
-        <p>Hệ thống hỗ trợ thông tin sức khỏe ban đầu.</p>
+        <strong>
+          MediCare AI
+        </strong>
+
+        <p>
+          Hệ thống hỗ trợ thông tin sức khỏe
+          ban đầu.
+        </p>
       </div>
-      <p>© 2026 MediCare AI. Nội dung chỉ mang tính tham khảo.</p>
+
+      <p>
+        © 2026 MediCare AI. Nội dung chỉ mang
+        tính tham khảo.
+      </p>
     </div>
   </footer>
+
+  <!-- ZALO -->
 
   <a
     class="zalo-floating"
@@ -353,94 +742,228 @@
     rel="noopener noreferrer"
     aria-label="Liên hệ Zalo"
   >
-    <span class="zalo-circle">Zalo</span>
-    <span class="zalo-text">Liên hệ Zalo</span>
+    <span class="zalo-circle">
+      Zalo
+    </span>
+
+    <span class="zalo-text">
+      Liên hệ Zalo
+    </span>
   </a>
 
-  <div class="modal-overlay" id="loginModal" aria-hidden="true">
-    <div class="login-modal">
-      <button class="modal-close" id="closeLoginBtn" type="button">×</button>
+  <!-- ĐĂNG NHẬP -->
 
-      <div class="login-icon">+</div>
-      <h2>Đăng nhập MediCare AI</h2>
-      <p>Đăng nhập bằng email hoặc số điện thoại.</p>
+  <div
+    class="modal-overlay"
+    id="loginModal"
+    aria-hidden="true"
+  >
+    <div class="login-modal">
+      <button
+        class="modal-close"
+        id="closeLoginBtn"
+        type="button"
+        aria-label="Đóng"
+      >
+        ×
+      </button>
+
+      <div class="login-icon">
+        +
+      </div>
+
+      <h2>
+        Đăng nhập MediCare AI
+      </h2>
+
+      <p>
+        Đăng nhập bằng email hoặc số điện thoại.
+      </p>
 
       <form id="loginForm">
-        <label for="loginAccount">Email hoặc số điện thoại</label>
-        <input id="loginAccount" type="text" placeholder="Nhập email hoặc số điện thoại" required>
+        <label for="loginAccount">
+          Email hoặc số điện thoại
+        </label>
 
-        <label for="loginPassword">Mật khẩu</label>
-        <input id="loginPassword" type="password" placeholder="Nhập mật khẩu" required>
+        <input
+          id="loginAccount"
+          type="text"
+          placeholder="Nhập email hoặc số điện thoại"
+          required
+        />
 
-        <p class="form-message" id="loginMessage"></p>
+        <label for="loginPassword">
+          Mật khẩu
+        </label>
 
-        <button class="btn btn-orange login-submit" type="submit">
+        <input
+          id="loginPassword"
+          type="password"
+          placeholder="Nhập mật khẩu"
+          required
+        />
+
+        <p
+          class="form-message"
+          id="loginMessage"
+        ></p>
+
+        <button
+          class="btn btn-orange login-submit"
+          type="submit"
+        >
           Đăng nhập
         </button>
       </form>
 
       <p class="register-text">
         Chưa có tài khoản?
-        <button class="text-button" id="openRegisterBtn" type="button">
+
+        <button
+          class="text-button"
+          id="openRegisterBtn"
+          type="button"
+        >
           Đăng ký ngay
         </button>
       </p>
     </div>
   </div>
 
-  <div class="modal-overlay" id="registerModal" aria-hidden="true">
-    <div class="login-modal">
-      <button class="modal-close" id="closeRegisterBtn" type="button">×</button>
+  <!-- ĐĂNG KÝ -->
 
-      <div class="login-icon">+</div>
-      <h2>Đăng ký tài khoản</h2>
-      <p>Tạo tài khoản để sử dụng hệ thống MediCare AI.</p>
+  <div
+    class="modal-overlay"
+    id="registerModal"
+    aria-hidden="true"
+  >
+    <div class="login-modal">
+      <button
+        class="modal-close"
+        id="closeRegisterBtn"
+        type="button"
+        aria-label="Đóng"
+      >
+        ×
+      </button>
+
+      <div class="login-icon">
+        +
+      </div>
+
+      <h2>
+        Đăng ký tài khoản
+      </h2>
+
+      <p>
+        Tạo tài khoản để sử dụng hệ thống
+        MediCare AI.
+      </p>
 
       <form id="registerForm">
-        <label for="registerName">Họ và tên</label>
-        <input id="registerName" type="text" placeholder="Nhập họ và tên" required>
+        <label for="registerName">
+          Họ và tên
+        </label>
 
-        <label for="registerEmail">Email</label>
-        <input id="registerEmail" type="email" placeholder="Nhập email" required>
+        <input
+          id="registerName"
+          type="text"
+          placeholder="Nhập họ và tên"
+          required
+        />
 
-        <label for="registerPhone">Số điện thoại</label>
-        <input id="registerPhone" type="text" placeholder="Nhập số điện thoại">
+        <label for="registerEmail">
+          Email
+        </label>
 
-        <label for="registerPassword">Mật khẩu</label>
+        <input
+          id="registerEmail"
+          type="email"
+          placeholder="Nhập email"
+          required
+        />
+
+        <label for="registerPhone">
+          Số điện thoại
+        </label>
+
+        <input
+          id="registerPhone"
+          type="text"
+          placeholder="Nhập số điện thoại"
+        />
+
+        <label for="registerPassword">
+          Mật khẩu
+        </label>
+
         <input
           id="registerPassword"
           type="password"
           minlength="8"
           placeholder="Tối thiểu 8 ký tự"
           required
-        >
+        />
 
-        <label for="registerConfirmPassword">Xác nhận mật khẩu</label>
+        <label for="registerConfirmPassword">
+          Xác nhận mật khẩu
+        </label>
+
         <input
           id="registerConfirmPassword"
           type="password"
           minlength="8"
           placeholder="Nhập lại mật khẩu"
           required
+        />
+
+        <p
+          class="form-message"
+          id="registerMessage"
+        ></p>
+
+        <button
+          class="btn btn-orange login-submit"
+          type="submit"
         >
-
-        <p class="form-message" id="registerMessage"></p>
-
-        <button class="btn btn-orange login-submit" type="submit">
           Đăng ký
         </button>
       </form>
 
       <p class="register-text">
         Đã có tài khoản?
-        <button class="text-button" id="backToLoginBtn" type="button">
+
+        <button
+          class="text-button"
+          id="backToLoginBtn"
+          type="button"
+        >
           Đăng nhập
         </button>
       </p>
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
   <div id="toastMessage"></div>
+
+  <script
+    src="{{ url_for('static', filename='app.js') }}"
+  ></script>
+  <a
+  class="emergency-floating"
+  href="tel:115"
+  aria-label="Gọi cấp cứu 115"
+  title="Gọi cấp cứu 115"
+>
+  <span class="emergency-floating-icon">🚨</span>
+  <span class="emergency-floating-text">
+    Gọi cấp cứu 115
+  </span>
+</a>
+
+<script
+  src="{{ url_for('static', filename='app.js') }}"
+></script>
+
 </body>
 </html>
