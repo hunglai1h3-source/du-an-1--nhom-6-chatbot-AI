@@ -2916,3 +2916,63 @@ body.dark-mode
 #chatBody > .message-row:first-child {
   margin-top: 24px !important;
 }
+/* Đưa cả nút 115 và Zalo sang bên phải */
+.emergency-floating {
+  left: auto !important;
+  right: 16px !important;
+  bottom: 82px !important;
+}
+
+.zalo-floating {
+  left: auto !important;
+  right: 16px !important;
+  bottom: 16px !important;
+}
+
+/* Vô hiệu hóa vị trí theo sidebar trước đó */
+@media (min-width: 901px) {
+  body:not(.sidebar-collapsed) .emergency-floating {
+    left: auto !important;
+    right: 16px !important;
+  }
+}
+
+/* Điện thoại */
+@media (max-width: 600px) {
+  .emergency-floating {
+    left: auto !important;
+    right: 12px !important;
+    bottom: 76px !important;
+  }
+
+  .zalo-floating {
+    left: auto !important;
+    right: 12px !important;
+    bottom: 12px !important;
+  }
+}
+.nav-links a,
+.nav-links a.active {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+/* Xóa hoàn toàn gạch chân menu Trang chủ */
+.nav-links a,
+.nav-links a.active {
+  text-decoration: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+.nav-links a::before,
+.nav-links a::after,
+.nav-links a.active::before,
+.nav-links a.active::after {
+  display: none !important;
+  content: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
