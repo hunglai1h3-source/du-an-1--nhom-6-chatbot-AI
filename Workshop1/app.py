@@ -71,8 +71,23 @@ VISION_MODEL_NAME = os.getenv(
     "qwen/qwen3.6-27b"
 ).strip()
 
+
+# Model nhận dạng giọng nói tiếng Việt.
+AUDIO_TRANSCRIPTION_MODEL = os.getenv(
+    "AUDIO_TRANSCRIPTION_MODEL",
+    "whisper-large-v3-turbo"
+).strip()
+
+ALLOWED_AUDIO_EXTENSIONS = {
+    ".webm", ".wav", ".mp3", ".m4a",
+    ".ogg", ".flac", ".mp4", ".mpeg", ".mpga"
+}
+MAX_AUDIO_BYTES = 5 * 1024 * 1024
+
+
 print("MODEL VĂN BẢN ĐANG DÙNG:", MODEL_NAME)
 print("MODEL HÌNH ẢNH ĐANG DÙNG:", VISION_MODEL_NAME)
+print("MODEL GIỌNG NÓI ĐANG DÙNG:", AUDIO_TRANSCRIPTION_MODEL)
 
 if API_KEY:
     client = OpenAI(
@@ -960,6 +975,98 @@ def current_user():
 def logout():
     session.clear()
     return jsonify({"message": "Đăng xuất thành công."})
+
+
+
+@app.post("/transcribe")
+def transcribe_audio():
+    """Nhận file ghi âm từ trình duyệt và chuyển giọng nói tiếng Việt thành chữ."""
+    if client is None:
+        return jsonify({
+            "error": (
+                "Chưa cấu hình Groq API key. "
+                "Hãy kiểm tra file .env."
+            )
+        }), 503
+
+    audio_file = request.files.get("audio")
+
+    if audio_file is None or not audio_file.filename:
+        return jsonify({
+            "error": "Bạn chưa gửi file âm thanh."
+        }), 400
+
+    extension = Path(audio_file.filename).suffix.lower()
+
+    if extension not in ALLOWED_AUDIO_EXTENSIONS:
+        return jsonify({
+            "error": (
+                "Định dạng âm thanh không được hỗ trợ. "
+                "Hãy dùng WEBM, WAV, MP3, M4A, OGG hoặc FLAC."
+            )
+        }), 400
+
+    audio_bytes = audio_file.read()
+
+    if not audio_bytes:
+        return jsonify({
+            "error": "File âm thanh đang trống."
+        }), 400
+
+    if len(audio_bytes) > MAX_AUDIO_BYTES:
+        return jsonify({
+            "error": "File âm thanh vượt quá dung lượng tối đa 5 MB."
+        }), 400
+
+    mime_type = (
+        audio_file.mimetype
+        or "application/octet-stream"
+    )
+
+    safe_filename = f"voice{extension}"
+
+    try:
+        transcription = (
+            client.audio.transcriptions.create(
+                file=(
+                    safe_filename,
+                    audio_bytes,
+                    mime_type
+                ),
+                model=AUDIO_TRANSCRIPTION_MODEL,
+                language="vi",
+                response_format="json",
+                temperature=0.0,
+                prompt=(
+                    "Đây là câu hỏi sức khỏe bằng tiếng Việt. "
+                    "Giữ đúng tên thuốc, triệu chứng và thuật ngữ y tế."
+                )
+            )
+        )
+
+        transcript_text = str(
+            getattr(transcription, "text", "") or ""
+        ).strip()
+
+        if not transcript_text:
+            return jsonify({
+                "error": (
+                    "Không nhận dạng được lời nói. "
+                    "Hãy nói lại gần micro hơn."
+                )
+            }), 422
+
+        return jsonify({
+            "text": transcript_text,
+            "model": AUDIO_TRANSCRIPTION_MODEL
+        })
+
+    except Exception as error:
+        print(
+            "Groq speech-to-text error: "
+            f"{type(error).__name__}: {error}"
+        )
+        return build_error_response(error)
 
 
 @app.post("/chat")
