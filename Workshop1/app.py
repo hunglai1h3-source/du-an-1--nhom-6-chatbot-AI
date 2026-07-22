@@ -1217,14 +1217,25 @@ def chat():
 
             prompt_text += """
 
-Yêu cầu bắt buộc:
-- Chỉ nêu thông tin thực sự nhìn thấy trong ảnh.
-- Nếu là thuốc, ưu tiên đọc chữ trên bao bì hoặc vỉ thuốc.
-- Không xác định viên thuốc rời chỉ bằng màu sắc hoặc hình dạng.
-- Nếu không chắc chắn, ghi rõ "Không xác định".
-- Không tự đưa liều dùng hoặc thay đổi đơn thuốc.
+YÊU CẦU TRẢ LỜI:
 - Chỉ trả lời kết quả cuối cùng bằng tiếng Việt.
-- Không hiển thị thẻ <think> hoặc quá trình suy luận.
+- Không trình bày quá trình quan sát hoặc suy luận.
+- Không viết các tiêu đề như "Text on the box", "Analysis", "Reasoning".
+- Không liệt kê toàn bộ chữ trên bao bì.
+- Không dịch từng dòng chữ sang tiếng Anh.
+- Trả lời ngắn gọn theo cấu trúc:
+
+1. Tên sản phẩm hoặc thuốc:
+2. Hoạt chất và hàm lượng:
+3. Công dụng ghi trên bao bì:
+4. Dạng bào chế và số lượng:
+5. Nhà sản xuất:
+6. Lưu ý an toàn:
+
+- Chỉ nêu thông tin nhìn thấy rõ trong ảnh.
+- Nếu không đọc rõ, ghi "Không xác định".
+- Không tự đưa liều dùng.
+- Không xác định viên thuốc rời chỉ dựa vào màu sắc hoặc hình dạng.
 """
 
             messages.append({
@@ -1289,6 +1300,12 @@ Yêu cầu bắt buộc:
             reply,
             flags=re.DOTALL | re.IGNORECASE
         ).strip()
+        # Xóa các tiêu đề phân tích không cần thiết
+        reply = re.sub(
+            r"(?im)^\s*[•\-*]?\s*(analysis|reasoning|thought process|text on the box)\s*:?\s*$",
+            "",
+            reply
+    ).strip()
 
         if not reply:
             return jsonify({
