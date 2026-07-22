@@ -30,10 +30,40 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
 # Model dùng cho các câu hỏi chỉ có văn bản.
-MODEL_NAME = os.getenv(
-    "MODEL_NAME",
-    "llama-3.3-70b-versatile"
+MODEL_NAME = "llama-3.1-8b-instant"
+
+VISION_MODEL_NAME = os.getenv(
+    "VISION_MODEL_NAME",
+    "qwen/qwen3.6-27b"
 ).strip()
+MEDICINE_IMAGE_PROMPT = """
+Bạn là trợ lý hỗ trợ phân tích hình ảnh thuốc.
+
+Hãy quan sát toàn bộ ảnh và tìm tất cả thuốc, hộp thuốc, vỉ thuốc,
+chai thuốc, đơn thuốc hoặc nhãn thuốc xuất hiện trong ảnh.
+
+Với từng thuốc, hãy cung cấp:
+1. Tên thuốc nhìn thấy trên ảnh.
+2. Hoạt chất.
+3. Hàm lượng.
+4. Dạng bào chế.
+5. Nhà sản xuất.
+6. Số lô và hạn sử dụng nếu nhìn thấy.
+7. Toàn bộ chữ quan trọng đọc được trên bao bì.
+8. Công dụng thường gặp.
+9. Cảnh báo và chống chỉ định quan trọng.
+10. Mức độ chắc chắn: cao, trung bình hoặc thấp.
+
+Quy tắc an toàn:
+- Không được tự đoán khi chữ hoặc hình ảnh không rõ.
+- Thông tin không nhìn thấy phải ghi "Không xác định được từ ảnh".
+- Không khẳng định chắc chắn danh tính của viên thuốc rời chỉ dựa vào màu sắc.
+- Không tự đưa ra liều dùng cho người dùng.
+- Không khuyên người dùng tự ý bắt đầu, ngừng hoặc đổi thuốc.
+- Nếu ảnh mờ, bị lóa, bị che hoặc quá xa, hãy yêu cầu chụp lại.
+- Nếu phát hiện nhiều thuốc, phải trình bày từng thuốc riêng biệt.
+- Cuối câu trả lời phải nhắc người dùng kiểm tra lại với dược sĩ hoặc bác sĩ.
+"""
 
 # Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
 VISION_MODEL_NAME = os.getenv(
@@ -1112,6 +1142,12 @@ Yêu cầu bắt buộc:
                 "content": user_message
             })
 
+        if has_image:
+            messages.insert(0, {
+                "role": "system",
+                "content": MEDICINE_IMAGE_PROMPT
+            })
+
         start_time = time.perf_counter()
 
         selected_model = (
@@ -1120,18 +1156,19 @@ Yêu cầu bắt buộc:
             else MODEL_NAME
         )
 
+        max_output_tokens = 1500 if has_image else 1000
+
         response = client.chat.completions.create(
             model=selected_model,
             messages=messages,
-            temperature=0.3,
-            max_completion_tokens=1000,
+            temperature=0.2 if has_image else 0.3,
+            max_completion_tokens=max_output_tokens,
         )
 
         print(
             f"Thời gian Groq phản hồi bằng {selected_model}: "
             f"{time.perf_counter() - start_time:.2f} giây"
         )
-
         if not response.choices:
             return jsonify({
                 "error": "AI không trả về nội dung."
@@ -1868,7 +1905,15 @@ Yêu cầu bắt buộc: 1
             ],
             temperature=0.3,
             max_completion_tokens=1400,
-        )
+        ) 
+        if has_image:
+            request_options.update({
+                "temperature": 0.5,
+                "max_completion_tokens": 2000,
+                "reasoning_effort": "none",
+                "reasoning_format": "hidden",
+            })
+        response = client.chat.completions.create(**request_options)
 
         if not response.choices:
             return jsonify({
