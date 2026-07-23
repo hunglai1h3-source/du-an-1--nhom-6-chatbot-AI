@@ -15,6 +15,9 @@ import os
 import sqlite3
 import time
 import webbrowser
+import csv
+import shutil
+from uuid import uuid4
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -691,11 +694,89 @@ def initialize_database():
         ON reminders(user_id, is_active)
     """)
 
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS chat_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            question TEXT NOT NULL,
+            answer TEXT,
+            model TEXT,
+            has_image INTEGER NOT NULL DEFAULT 0,
+            latency_ms INTEGER,
+            prompt_tokens INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'success',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS system_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT,
+            updated_by INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS prompt_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prompt_name TEXT NOT NULL DEFAULT 'system',
+            content TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 0,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_chat_logs_created ON chat_logs(created_at)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_chat_logs_user ON chat_logs(user_id)")
+
     connection.commit()
     connection.close()
 
 
 initialize_database()
+
+
+def get_setting(key, default=""):
+    connection = get_database()
+    row = connection.execute(
+        "SELECT setting_value FROM system_settings WHERE setting_key = ?",
+        (key,),
+    ).fetchone()
+    connection.close()
+    return row["setting_value"] if row else default
+
+
+def get_active_system_prompt():
+    connection = get_database()
+    row = connection.execute(
+        "SELECT content FROM prompt_versions WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    connection.close()
+    if row:
+        return {"role": "system", "content": row["content"]}
+    return SYSTEM_PROMPT
+
+
+def record_chat_log(question, answer, model, has_image, latency_ms, status="success", error_message="", usage=None):
+    try:
+        usage = usage or {}
+        connection = get_database()
+        connection.execute(
+            """INSERT INTO chat_logs (user_id, question, answer, model, has_image, latency_ms,
+                   prompt_tokens, completion_tokens, status, error_message)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session.get("user_id"), str(question)[:4000], str(answer or "")[:12000],
+             str(model)[:120], int(bool(has_image)), int(latency_ms or 0),
+             int(usage.get("prompt_tokens", 0) or 0), int(usage.get("completion_tokens", 0) or 0),
+             str(status)[:30], str(error_message or "")[:1000]),
+        )
+        connection.commit()
+        connection.close()
+    except Exception as log_error:
+        print("Không thể ghi chat log:", log_error)
 
 
 def clean_history(history):
@@ -1170,7 +1251,7 @@ def chat():
                 "error": "Nội dung quá dài. Vui lòng nhập dưới 4.000 ký tự."
             }), 400
 
-        messages = [SYSTEM_PROMPT]
+        messages = [get_active_system_prompt()]
 
         if "user_id" in session:
             connection = get_database()
@@ -1326,9 +1407,10 @@ YÊU CẦU TRẢ LỜI:
             max_completion_tokens=max_output_tokens,
         )
 
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000)
         print(
             f"Thời gian Groq phản hồi bằng {selected_model}: "
-            f"{time.perf_counter() - start_time:.2f} giây"
+            f"{elapsed_ms / 1000:.2f} giây"
         )
         if not response.choices:
             return jsonify({
@@ -1355,6 +1437,14 @@ YÊU CẦU TRẢ LỜI:
                 "error": "AI trả về nội dung trống."
             }), 502
 
+        usage_data = {}
+        usage_obj = getattr(response, "usage", None)
+        if usage_obj is not None:
+            usage_data = {
+                "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
+                "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
+            }
+        record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data)
         return jsonify({
             "reply": reply
         })
@@ -2099,7 +2189,7 @@ Yêu cầu bắt buộc: 1
 
 
 # =========================
-# ADMIN MANAGEMENT MODULE
+# ADMIN MANAGEMENT MODULE - GIAI ĐOẠN 1
 # =========================
 
 def admin_required(view_function):
@@ -2115,18 +2205,35 @@ def admin_required(view_function):
 
 def write_admin_log(connection, action, target_user_id=None, details=""):
     connection.execute(
-        """
-        INSERT INTO admin_audit_logs (
-            admin_user_id, action, target_user_id, details
-        ) VALUES (?, ?, ?, ?)
-        """,
-        (
-            session["user_id"],
-            str(action)[:100],
-            target_user_id,
-            str(details)[:1000],
-        ),
+        "INSERT INTO admin_audit_logs (admin_user_id, action, target_user_id, details) VALUES (?, ?, ?, ?)",
+        (session["user_id"], str(action)[:100], target_user_id, str(details)[:1000]),
     )
+
+
+def dataset_directory():
+    path = BASE_DIR / "data" / "raw"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def inspect_dataset(path):
+    result = {"rows": 0, "columns": 0, "duplicate_rows": 0, "missing_cells": 0, "error": ""}
+    try:
+        if path.suffix.lower() == ".csv":
+            with path.open("r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+            if rows:
+                result["columns"] = len(rows[0])
+                data_rows = rows[1:]
+                result["rows"] = len(data_rows)
+                result["duplicate_rows"] = len(data_rows) - len({tuple(r) for r in data_rows})
+                result["missing_cells"] = sum(1 for r in data_rows for c in r if not str(c).strip())
+        else:
+            result["error"] = "Chỉ thống kê chi tiết file CSV"
+    except Exception as error:
+        result["error"] = str(error)
+    return result
 
 
 @app.get("/admin")
@@ -2135,167 +2242,196 @@ def admin_dashboard():
     connection = get_database()
     stats = {
         "users": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
-        "active_users": connection.execute(
-            "SELECT COUNT(*) FROM users WHERE is_active = 1"
-        ).fetchone()[0],
-        "admins": connection.execute(
-            "SELECT COUNT(*) FROM users WHERE role = 'admin'"
-        ).fetchone()[0],
-        "profiles": connection.execute(
-            "SELECT COUNT(*) FROM health_profiles"
-        ).fetchone()[0],
-        "weight_logs": connection.execute(
-            "SELECT COUNT(*) FROM weight_logs"
-        ).fetchone()[0],
-        "water_logs": connection.execute(
-            "SELECT COUNT(*) FROM water_logs"
-        ).fetchone()[0],
-        "reminders": connection.execute(
-            "SELECT COUNT(*) FROM reminders"
-        ).fetchone()[0],
+        "active_users": connection.execute("SELECT COUNT(*) FROM users WHERE is_active = 1").fetchone()[0],
+        "admins": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
+        "chats": connection.execute("SELECT COUNT(*) FROM chat_logs").fetchone()[0],
+        "images": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE has_image = 1").fetchone()[0],
+        "errors": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE status != 'success'").fetchone()[0],
+        "avg_latency": connection.execute("SELECT COALESCE(ROUND(AVG(latency_ms)),0) FROM chat_logs WHERE latency_ms > 0").fetchone()[0],
+        "tokens": connection.execute("SELECT COALESCE(SUM(prompt_tokens + completion_tokens),0) FROM chat_logs").fetchone()[0],
     }
-    recent_users = connection.execute(
-        """
-        SELECT id, full_name, email, phone, role, is_active, created_at
-        FROM users ORDER BY id DESC LIMIT 8
-        """
-    ).fetchall()
-    recent_logs = connection.execute(
-        """
-        SELECT l.*, a.full_name AS admin_name, u.full_name AS target_name
-        FROM admin_audit_logs l
-        JOIN users a ON a.id = l.admin_user_id
-        LEFT JOIN users u ON u.id = l.target_user_id
-        ORDER BY l.id DESC LIMIT 10
-        """
-    ).fetchall()
+    chart_rows = connection.execute("""
+        WITH RECURSIVE dates(day) AS (
+            SELECT date('now','-6 day') UNION ALL SELECT date(day,'+1 day') FROM dates WHERE day < date('now')
+        )
+        SELECT day, (SELECT COUNT(*) FROM chat_logs WHERE date(created_at)=day) chats,
+                    (SELECT COUNT(*) FROM users WHERE date(created_at)=day) users
+        FROM dates
+    """).fetchall()
+    recent_chats = connection.execute("""
+        SELECT c.*, u.full_name FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id
+        ORDER BY c.id DESC LIMIT 8
+    """).fetchall()
     connection.close()
-    return render_template(
-        "admin/dashboard.html",
-        stats=stats,
-        recent_users=recent_users,
-        recent_logs=recent_logs,
-    )
+    return render_template("admin/dashboard.html", stats=stats, chart_rows=chart_rows, recent_chats=recent_chats)
 
 
 @app.get("/admin/users")
 @admin_required
 def admin_users():
-    keyword = request.args.get("q", "").strip()
-    connection = get_database()
+    keyword=request.args.get("q","").strip(); role=request.args.get("role","").strip(); status=request.args.get("status","").strip()
+    page=max(request.args.get("page",1,type=int),1); per_page=20; offset=(page-1)*per_page
+    where=[]; params=[]
     if keyword:
-        pattern = f"%{keyword}%"
-        users = connection.execute(
-            """
-            SELECT id, full_name, email, phone, role, is_active, created_at
-            FROM users
-            WHERE full_name LIKE ? OR email LIKE ? OR phone LIKE ?
-            ORDER BY id DESC
-            """,
-            (pattern, pattern, pattern),
-        ).fetchall()
-    else:
-        users = connection.execute(
-            """
-            SELECT id, full_name, email, phone, role, is_active, created_at
-            FROM users ORDER BY id DESC LIMIT 300
-            """
-        ).fetchall()
+        where.append("(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)"); params += [f"%{keyword}%"]*3
+    if role in {"user","admin"}: where.append("u.role = ?"); params.append(role)
+    if status in {"0","1"}: where.append("u.is_active = ?"); params.append(int(status))
+    clause=("WHERE "+" AND ".join(where)) if where else ""
+    connection=get_database()
+    total=connection.execute(f"SELECT COUNT(*) FROM users u {clause}",params).fetchone()[0]
+    users=connection.execute(f"""
+        SELECT u.*, (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id=u.id) chat_count,
+        (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) last_activity
+        FROM users u {clause} ORDER BY u.id DESC LIMIT ? OFFSET ?
+    """,params+[per_page,offset]).fetchall()
     connection.close()
-    return render_template("admin/users.html", users=users, keyword=keyword)
+    return render_template("admin/users.html",users=users,keyword=keyword,role=role,status=status,page=page,total=total,pages=max(1,(total+per_page-1)//per_page))
+
+
+@app.get("/admin/users/<int:user_id>")
+@admin_required
+def admin_user_detail(user_id):
+    connection=get_database(); user=connection.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+    if not user: connection.close(); return "Không tìm thấy người dùng",404
+    chats=connection.execute("SELECT * FROM chat_logs WHERE user_id=? ORDER BY id DESC LIMIT 50",(user_id,)).fetchall()
+    profile=connection.execute("SELECT * FROM health_profiles WHERE user_id=?",(user_id,)).fetchone(); connection.close()
+    return render_template("admin/user_detail.html",user=user,chats=chats,profile=profile)
 
 
 @app.post("/admin/users/<int:user_id>/toggle-active")
 @admin_required
 def admin_toggle_user(user_id):
-    if user_id == session["user_id"]:
-        return jsonify({"error": "Bạn không thể tự khóa tài khoản admin đang dùng."}), 400
-    connection = get_database()
-    user = connection.execute(
-        "SELECT id, full_name, is_active FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
-    if user is None:
-        connection.close()
-        return jsonify({"error": "Không tìm thấy người dùng."}), 404
-    new_status = 0 if user["is_active"] else 1
-    connection.execute(
-        "UPDATE users SET is_active = ? WHERE id = ?", (new_status, user_id)
-    )
-    write_admin_log(
-        connection,
-        "unlock_user" if new_status else "lock_user",
-        user_id,
-        f"Đổi trạng thái {user['full_name']} thành {'active' if new_status else 'locked'}",
-    )
-    connection.commit()
-    connection.close()
-    return jsonify({"ok": True, "is_active": bool(new_status)})
+    if user_id==session["user_id"]: return jsonify({"error":"Bạn không thể tự khóa tài khoản đang dùng."}),400
+    connection=get_database(); user=connection.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+    if not user: connection.close(); return jsonify({"error":"Không tìm thấy người dùng."}),404
+    new_status=0 if user["is_active"] else 1; connection.execute("UPDATE users SET is_active=? WHERE id=?",(new_status,user_id))
+    write_admin_log(connection,"unlock_user" if new_status else "lock_user",user_id); connection.commit(); connection.close()
+    return jsonify({"ok":True,"is_active":bool(new_status)})
 
 
 @app.post("/admin/users/<int:user_id>/role")
 @admin_required
 def admin_change_role(user_id):
-    data = request.get_json(silent=True) or {}
-    new_role = str(data.get("role", "")).strip().lower()
-    if new_role not in {"user", "admin"}:
-        return jsonify({"error": "Quyền không hợp lệ."}), 400
-    if user_id == session["user_id"] and new_role != "admin":
-        return jsonify({"error": "Bạn không thể tự hạ quyền của mình."}), 400
-    connection = get_database()
-    user = connection.execute(
-        "SELECT id, full_name, role FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
-    if user is None:
-        connection.close()
-        return jsonify({"error": "Không tìm thấy người dùng."}), 404
-    connection.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
-    write_admin_log(
-        connection,
-        "change_role",
-        user_id,
-        f"Đổi quyền {user['full_name']} từ {user['role']} thành {new_role}",
-    )
-    connection.commit()
-    connection.close()
-    return jsonify({"ok": True, "role": new_role})
+    data=request.get_json(silent=True) or {}; new_role=str(data.get("role","")).lower()
+    if new_role not in {"user","admin"}: return jsonify({"error":"Quyền không hợp lệ."}),400
+    if user_id==session["user_id"] and new_role!="admin": return jsonify({"error":"Bạn không thể tự hạ quyền."}),400
+    connection=get_database(); connection.execute("UPDATE users SET role=? WHERE id=?",(new_role,user_id)); write_admin_log(connection,"change_role",user_id,new_role); connection.commit(); connection.close()
+    return jsonify({"ok":True,"role":new_role})
+
+
+@app.get("/admin/chats")
+@admin_required
+def admin_chats():
+    q=request.args.get("q","").strip(); model=request.args.get("model","").strip(); page=max(request.args.get("page",1,type=int),1); per_page=25
+    where=[]; params=[]
+    if q: where.append("(c.question LIKE ? OR c.answer LIKE ? OR u.full_name LIKE ?)"); params += [f"%{q}%"]*3
+    if model: where.append("c.model=?"); params.append(model)
+    clause=("WHERE "+" AND ".join(where)) if where else ""; connection=get_database()
+    total=connection.execute(f"SELECT COUNT(*) FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id {clause}",params).fetchone()[0]
+    chats=connection.execute(f"SELECT c.*,u.full_name,u.email FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id {clause} ORDER BY c.id DESC LIMIT ? OFFSET ?",params+[per_page,(page-1)*per_page]).fetchall()
+    models=connection.execute("SELECT DISTINCT model FROM chat_logs WHERE model IS NOT NULL ORDER BY model").fetchall(); connection.close()
+    return render_template("admin/chats.html",chats=chats,q=q,model=model,models=models,page=page,pages=max(1,(total+per_page-1)//per_page))
+
+
+@app.post("/admin/chats/<int:chat_id>/delete")
+@admin_required
+def admin_delete_chat(chat_id):
+    connection=get_database(); connection.execute("DELETE FROM chat_logs WHERE id=?",(chat_id,)); write_admin_log(connection,"delete_chat",details=f"chat_id={chat_id}"); connection.commit(); connection.close(); return jsonify({"ok":True})
+
+
+@app.get("/admin/datasets")
+@admin_required
+def admin_datasets():
+    files=[]
+    for path in sorted(dataset_directory().iterdir()):
+        if path.is_file(): files.append({"name":path.name,"size":path.stat().st_size,"modified":datetime.fromtimestamp(path.stat().st_mtime),**inspect_dataset(path)})
+    return render_template("admin/datasets.html",files=files)
+
+
+@app.post("/admin/datasets/upload")
+@admin_required
+def admin_dataset_upload():
+    upload=request.files.get("dataset")
+    if not upload or not upload.filename: return jsonify({"error":"Chưa chọn file."}),400
+    safe_name=re.sub(r"[^A-Za-z0-9._-]","_",Path(upload.filename).name)
+    if Path(safe_name).suffix.lower() not in {".csv",".parquet",".json"}: return jsonify({"error":"Chỉ hỗ trợ CSV, Parquet hoặc JSON."}),400
+    target=dataset_directory()/safe_name
+    if target.exists(): target=dataset_directory()/f"{target.stem}_{uuid4().hex[:6]}{target.suffix}"
+    upload.save(target); connection=get_database(); write_admin_log(connection,"upload_dataset",details=target.name); connection.commit(); connection.close()
+    return redirect(url_for("admin_datasets"))
+
+
+@app.post("/admin/datasets/<path:filename>/delete")
+@admin_required
+def admin_dataset_delete(filename):
+    target=(dataset_directory()/Path(filename).name).resolve()
+    if target.parent!=dataset_directory().resolve() or not target.exists(): return jsonify({"error":"File không tồn tại."}),404
+    backup=BASE_DIR/"data"/"backup"; backup.mkdir(parents=True,exist_ok=True); shutil.copy2(target,backup/f"{datetime.now():%Y%m%d-%H%M%S}_{target.name}"); target.unlink()
+    connection=get_database(); write_admin_log(connection,"delete_dataset",details=filename); connection.commit(); connection.close(); return jsonify({"ok":True})
+
+
+@app.get("/admin/datasets/<path:filename>/download")
+@admin_required
+def admin_dataset_download(filename):
+    target=dataset_directory()/Path(filename).name
+    if not target.exists(): return "Không tìm thấy file",404
+    return send_file(target,as_attachment=True)
+
+
+@app.get("/admin/prompt")
+@admin_required
+def admin_prompt():
+    connection=get_database(); versions=connection.execute("SELECT p.*,u.full_name creator FROM prompt_versions p LEFT JOIN users u ON u.id=p.created_by ORDER BY p.id DESC LIMIT 20").fetchall(); active=get_active_system_prompt()["content"]; connection.close()
+    return render_template("admin/prompt.html",versions=versions,active_prompt=active)
+
+
+@app.post("/admin/prompt")
+@admin_required
+def admin_prompt_save():
+    content=request.form.get("content","").strip()
+    if len(content)<50: return "Prompt quá ngắn",400
+    connection=get_database(); connection.execute("UPDATE prompt_versions SET is_active=0"); connection.execute("INSERT INTO prompt_versions(content,is_active,created_by) VALUES (?,1,?)",(content,session["user_id"])); write_admin_log(connection,"update_prompt",details=f"{len(content)} ký tự"); connection.commit(); connection.close(); return redirect(url_for("admin_prompt"))
+
+
+@app.post("/admin/prompt/<int:version_id>/activate")
+@admin_required
+def admin_prompt_activate(version_id):
+    connection=get_database(); connection.execute("UPDATE prompt_versions SET is_active=0"); connection.execute("UPDATE prompt_versions SET is_active=1 WHERE id=?",(version_id,)); write_admin_log(connection,"activate_prompt",details=f"version={version_id}"); connection.commit(); connection.close(); return redirect(url_for("admin_prompt"))
+
+
+@app.get("/admin/ai-settings")
+@admin_required
+def admin_ai_settings():
+    settings={"text_model":get_setting("text_model",MODEL_NAME),"vision_model":get_setting("vision_model",VISION_MODEL_NAME),"temperature":get_setting("temperature","0.3"),"max_tokens":get_setting("max_tokens","1000"),"provider":"Groq","api_configured":bool(API_KEY)}
+    return render_template("admin/ai_settings.html",settings=settings)
+
+
+@app.post("/admin/ai-settings")
+@admin_required
+def admin_ai_settings_save():
+    allowed={"text_model","vision_model","temperature","max_tokens"}; connection=get_database()
+    for key in allowed:
+        value=request.form.get(key,"").strip()
+        connection.execute("INSERT INTO system_settings(setting_key,setting_value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP",(key,value,session["user_id"]))
+    write_admin_log(connection,"update_ai_settings",details="Cần khởi động lại để áp dụng model"); connection.commit(); connection.close(); return redirect(url_for("admin_ai_settings"))
 
 
 @app.get("/admin/audit-logs")
 @admin_required
 def admin_audit_logs():
-    connection = get_database()
-    logs = connection.execute(
-        """
-        SELECT l.*, a.full_name AS admin_name, u.full_name AS target_name
-        FROM admin_audit_logs l
-        JOIN users a ON a.id = l.admin_user_id
-        LEFT JOIN users u ON u.id = l.target_user_id
-        ORDER BY l.id DESC LIMIT 500
-        """
-    ).fetchall()
-    connection.close()
-    return render_template("admin/audit_logs.html", logs=logs)
+    connection=get_database(); logs=connection.execute("SELECT l.*,a.full_name admin_name,u.full_name target_name FROM admin_audit_logs l JOIN users a ON a.id=l.admin_user_id LEFT JOIN users u ON u.id=l.target_user_id ORDER BY l.id DESC LIMIT 500").fetchall(); connection.close(); return render_template("admin/audit_logs.html",logs=logs)
 
 
 @app.get("/admin/backup/users-db")
 @admin_required
 def admin_backup_users_db():
-    connection = get_database()
-    write_admin_log(connection, "backup_database", details="Tải bản sao users.db")
-    connection.commit()
-    connection.close()
-    return send_file(
-        DATABASE_PATH,
-        as_attachment=True,
-        download_name=f"users-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db",
-    )
+    connection=get_database(); write_admin_log(connection,"backup_database",details="Tải bản sao users.db"); connection.commit(); connection.close(); return send_file(DATABASE_PATH,as_attachment=True,download_name=f"users-backup-{datetime.now():%Y%m%d-%H%M%S}.db")
 
 
 @app.post("/admin/logout")
 @admin_required
 def admin_logout():
-    session.clear()
-    return redirect(url_for("index"))
+    session.clear(); return redirect(url_for("index"))
 
 def open_browser():
     webbrowser.open_new("http://127.0.0.1:5000/")

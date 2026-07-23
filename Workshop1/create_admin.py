@@ -10,3 +10,4 @@ row=conn.execute("SELECT id,full_name FROM users WHERE lower(email)=?",(email,))
 if not row: raise SystemExit("Không tìm thấy tài khoản. Hãy đăng ký trước.")
 conn.execute("UPDATE users SET role='admin',is_active=1 WHERE id=?",(row[0],)); conn.commit(); conn.close()
 print("Đã cấp quyền admin cho",row[1])
+
