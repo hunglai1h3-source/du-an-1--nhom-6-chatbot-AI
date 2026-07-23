@@ -781,7 +781,34 @@ async function initialize() {
   $("#viewAirQualityButton")?.addEventListener("click", () => focusPanel("#utilities"));
   $("#showRemindersButton")?.addEventListener("click", () => loadReminders({ openModal: true }));
   $("#openSettings")?.addEventListener("click", () => M.showToast("Bạn có thể đổi giao diện bằng nút trăng ở góc phải."));
-  $("#upgradeButton")?.addEventListener("click", () => M.showToast("Đây là tính năng minh họa cho bản demo."));
+ const premiumModal = $("#premiumModal");
+
+$("#upgradeButton")?.addEventListener("click", () => {
+  premiumModal?.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+});
+
+$("#closePremiumModal")?.addEventListener("click", () => {
+  premiumModal?.classList.add("hidden");
+  document.body.style.overflow = "";
+});
+
+premiumModal?.addEventListener("click", (event) => {
+  if (event.target === premiumModal) {
+    premiumModal.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+});
+
+$("#subscribePremiumButton")?.addEventListener("click", () => {
+  M.showToast(
+    "Bạn đã chọn gói MediCare Premium 20.000đ/tháng.",
+    "success"
+  );
+
+  premiumModal?.classList.add("hidden");
+  document.body.style.overflow = "";
+});
 
   window.addEventListener("medicare:profile-changed", () => {
     renderProfiles();
