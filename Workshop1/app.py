@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, render_template, request, session
+from flask import (Flask, jsonify, render_template, request, session,
+                   redirect, url_for, send_file)
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
@@ -14,6 +15,14 @@ import os
 import sqlite3
 import time
 import webbrowser
+import csv
+import shutil
+from uuid import uuid4
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
+from threading import Lock
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -63,14 +72,6 @@ Quy tắc an toàn:
 - Nếu ảnh mờ, bị lóa, bị che hoặc quá xa, hãy yêu cầu chụp lại.
 - Nếu phát hiện nhiều thuốc, phải trình bày từng thuốc riêng biệt.
 - Cuối câu trả lời phải nhắc người dùng kiểm tra lại với dược sĩ hoặc bác sĩ.
-QUY TẮC BẮT BUỘC
-
-- Chỉ trả lời bằng TIẾNG VIỆT.
-- Không được sử dụng tiếng Anh.
-- Không hiển thị quá trình suy luận.
-- Không giải thích cách bạn suy nghĩ.
-- Không viết "Analysis", "Reasoning", "Thinking".
-- Chỉ đưa ra kết quả cuối cùng.
 """
 
 # Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
@@ -431,6 +432,15 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
+# Bộ nhớ đệm ngắn cho dữ liệu vị trí để tránh gọi API công cộng quá dày.
+LOCATION_CACHE = {}
+LOCATION_CACHE_TTL_SECONDS = 300
+LOCATION_CACHE_LOCK = Lock()
+NOMINATIM_LOCK = Lock()
+NOMINATIM_LAST_REQUEST_AT = 0.0
+APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "").strip()
+
+
 def get_database():
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
@@ -589,6 +599,8 @@ def initialize_database():
             email TEXT NOT NULL UNIQUE,
             phone TEXT UNIQUE,
             password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user',
+            is_active INTEGER NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -649,6 +661,38 @@ def initialize_database():
         )
     """)
 
+    # Nâng cấp database cũ mà không xóa dữ liệu người dùng.
+    user_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "role" not in user_columns:
+        connection.execute(
+            "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"
+        )
+    if "is_active" not in user_columns:
+        connection.execute(
+            "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
+        )
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS admin_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            target_user_id INTEGER,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+            FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_admin_logs_created
+        ON admin_audit_logs(created_at)
+    """)
+
     connection.execute("""
         CREATE INDEX IF NOT EXISTS idx_weight_user_date
         ON weight_logs(user_id, logged_at)
@@ -664,11 +708,113 @@ def initialize_database():
         ON reminders(user_id, is_active)
     """)
 
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS family_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            full_name TEXT NOT NULL,
+            relationship TEXT NOT NULL DEFAULT 'Khác',
+            age INTEGER,
+            gender TEXT,
+            height_cm REAL,
+            weight_kg REAL,
+            medical_conditions TEXT,
+            allergies TEXT,
+            avatar_seed TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_family_members_user
+        ON family_members(user_id, updated_at)
+    """)
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS chat_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            question TEXT NOT NULL,
+            answer TEXT,
+            model TEXT,
+            has_image INTEGER NOT NULL DEFAULT 0,
+            latency_ms INTEGER,
+            prompt_tokens INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'success',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS system_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT,
+            updated_by INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS prompt_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prompt_name TEXT NOT NULL DEFAULT 'system',
+            content TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 0,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_chat_logs_created ON chat_logs(created_at)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_chat_logs_user ON chat_logs(user_id)")
+
     connection.commit()
     connection.close()
 
 
 initialize_database()
+
+
+def get_setting(key, default=""):
+    connection = get_database()
+    row = connection.execute(
+        "SELECT setting_value FROM system_settings WHERE setting_key = ?",
+        (key,),
+    ).fetchone()
+    connection.close()
+    return row["setting_value"] if row else default
+
+
+def get_active_system_prompt():
+    connection = get_database()
+    row = connection.execute(
+        "SELECT content FROM prompt_versions WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    connection.close()
+    if row:
+        return {"role": "system", "content": row["content"]}
+    return SYSTEM_PROMPT
+
+
+def record_chat_log(question, answer, model, has_image, latency_ms, status="success", error_message="", usage=None):
+    try:
+        usage = usage or {}
+        connection = get_database()
+        connection.execute(
+            """INSERT INTO chat_logs (user_id, question, answer, model, has_image, latency_ms,
+                   prompt_tokens, completion_tokens, status, error_message)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session.get("user_id"), str(question)[:4000], str(answer or "")[:12000],
+             str(model)[:120], int(bool(has_image)), int(latency_ms or 0),
+             int(usage.get("prompt_tokens", 0) or 0), int(usage.get("completion_tokens", 0) or 0),
+             str(status)[:30], str(error_message or "")[:1000]),
+        )
+        connection.commit()
+        connection.close()
+    except Exception as log_error:
+        print("Không thể ghi chat log:", log_error)
 
 
 def clean_history(history):
@@ -826,9 +972,290 @@ def build_error_response(error):
     }), 500
 
 
+def clamp_number(value, field_name, minimum, maximum):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} không hợp lệ.")
+
+    if not math.isfinite(number) or number < minimum or number > maximum:
+        raise ValueError(f"{field_name} nằm ngoài phạm vi cho phép.")
+
+    return number
+
+
+def http_get_json(url, timeout=15, headers=None):
+    request_headers = {
+        "Accept": "application/json",
+        "User-Agent": (
+            "MediCareAI/1.0"
+            + (f" ({APP_CONTACT_EMAIL})" if APP_CONTACT_EMAIL else "")
+        ),
+    }
+    if headers:
+        request_headers.update(headers)
+
+    request_object = Request(url, headers=request_headers)
+    with urlopen(request_object, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    earth_radius_km = 6371.0088
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    value = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return earth_radius_km * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+def reverse_geocode(latitude, longitude):
+    global NOMINATIM_LAST_REQUEST_AT
+
+    query = urlencode({
+        "lat": f"{latitude:.7f}",
+        "lon": f"{longitude:.7f}",
+        "format": "jsonv2",
+        "addressdetails": 1,
+        "zoom": 18,
+        "accept-language": "vi",
+    })
+
+    # Public Nominatim yêu cầu tần suất thấp. Khóa này giúp một tiến trình
+    # không gửi nhiều request sát nhau và kết quả còn được cache 5 phút.
+    with NOMINATIM_LOCK:
+        wait_seconds = 1.05 - (time.monotonic() - NOMINATIM_LAST_REQUEST_AT)
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
+        result = http_get_json(
+            f"https://nominatim.openstreetmap.org/reverse?{query}",
+            timeout=12,
+        )
+        NOMINATIM_LAST_REQUEST_AT = time.monotonic()
+
+    address = result.get("address") or {}
+    short_parts = [
+        address.get("suburb") or address.get("quarter") or address.get("neighbourhood"),
+        address.get("city_district") or address.get("county"),
+        address.get("city") or address.get("town") or address.get("province") or address.get("state"),
+    ]
+    short_address = ", ".join(dict.fromkeys(part for part in short_parts if part))
+
+    return {
+        "display_name": result.get("display_name") or short_address,
+        "short_address": short_address or result.get("display_name") or "Vị trí hiện tại",
+        "address": address,
+    }
+
+
+def fetch_weather_and_air(latitude, longitude):
+    weather_query = urlencode({
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": (
+            "temperature_2m,apparent_temperature,relative_humidity_2m,"
+            "wind_speed_10m,weather_code"
+        ),
+        "timezone": "auto",
+    })
+    air_query = urlencode({
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": "european_aqi,pm2_5,pm10,nitrogen_dioxide,ozone",
+        "timezone": "auto",
+    })
+
+    weather = http_get_json(
+        f"https://api.open-meteo.com/v1/forecast?{weather_query}",
+        timeout=15,
+    )
+    air = http_get_json(
+        f"https://air-quality-api.open-meteo.com/v1/air-quality?{air_query}",
+        timeout=15,
+    )
+
+    current_weather = weather.get("current") or {}
+    current_air = air.get("current") or {}
+    return {
+        "temperature": current_weather.get("temperature_2m"),
+        "apparent_temperature": current_weather.get("apparent_temperature"),
+        "humidity": current_weather.get("relative_humidity_2m"),
+        "wind_speed": current_weather.get("wind_speed_10m"),
+        "weather_code": current_weather.get("weather_code"),
+        "aqi": current_air.get("european_aqi"),
+        "pm25": current_air.get("pm2_5"),
+        "pm10": current_air.get("pm10"),
+        "nitrogen_dioxide": current_air.get("nitrogen_dioxide"),
+        "ozone": current_air.get("ozone"),
+        "weather_time": current_weather.get("time"),
+        "air_time": current_air.get("time"),
+    }
+
+
+def fetch_nearby_pharmacies(latitude, longitude, radius_m=5000, limit=6):
+    query = (
+        f'[out:json][timeout:20];\n'
+        f'(\n  nwr(around:{int(radius_m)},{latitude:.7f},{longitude:.7f})'
+        '["amenity"="pharmacy"];\n);\nout center tags;'
+    )
+    body = urlencode({"data": query}).encode("utf-8")
+    request_object = Request(
+        "https://overpass-api.de/api/interpreter",
+        data=body,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "User-Agent": (
+                "MediCareAI/1.0"
+                + (f" ({APP_CONTACT_EMAIL})" if APP_CONTACT_EMAIL else "")
+            ),
+        },
+        method="POST",
+    )
+
+    with urlopen(request_object, timeout=25) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    pharmacies = []
+    for element in payload.get("elements", []):
+        center = element.get("center") or {}
+        item_lat = element.get("lat", center.get("lat"))
+        item_lon = element.get("lon", center.get("lon"))
+        if item_lat is None or item_lon is None:
+            continue
+
+        tags = element.get("tags") or {}
+        distance = haversine_km(latitude, longitude, float(item_lat), float(item_lon))
+        street = " ".join(
+            part for part in [tags.get("addr:housenumber"), tags.get("addr:street")]
+            if part
+        )
+        address = street or tags.get("addr:full") or tags.get("addr:place") or "Chưa có địa chỉ chi tiết"
+        pharmacies.append({
+            "id": f"{element.get('type', 'node')}-{element.get('id')}",
+            "name": tags.get("name") or tags.get("brand") or "Nhà thuốc",
+            "address": address,
+            "latitude": float(item_lat),
+            "longitude": float(item_lon),
+            "distance_km": round(distance, 2),
+            "phone": tags.get("phone") or tags.get("contact:phone") or "",
+            "opening_hours": tags.get("opening_hours") or "",
+        })
+
+    pharmacies.sort(key=lambda item: item["distance_km"])
+    return pharmacies[:max(1, min(int(limit), 10))]
+
+
+def get_location_context(latitude, longitude, accuracy=None):
+    cache_key = f"{round(latitude, 4)}:{round(longitude, 4)}"
+    now = time.time()
+
+    with LOCATION_CACHE_LOCK:
+        cached = LOCATION_CACHE.get(cache_key)
+        if cached and now - cached["cached_at"] < LOCATION_CACHE_TTL_SECONDS:
+            result = dict(cached["payload"])
+            result["from_cache"] = True
+            result["accuracy_m"] = accuracy
+            return result
+
+    result = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "accuracy_m": accuracy,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "from_cache": False,
+        "location": {},
+        "environment": {},
+        "pharmacies": [],
+        "warnings": [],
+    }
+
+    jobs = {
+        "location": (reverse_geocode, (latitude, longitude)),
+        "environment": (fetch_weather_and_air, (latitude, longitude)),
+        "pharmacies": (fetch_nearby_pharmacies, (latitude, longitude)),
+    }
+    error_labels = {
+        "location": "Không lấy được địa chỉ",
+        "environment": "Không tải được thời tiết/chất lượng không khí",
+        "pharmacies": "Không tải được danh sách nhà thuốc",
+    }
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_map = {
+            executor.submit(function, *arguments): key
+            for key, (function, arguments) in jobs.items()
+        }
+        for future in as_completed(future_map):
+            key = future_map[future]
+            try:
+                result[key] = future.result()
+            except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError, OSError) as error:
+                result["warnings"].append(f"{error_labels[key]}: {error}")
+
+    if not result["location"]:
+        result["location"] = {
+            "display_name": f"{latitude:.5f}, {longitude:.5f}",
+            "short_address": "Vị trí hiện tại",
+            "address": {},
+        }
+
+    with LOCATION_CACHE_LOCK:
+        LOCATION_CACHE[cache_key] = {"cached_at": now, "payload": dict(result)}
+        if len(LOCATION_CACHE) > 100:
+            oldest_keys = sorted(
+                LOCATION_CACHE,
+                key=lambda key: LOCATION_CACHE[key]["cached_at"],
+            )[:25]
+            for key in oldest_keys:
+                LOCATION_CACHE.pop(key, None)
+
+    return result
+
+
+@app.post("/api/location/context")
+def location_context():
+    data = request.get_json(silent=True) or {}
+    try:
+        latitude = clamp_number(data.get("latitude"), "Vĩ độ", -90, 90)
+        longitude = clamp_number(data.get("longitude"), "Kinh độ", -180, 180)
+        accuracy_value = data.get("accuracy")
+        accuracy = None
+        if accuracy_value not in (None, ""):
+            accuracy = clamp_number(accuracy_value, "Độ chính xác", 0, 100000)
+        result = get_location_context(latitude, longitude, accuracy)
+        return jsonify(result)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except Exception as error:
+        print("Lỗi location context:", repr(error))
+        return jsonify({
+            "error": "Không thể tải dữ liệu vị trí lúc này. Vui lòng thử lại."
+        }), 503
+
+
 @app.get("/")
 def index():
     return render_template("index.html")
+
+
+@app.get("/tu-van")
+def consultation_page():
+    return render_template("chat.html")
+
+
+@app.get("/kien-thuc")
+def knowledge_page():
+    return render_template("knowledge.html")
+
+
+@app.get("/nha-thuoc")
+def pharmacy_page():
+    return render_template("pharmacies.html")
 
 
 @app.get("/health")
@@ -946,11 +1373,17 @@ def login():
     if not check_password_hash(user["password_hash"], password):
         return jsonify({"error": "Mật khẩu không chính xác."}), 401
 
+    if not bool(user["is_active"]):
+        return jsonify({
+            "error": "Tài khoản này đã bị quản trị viên tạm khóa."
+        }), 403
+
     session.clear()
     session["user_id"] = user["id"]
     session["full_name"] = user["full_name"]
     session["email"] = user["email"]
     session["phone"] = user["phone"]
+    session["role"] = user["role"]
 
     return jsonify({
         "message": "Đăng nhập thành công.",
@@ -958,7 +1391,8 @@ def login():
             "id": user["id"],
             "full_name": user["full_name"],
             "email": user["email"],
-            "phone": user["phone"]
+            "phone": user["phone"],
+            "role": user["role"]
         }
     })
 
@@ -974,7 +1408,8 @@ def current_user():
             "id": session.get("user_id"),
             "full_name": session.get("full_name"),
             "email": session.get("email"),
-            "phone": session.get("phone")
+            "phone": session.get("phone"),
+            "role": session.get("role", "user")
         }
     })
 
@@ -1077,6 +1512,19 @@ def transcribe_audio():
         return build_error_response(error)
 
 
+def parse_optional_json_object(value):
+    """Đọc object JSON tùy chọn từ form-data hoặc JSON body."""
+    if isinstance(value, dict):
+        return value
+    if value in (None, ""):
+        return {}
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 @app.post("/chat")
 def chat():
     if client is None:
@@ -1104,6 +1552,15 @@ def chat():
 
             history = clean_history(history_data)
             image_file = request.files.get("image")
+            selected_profile = parse_optional_json_object(
+                request.form.get("selected_profile", "")
+            )
+            environment_context = parse_optional_json_object(
+                request.form.get("environment", "")
+            )
+            selected_specialty = str(
+                request.form.get("specialty", "")
+            ).strip()[:100]
 
         else:
             data = request.get_json(silent=True)
@@ -1120,6 +1577,15 @@ def chat():
             history = clean_history(
                 data.get("history", [])
             )
+            selected_profile = parse_optional_json_object(
+                data.get("selected_profile")
+            )
+            environment_context = parse_optional_json_object(
+                data.get("environment")
+            )
+            selected_specialty = str(
+                data.get("specialty", "")
+            ).strip()[:100]
 
             image_file = None
 
@@ -1135,7 +1601,7 @@ def chat():
                 "error": "Nội dung quá dài. Vui lòng nhập dưới 4.000 ký tự."
             }), 400
 
-        messages = [SYSTEM_PROMPT]
+        messages = [get_active_system_prompt()]
 
         if "user_id" in session:
             connection = get_database()
@@ -1175,6 +1641,57 @@ def chat():
                         )
                         + "\nChỉ dùng hồ sơ này để cá nhân hóa an toàn. "
                         "Không coi dữ liệu tự khai là chẩn đoán."
+                    ),
+                })
+
+        # Hồ sơ thành viên gia đình đang được chọn trên giao diện.
+        if selected_profile:
+            allowed_profile_fields = {
+                key: selected_profile.get(key)
+                for key in (
+                    "id", "name", "relationship", "age", "gender",
+                    "height", "weight", "condition", "allergies"
+                )
+                if selected_profile.get(key) not in (None, "")
+            }
+            if allowed_profile_fields:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "THÀNH VIÊN GIA ĐÌNH ĐANG ĐƯỢC CHỌN ĐỂ TƯ VẤN:\n"
+                        + json.dumps(allowed_profile_fields, ensure_ascii=False)
+                        + "\nDữ liệu do người dùng tự khai. Chỉ dùng để cá nhân hóa "
+                        "và không được nhầm với thành viên khác."
+                    ),
+                })
+
+        if selected_specialty:
+            messages.append({
+                "role": "system",
+                "content": (
+                    f"CHUYÊN KHOA NGƯỜI DÙNG ĐÃ CHỌN: {selected_specialty}. "
+                    "Dùng làm ngữ cảnh định hướng, không khẳng định chẩn đoán."
+                ),
+            })
+
+        if environment_context:
+            allowed_environment_fields = {
+                key: environment_context.get(key)
+                for key in (
+                    "short_address", "temperature", "apparent_temperature",
+                    "humidity", "wind_speed", "weather_code", "aqi",
+                    "pm25", "pm10", "accuracy_m", "updated_at"
+                )
+                if environment_context.get(key) not in (None, "")
+            }
+            if allowed_environment_fields:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "BỐI CẢNH THỜI TIẾT VÀ KHÔNG KHÍ TẠI VỊ TRÍ NGƯỜI DÙNG:\n"
+                        + json.dumps(allowed_environment_fields, ensure_ascii=False)
+                        + "\nDữ liệu thay đổi theo thời gian, chỉ dùng cho khuyến nghị "
+                        "phòng ngừa tổng quát."
                     ),
                 })
 
@@ -1291,9 +1808,10 @@ YÊU CẦU TRẢ LỜI:
             max_completion_tokens=max_output_tokens,
         )
 
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000)
         print(
             f"Thời gian Groq phản hồi bằng {selected_model}: "
-            f"{time.perf_counter() - start_time:.2f} giây"
+            f"{elapsed_ms / 1000:.2f} giây"
         )
         if not response.choices:
             return jsonify({
@@ -1320,6 +1838,14 @@ YÊU CẦU TRẢ LỜI:
                 "error": "AI trả về nội dung trống."
             }), 502
 
+        usage_data = {}
+        usage_obj = getattr(response, "usage", None)
+        if usage_obj is not None:
+            usage_data = {
+                "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
+                "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
+            }
+        record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data)
         return jsonify({
             "reply": reply
         })
@@ -1366,6 +1892,151 @@ def login_required(view_function):
         return view_function(*args, **kwargs)
 
     return wrapped
+
+
+def normalize_family_member_payload(data, partial=False):
+    if not isinstance(data, dict):
+        raise ValueError("Dữ liệu thành viên không hợp lệ.")
+
+    result = {}
+    if not partial or "full_name" in data:
+        full_name = str(data.get("full_name", "")).strip()
+        if len(full_name) < 2 or len(full_name) > 120:
+            raise ValueError("Họ tên thành viên phải từ 2 đến 120 ký tự.")
+        result["full_name"] = full_name
+
+    text_fields = {
+        "relationship": 40,
+        "gender": 30,
+        "medical_conditions": 500,
+        "allergies": 500,
+        "avatar_seed": 80,
+    }
+    for field, max_length in text_fields.items():
+        if not partial or field in data:
+            result[field] = str(data.get(field, "")).strip()[:max_length]
+
+    if not partial or "age" in data:
+        value = data.get("age")
+        if value in (None, ""):
+            result["age"] = None
+        else:
+            try:
+                age = int(value)
+            except (TypeError, ValueError):
+                raise ValueError("Tuổi không hợp lệ.")
+            if age < 0 or age > 120:
+                raise ValueError("Tuổi phải từ 0 đến 120.")
+            result["age"] = age
+
+    for field, label, minimum, maximum in (
+        ("height_cm", "Chiều cao", 30, 250),
+        ("weight_kg", "Cân nặng", 1, 350),
+    ):
+        if not partial or field in data:
+            value = data.get(field)
+            result[field] = None if value in (None, "") else clamp_number(
+                value, label, minimum, maximum
+            )
+
+    return result
+
+
+@app.route("/api/family", methods=["GET", "POST"])
+@login_required
+def family_collection():
+    user_id = session["user_id"]
+    connection = get_database()
+
+    if request.method == "GET":
+        rows = connection.execute(
+            "SELECT * FROM family_members WHERE user_id = ? "
+            "ORDER BY updated_at DESC, id DESC",
+            (user_id,),
+        ).fetchall()
+        connection.close()
+        return jsonify({"members": [dict(row) for row in rows]})
+
+    try:
+        payload = normalize_family_member_payload(request.get_json(silent=True) or {})
+        cursor = connection.execute(
+            """
+            INSERT INTO family_members (
+                user_id, full_name, relationship, age, gender, height_cm,
+                weight_kg, medical_conditions, allergies, avatar_seed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                payload["full_name"],
+                payload.get("relationship") or "Khác",
+                payload.get("age"),
+                payload.get("gender"),
+                payload.get("height_cm"),
+                payload.get("weight_kg"),
+                payload.get("medical_conditions"),
+                payload.get("allergies"),
+                payload.get("avatar_seed") or uuid4().hex[:12],
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT * FROM family_members WHERE id = ?", (cursor.lastrowid,)
+        ).fetchone()
+        connection.close()
+        return jsonify({"member": dict(row)}), 201
+    except ValueError as error:
+        connection.close()
+        return jsonify({"error": str(error)}), 400
+
+
+@app.route("/api/family/<int:member_id>", methods=["PUT", "DELETE"])
+@login_required
+def family_item(member_id):
+    user_id = session["user_id"]
+    connection = get_database()
+    existing = connection.execute(
+        "SELECT * FROM family_members WHERE id = ? AND user_id = ?",
+        (member_id, user_id),
+    ).fetchone()
+    if existing is None:
+        connection.close()
+        return jsonify({"error": "Không tìm thấy thành viên."}), 404
+
+    if request.method == "DELETE":
+        connection.execute(
+            "DELETE FROM family_members WHERE id = ? AND user_id = ?",
+            (member_id, user_id),
+        )
+        connection.commit()
+        connection.close()
+        return jsonify({"message": "Đã xóa thành viên."})
+
+    try:
+        changes = normalize_family_member_payload(
+            request.get_json(silent=True) or {}, partial=True
+        )
+        if not changes:
+            connection.close()
+            return jsonify({"member": dict(existing)})
+
+        assignments = ", ".join(f"{field} = ?" for field in changes)
+        values = list(changes.values()) + [member_id, user_id]
+        connection.execute(
+            f"UPDATE family_members SET {assignments}, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+            values,
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT * FROM family_members WHERE id = ? AND user_id = ?",
+            (member_id, user_id),
+        ).fetchone()
+        connection.close()
+        return jsonify({"member": dict(row)})
+    except ValueError as error:
+        connection.close()
+        return jsonify({"error": str(error)}), 400
 
 
 def parse_float(value, field_name, minimum=None, maximum=None):
@@ -2061,6 +2732,252 @@ Yêu cầu bắt buộc: 1
         print(f"Groq API error: {type(error).__name__}: {error}")
         return build_error_response(error)
 
+
+
+# =========================
+# ADMIN MANAGEMENT MODULE - GIAI ĐOẠN 1
+# =========================
+
+def admin_required(view_function):
+    @wraps(view_function)
+    def wrapped(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("index"))
+        if session.get("role") != "admin":
+            return jsonify({"error": "Bạn không có quyền quản trị."}), 403
+        return view_function(*args, **kwargs)
+    return wrapped
+
+
+def write_admin_log(connection, action, target_user_id=None, details=""):
+    connection.execute(
+        "INSERT INTO admin_audit_logs (admin_user_id, action, target_user_id, details) VALUES (?, ?, ?, ?)",
+        (session["user_id"], str(action)[:100], target_user_id, str(details)[:1000]),
+    )
+
+
+def dataset_directory():
+    path = BASE_DIR / "data" / "raw"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def inspect_dataset(path):
+    result = {"rows": 0, "columns": 0, "duplicate_rows": 0, "missing_cells": 0, "error": ""}
+    try:
+        if path.suffix.lower() == ".csv":
+            with path.open("r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+            if rows:
+                result["columns"] = len(rows[0])
+                data_rows = rows[1:]
+                result["rows"] = len(data_rows)
+                result["duplicate_rows"] = len(data_rows) - len({tuple(r) for r in data_rows})
+                result["missing_cells"] = sum(1 for r in data_rows for c in r if not str(c).strip())
+        else:
+            result["error"] = "Chỉ thống kê chi tiết file CSV"
+    except Exception as error:
+        result["error"] = str(error)
+    return result
+
+
+@app.get("/admin")
+@admin_required
+def admin_dashboard():
+    connection = get_database()
+    stats = {
+        "users": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
+        "active_users": connection.execute("SELECT COUNT(*) FROM users WHERE is_active = 1").fetchone()[0],
+        "admins": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
+        "chats": connection.execute("SELECT COUNT(*) FROM chat_logs").fetchone()[0],
+        "images": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE has_image = 1").fetchone()[0],
+        "errors": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE status != 'success'").fetchone()[0],
+        "avg_latency": connection.execute("SELECT COALESCE(ROUND(AVG(latency_ms)),0) FROM chat_logs WHERE latency_ms > 0").fetchone()[0],
+        "tokens": connection.execute("SELECT COALESCE(SUM(prompt_tokens + completion_tokens),0) FROM chat_logs").fetchone()[0],
+    }
+    chart_rows = connection.execute("""
+        WITH RECURSIVE dates(day) AS (
+            SELECT date('now','-6 day') UNION ALL SELECT date(day,'+1 day') FROM dates WHERE day < date('now')
+        )
+        SELECT day, (SELECT COUNT(*) FROM chat_logs WHERE date(created_at)=day) chats,
+                    (SELECT COUNT(*) FROM users WHERE date(created_at)=day) users
+        FROM dates
+    """).fetchall()
+    recent_chats = connection.execute("""
+        SELECT c.*, u.full_name FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id
+        ORDER BY c.id DESC LIMIT 8
+    """).fetchall()
+    connection.close()
+    return render_template("admin/dashboard.html", stats=stats, chart_rows=chart_rows, recent_chats=recent_chats)
+
+
+@app.get("/admin/users")
+@admin_required
+def admin_users():
+    keyword=request.args.get("q","").strip(); role=request.args.get("role","").strip(); status=request.args.get("status","").strip()
+    page=max(request.args.get("page",1,type=int),1); per_page=20; offset=(page-1)*per_page
+    where=[]; params=[]
+    if keyword:
+        where.append("(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)"); params += [f"%{keyword}%"]*3
+    if role in {"user","admin"}: where.append("u.role = ?"); params.append(role)
+    if status in {"0","1"}: where.append("u.is_active = ?"); params.append(int(status))
+    clause=("WHERE "+" AND ".join(where)) if where else ""
+    connection=get_database()
+    total=connection.execute(f"SELECT COUNT(*) FROM users u {clause}",params).fetchone()[0]
+    users=connection.execute(f"""
+        SELECT u.*, (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id=u.id) chat_count,
+        (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) last_activity
+        FROM users u {clause} ORDER BY u.id DESC LIMIT ? OFFSET ?
+    """,params+[per_page,offset]).fetchall()
+    connection.close()
+    return render_template("admin/users.html",users=users,keyword=keyword,role=role,status=status,page=page,total=total,pages=max(1,(total+per_page-1)//per_page))
+
+
+@app.get("/admin/users/<int:user_id>")
+@admin_required
+def admin_user_detail(user_id):
+    connection=get_database(); user=connection.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+    if not user: connection.close(); return "Không tìm thấy người dùng",404
+    chats=connection.execute("SELECT * FROM chat_logs WHERE user_id=? ORDER BY id DESC LIMIT 50",(user_id,)).fetchall()
+    profile=connection.execute("SELECT * FROM health_profiles WHERE user_id=?",(user_id,)).fetchone(); connection.close()
+    return render_template("admin/user_detail.html",user=user,chats=chats,profile=profile)
+
+
+@app.post("/admin/users/<int:user_id>/toggle-active")
+@admin_required
+def admin_toggle_user(user_id):
+    if user_id==session["user_id"]: return jsonify({"error":"Bạn không thể tự khóa tài khoản đang dùng."}),400
+    connection=get_database(); user=connection.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+    if not user: connection.close(); return jsonify({"error":"Không tìm thấy người dùng."}),404
+    new_status=0 if user["is_active"] else 1; connection.execute("UPDATE users SET is_active=? WHERE id=?",(new_status,user_id))
+    write_admin_log(connection,"unlock_user" if new_status else "lock_user",user_id); connection.commit(); connection.close()
+    return jsonify({"ok":True,"is_active":bool(new_status)})
+
+
+@app.post("/admin/users/<int:user_id>/role")
+@admin_required
+def admin_change_role(user_id):
+    data=request.get_json(silent=True) or {}; new_role=str(data.get("role","")).lower()
+    if new_role not in {"user","admin"}: return jsonify({"error":"Quyền không hợp lệ."}),400
+    if user_id==session["user_id"] and new_role!="admin": return jsonify({"error":"Bạn không thể tự hạ quyền."}),400
+    connection=get_database(); connection.execute("UPDATE users SET role=? WHERE id=?",(new_role,user_id)); write_admin_log(connection,"change_role",user_id,new_role); connection.commit(); connection.close()
+    return jsonify({"ok":True,"role":new_role})
+
+
+@app.get("/admin/chats")
+@admin_required
+def admin_chats():
+    q=request.args.get("q","").strip(); model=request.args.get("model","").strip(); page=max(request.args.get("page",1,type=int),1); per_page=25
+    where=[]; params=[]
+    if q: where.append("(c.question LIKE ? OR c.answer LIKE ? OR u.full_name LIKE ?)"); params += [f"%{q}%"]*3
+    if model: where.append("c.model=?"); params.append(model)
+    clause=("WHERE "+" AND ".join(where)) if where else ""; connection=get_database()
+    total=connection.execute(f"SELECT COUNT(*) FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id {clause}",params).fetchone()[0]
+    chats=connection.execute(f"SELECT c.*,u.full_name,u.email FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id {clause} ORDER BY c.id DESC LIMIT ? OFFSET ?",params+[per_page,(page-1)*per_page]).fetchall()
+    models=connection.execute("SELECT DISTINCT model FROM chat_logs WHERE model IS NOT NULL ORDER BY model").fetchall(); connection.close()
+    return render_template("admin/chats.html",chats=chats,q=q,model=model,models=models,page=page,pages=max(1,(total+per_page-1)//per_page))
+
+
+@app.post("/admin/chats/<int:chat_id>/delete")
+@admin_required
+def admin_delete_chat(chat_id):
+    connection=get_database(); connection.execute("DELETE FROM chat_logs WHERE id=?",(chat_id,)); write_admin_log(connection,"delete_chat",details=f"chat_id={chat_id}"); connection.commit(); connection.close(); return jsonify({"ok":True})
+
+
+@app.get("/admin/datasets")
+@admin_required
+def admin_datasets():
+    files=[]
+    for path in sorted(dataset_directory().iterdir()):
+        if path.is_file(): files.append({"name":path.name,"size":path.stat().st_size,"modified":datetime.fromtimestamp(path.stat().st_mtime),**inspect_dataset(path)})
+    return render_template("admin/datasets.html",files=files)
+
+
+@app.post("/admin/datasets/upload")
+@admin_required
+def admin_dataset_upload():
+    upload=request.files.get("dataset")
+    if not upload or not upload.filename: return jsonify({"error":"Chưa chọn file."}),400
+    safe_name=re.sub(r"[^A-Za-z0-9._-]","_",Path(upload.filename).name)
+    if Path(safe_name).suffix.lower() not in {".csv",".parquet",".json"}: return jsonify({"error":"Chỉ hỗ trợ CSV, Parquet hoặc JSON."}),400
+    target=dataset_directory()/safe_name
+    if target.exists(): target=dataset_directory()/f"{target.stem}_{uuid4().hex[:6]}{target.suffix}"
+    upload.save(target); connection=get_database(); write_admin_log(connection,"upload_dataset",details=target.name); connection.commit(); connection.close()
+    return redirect(url_for("admin_datasets"))
+
+
+@app.post("/admin/datasets/<path:filename>/delete")
+@admin_required
+def admin_dataset_delete(filename):
+    target=(dataset_directory()/Path(filename).name).resolve()
+    if target.parent!=dataset_directory().resolve() or not target.exists(): return jsonify({"error":"File không tồn tại."}),404
+    backup=BASE_DIR/"data"/"backup"; backup.mkdir(parents=True,exist_ok=True); shutil.copy2(target,backup/f"{datetime.now():%Y%m%d-%H%M%S}_{target.name}"); target.unlink()
+    connection=get_database(); write_admin_log(connection,"delete_dataset",details=filename); connection.commit(); connection.close(); return jsonify({"ok":True})
+
+
+@app.get("/admin/datasets/<path:filename>/download")
+@admin_required
+def admin_dataset_download(filename):
+    target=dataset_directory()/Path(filename).name
+    if not target.exists(): return "Không tìm thấy file",404
+    return send_file(target,as_attachment=True)
+
+
+@app.get("/admin/prompt")
+@admin_required
+def admin_prompt():
+    connection=get_database(); versions=connection.execute("SELECT p.*,u.full_name creator FROM prompt_versions p LEFT JOIN users u ON u.id=p.created_by ORDER BY p.id DESC LIMIT 20").fetchall(); active=get_active_system_prompt()["content"]; connection.close()
+    return render_template("admin/prompt.html",versions=versions,active_prompt=active)
+
+
+@app.post("/admin/prompt")
+@admin_required
+def admin_prompt_save():
+    content=request.form.get("content","").strip()
+    if len(content)<50: return "Prompt quá ngắn",400
+    connection=get_database(); connection.execute("UPDATE prompt_versions SET is_active=0"); connection.execute("INSERT INTO prompt_versions(content,is_active,created_by) VALUES (?,1,?)",(content,session["user_id"])); write_admin_log(connection,"update_prompt",details=f"{len(content)} ký tự"); connection.commit(); connection.close(); return redirect(url_for("admin_prompt"))
+
+
+@app.post("/admin/prompt/<int:version_id>/activate")
+@admin_required
+def admin_prompt_activate(version_id):
+    connection=get_database(); connection.execute("UPDATE prompt_versions SET is_active=0"); connection.execute("UPDATE prompt_versions SET is_active=1 WHERE id=?",(version_id,)); write_admin_log(connection,"activate_prompt",details=f"version={version_id}"); connection.commit(); connection.close(); return redirect(url_for("admin_prompt"))
+
+
+@app.get("/admin/ai-settings")
+@admin_required
+def admin_ai_settings():
+    settings={"text_model":get_setting("text_model",MODEL_NAME),"vision_model":get_setting("vision_model",VISION_MODEL_NAME),"temperature":get_setting("temperature","0.3"),"max_tokens":get_setting("max_tokens","1000"),"provider":"Groq","api_configured":bool(API_KEY)}
+    return render_template("admin/ai_settings.html",settings=settings)
+
+
+@app.post("/admin/ai-settings")
+@admin_required
+def admin_ai_settings_save():
+    allowed={"text_model","vision_model","temperature","max_tokens"}; connection=get_database()
+    for key in allowed:
+        value=request.form.get(key,"").strip()
+        connection.execute("INSERT INTO system_settings(setting_key,setting_value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP",(key,value,session["user_id"]))
+    write_admin_log(connection,"update_ai_settings",details="Cần khởi động lại để áp dụng model"); connection.commit(); connection.close(); return redirect(url_for("admin_ai_settings"))
+
+
+@app.get("/admin/audit-logs")
+@admin_required
+def admin_audit_logs():
+    connection=get_database(); logs=connection.execute("SELECT l.*,a.full_name admin_name,u.full_name target_name FROM admin_audit_logs l JOIN users a ON a.id=l.admin_user_id LEFT JOIN users u ON u.id=l.target_user_id ORDER BY l.id DESC LIMIT 500").fetchall(); connection.close(); return render_template("admin/audit_logs.html",logs=logs)
+
+
+@app.get("/admin/backup/users-db")
+@admin_required
+def admin_backup_users_db():
+    connection=get_database(); write_admin_log(connection,"backup_database",details="Tải bản sao users.db"); connection.commit(); connection.close(); return send_file(DATABASE_PATH,as_attachment=True,download_name=f"users-backup-{datetime.now():%Y%m%d-%H%M%S}.db")
+
+
+@app.post("/admin/logout")
+@admin_required
+def admin_logout():
+    session.clear(); return redirect(url_for("index"))
 
 def open_browser():
     webbrowser.open_new("http://127.0.0.1:5000/")

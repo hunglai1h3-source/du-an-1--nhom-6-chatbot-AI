@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MediCare AI - Bản đồ nhà thuốc gần vị trí hiện tại">
+  <title>MediCare AI | Nhà thuốc gần nhất</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pharmacies.css', v='20260723-6') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">+</span><span><strong>MediCare <em>AI</em></strong><small>AI đồng hành cùng sức khỏe</small></span></a>
+    <nav><a href="/">Trang chủ</a><a href="/tu-van">Tư vấn AI</a><a href="/tu-van?openSpecialty=1">Chuyên khoa</a><a href="/kien-thuc">Kiến thức</a><a class="active" href="/nha-thuoc">Nhà thuốc</a></nav>
+    <div class="actions"><button data-action="toggle-theme" type="button">☾</button><button class="account-button" id="accountButton" type="button"><span class="account-avatar" id="accountAvatar">K</span><span><strong data-account-name id="accountName">Khách</strong><small>Tài khoản của tôi</small></span></button></div>
+  </header>
+  <main class="map-shell">
+    <aside class="pharmacy-sidebar">
+      <div class="sidebar-head"><div><p>VỊ TRÍ & NHÀ THUỐC</p><h1>Nhà thuốc gần bạn</h1><span id="mapLocationText">Đang chờ vị trí thiết bị</span></div><button id="refreshMapLocation" type="button">↻ Làm mới</button></div>
+      <label class="pharmacy-search"><span>⌕</span><input id="pharmacySearch" type="search" placeholder="Tìm tên hoặc địa chỉ nhà thuốc..."></label>
+      <p class="accuracy-note" id="mapAccuracy">Website sẽ chọn tọa độ có độ chính xác tốt nhất mà thiết bị cung cấp.</p>
+      <div class="pharmacy-results" id="pharmacyResults"></div>
+      <div class="map-footer-actions"><a href="/">← Quay lại trang chủ</a><button id="openGoogleMapSearch" type="button">Mở tìm kiếm Google Maps</button></div>
+    </aside>
+    <section class="map-stage"><div id="pharmacyMap" aria-label="Bản đồ các nhà thuốc"></div><div class="map-status" id="mapStatus">Đang tải bản đồ...</div></section>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="{{ url_for('static', filename='common.js', v='20260723-6') }}"></script>
+  <script src="{{ url_for('static', filename='pharmacies.js', v='20260723-6') }}"></script>
+</body>
+</html>

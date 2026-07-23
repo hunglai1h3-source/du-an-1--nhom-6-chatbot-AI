@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MediCare AI - Tư vấn sức khỏe theo hồ sơ gia đình">
+  <title>MediCare AI | Tư vấn AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='chat.css', v='20260723-13') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="MediCare AI">
+      <span class="brand-mark">+</span>
+      <span><strong>MediCare <em>AI</em></strong><small>AI đồng hành cùng sức khỏe</small></span>
+    </a>
+
+    <nav class="main-nav" aria-label="Điều hướng chính">
+      <a href="/">Trang chủ</a>
+      <a class="active" href="/tu-van">Tư vấn AI</a>
+      <a href="/#family-health">Hồ sơ sức khỏe</a>
+      <a href="#" id="openSpecialtyNav">Chuyên khoa</a>
+      <a href="/kien-thuc">Kiến thức</a>
+    </nav>
+
+    <div class="top-actions">
+      <a class="back-overview" href="/">← Tổng quan</a>
+      <button class="icon-button" data-action="toggle-theme" type="button" title="Đổi giao diện">☾</button>
+      <button class="icon-button" id="notificationButton" type="button" title="Thông báo">♢<b>3</b></button>
+      <button class="account-button" id="accountButton" type="button">
+        <span class="account-avatar" id="accountAvatar">K</span>
+        <span><strong id="accountName" data-account-name>Khách</strong><small>Tài khoản của tôi</small></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="consultation-shell">
+    <aside class="history-sidebar" aria-label="Lịch sử trò chuyện">
+      <button class="new-chat-button" id="newChatButton" type="button">＋ Cuộc trò chuyện mới</button>
+
+      <div class="history-search-row">
+        <label class="history-search"><span>⌕</span><input id="historySearch" type="search" placeholder="Tìm cuộc trò chuyện..."></label>
+        <button class="filter-button" id="favoriteFilterButton" type="button" title="Chỉ xem cuộc trò chuyện yêu thích">☆</button>
+      </div>
+
+      <div class="history-title-row">
+        <h2>Lịch sử trò chuyện</h2>
+        <button id="clearAllHistoryButton" type="button">Xóa tất cả</button>
+      </div>
+      <div class="history-list" id="historyList"></div>
+
+      <section class="active-person-card">
+        <small>HỒ SƠ ĐANG TƯ VẤN</small>
+        <div>
+          <span class="person-avatar" id="sidebarProfileAvatar">K</span>
+          <p><strong id="sidebarProfileName">Khách</strong><small id="sidebarProfileMeta">Chưa cập nhật</small></p>
+          <em id="sidebarRelationship">Bản thân</em>
+        </div>
+        <button id="changeProfileButton" type="button">Chọn hồ sơ khác</button>
+      </section>
+
+      <div class="privacy-note">
+        <span>🔒</span>
+        <div><strong>Dữ liệu riêng tư</strong><small>Lịch sử chat được lưu trên trình duyệt của thiết bị này.</small></div>
+      </div>
+    </aside>
+
+    <section class="chat-workspace">
+      <article class="chat-card">
+        <header class="chat-card-header">
+          <div class="assistant-title">
+            <span class="bot-avatar">🤖</span>
+            <div><h1>MediCare AI</h1><p><i></i> Đang hoạt động</p></div>
+          </div>
+
+          <div class="profile-control-wrap">
+            <button class="profile-control" id="profileControl" type="button" aria-expanded="false">
+              <span class="mini-avatar" id="selectedProfileAvatar">K</span>
+              <span><small>Đang tư vấn cho</small><strong id="selectedProfileName">Khách</strong></span>
+              <b>⌄</b>
+            </button>
+            <div class="profile-menu hidden" id="profileMenu"></div>
+          </div>
+
+          <button class="header-profile-button" id="headerChangeProfileButton" type="button">Chọn hồ sơ</button>
+
+          <div class="more-wrap">
+            <button class="more-button" id="moreButton" type="button" title="Tùy chọn">⋯</button>
+            <div class="more-menu hidden" id="moreMenu">
+              <button type="button" data-chat-action="export">Xuất cuộc trò chuyện</button>
+              <button type="button" data-chat-action="clear">Xóa nội dung hiện tại</button>
+              <button class="danger" type="button" data-chat-action="delete">Xóa cuộc trò chuyện</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="profile-context-strip" id="profileContextStrip"></div>
+
+        <div class="specialty-strip hidden" id="specialtyStrip">
+          <span>🩺 Chuyên khoa: <strong id="specialtyName"></strong></span>
+          <button id="removeSpecialtyButton" type="button" title="Bỏ chuyên khoa">×</button>
+        </div>
+
+        <section class="message-list" id="messageList" aria-live="polite"></section>
+
+        <section class="quick-area">
+          <div class="quick-heading">
+            <div>
+              <strong>Gợi ý nhanh</strong>
+            </div>
+            <button id="refreshQuickButton" type="button">↻ Đổi gợi ý</button>
+          </div>
+          <div class="quick-list" id="quickList"></div>
+        </section>
+
+        <div class="image-preview hidden" id="imagePreview">
+          <img id="imagePreviewThumb" alt="Ảnh đã chọn">
+          <span id="imagePreviewName"></span>
+          <button id="removeImageButton" type="button">×</button>
+        </div>
+
+        <form class="composer" id="chatForm">
+          <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          <button class="composer-tool" id="attachImageButton" type="button" title="Gửi ảnh" aria-label="Gửi ảnh">🖼</button>
+          <textarea id="chatInput" rows="1" maxlength="4000" placeholder="Nhập câu hỏi sức khỏe của bạn..."></textarea>
+          <button class="composer-tool" id="voiceButton" type="button" title="Ghi âm" aria-label="Ghi âm">🎙</button>
+          <button class="send-button" id="sendButton" type="submit" title="Gửi" aria-label="Gửi câu hỏi">➤</button>
+        </form>
+        <p class="voice-status hidden" id="voiceStatus"></p>
+        <p class="chat-disclaimer">AI hỗ trợ tư vấn ban đầu, không thay thế chẩn đoán hoặc điều trị của bác sĩ.</p>
+      </article>
+    </section>
+
+    <aside class="context-sidebar">
+      <section class="context-card profile-detail-card">
+        <div class="context-heading"><h2>Hồ sơ sức khỏe</h2><div><button id="editSelfHealthButton" type="button">Cập nhật</button><button id="contextChangeProfileButton" type="button">Chọn hồ sơ</button></div></div>
+        <div class="profile-detail-head">
+          <span class="large-avatar" id="rightProfileAvatar">K</span>
+          <div><strong id="rightProfileName">Khách</strong><small id="rightProfileRelationship">Bản thân</small></div>
+        </div>
+        <dl id="profileDetails"></dl>
+      </section>
+
+      <section class="context-card">
+        <div class="context-heading"><h2>Thời tiết & không khí</h2><button id="refreshLocationButton" type="button">↻</button></div>
+        <strong id="locationName">Chưa xác định vị trí</strong>
+        <div class="location-actions">
+          <button class="location-primary" id="useCurrentLocationButton" type="button">📍 Dùng vị trí hiện tại</button>
+          <button id="openLocationMapButton" type="button">Mở vị trí</button>
+        </div>
+        <p class="location-accuracy" id="locationAccuracy">Bấm “Dùng vị trí hiện tại” để tải dữ liệu môi trường.</p>
+        <p class="location-service-warning hidden" id="locationServiceWarning"></p>
+        <div class="environment-summary">
+          <div><span id="weatherIcon">⛅</span><strong id="temperatureValue">--°C</strong><small id="weatherText">Chưa có dữ liệu</small></div>
+          <div><span>AQI</span><strong id="aqiValue">--</strong><small id="aqiLevel">Chưa có dữ liệu</small></div>
+          <div><span>PM2.5</span><strong id="pm25Value">--</strong><small>µg/m³</small></div>
+        </div>
+        <ul class="environment-advice" id="environmentAdvice"></ul>
+        <button class="ask-environment-button" id="askEnvironmentButton" type="button">Hỏi AI cách bảo vệ sức khỏe</button>
+      </section>
+
+      <section class="context-card">
+        <div class="context-heading"><h2>Nhà thuốc gần đây</h2><span>Google Maps</span></div>
+        <div class="google-map-frame-wrap">
+          <iframe
+            id="googlePharmacyMap"
+            class="google-pharmacy-map"
+            title="Google Maps tìm nhà thuốc gần đây"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"
+            src="https://www.google.com/maps?q=nh%C3%A0+thu%E1%BB%91c+g%E1%BA%A7n+t%C3%B4i&output=embed"
+          ></iframe>
+        </div>
+        <p class="google-map-help">Bản đồ do Google Maps hiển thị. Không quét hoặc tự tạo danh sách nhà thuốc.</p>
+        <button class="ask-environment-button" id="viewAllPharmaciesButton" type="button">Mở Google Maps tìm nhà thuốc</button>
+      </section>
+
+      <section class="emergency-card">
+        <strong>Hỗ trợ khẩn cấp</strong>
+        <p>Khó thở nặng, đau ngực, bất tỉnh hoặc phản vệ: gọi cấp cứu ngay.</p>
+        <a href="tel:115">☎ 115</a>
+      </section>
+    </aside>
+  </main>
+
+  <div class="shared-modal hidden" id="specialtyModal" role="dialog" aria-modal="true" aria-labelledby="specialtyTitle">
+    <section class="shared-modal-card specialty-modal-card">
+      <button class="shared-modal-close" id="closeSpecialtyModal" type="button">×</button>
+      <p class="modal-eyebrow">CHỌN CHUYÊN KHOA</p>
+      <h2 id="specialtyTitle">Thêm tag chuyên khoa vào cuộc tư vấn</h2>
+      <p class="specialty-help">Tag giúp AI định hướng câu hỏi, không phải kết luận chẩn đoán.</p>
+      <div class="specialty-picker">
+        <button type="button" data-choose-specialty="Tai Mũi Họng"><span>👂</span><strong>Tai Mũi Họng</strong><small>Ho, đau họng, nghẹt mũi</small></button>
+        <button type="button" data-choose-specialty="Tim mạch"><span>🫀</span><strong>Tim mạch</strong><small>Đau ngực, huyết áp, hồi hộp</small></button>
+        <button type="button" data-choose-specialty="Hô hấp"><span>🫁</span><strong>Hô hấp</strong><small>Ho, khó thở, hen</small></button>
+        <button type="button" data-choose-specialty="Tiêu hóa"><span>🫃</span><strong>Tiêu hóa</strong><small>Đau bụng, buồn nôn, tiêu chảy</small></button>
+        <button type="button" data-choose-specialty="Da liễu"><span>🧴</span><strong>Da liễu</strong><small>Ngứa, nổi mẩn, dị ứng da</small></button>
+        <button type="button" data-choose-specialty="Thần kinh"><span>🧠</span><strong>Thần kinh</strong><small>Đau đầu, chóng mặt, tê yếu</small></button>
+      </div>
+    </section>
+  </div>
+
+
+  <div class="shared-modal hidden" id="healthProfileModal" role="dialog" aria-modal="true" aria-labelledby="healthProfileTitle">
+    <section class="shared-modal-card health-profile-modal-card">
+      <button class="shared-modal-close" id="closeHealthProfileModal" type="button">×</button>
+      <p class="modal-eyebrow">HỒ SƠ BẢN THÂN</p>
+      <h2 id="healthProfileTitle">Cập nhật hồ sơ sức khỏe</h2>
+      <p class="specialty-help">Thông tin này được dùng để cá nhân hóa câu trả lời của AI.</p>
+      <form class="health-profile-form" id="healthProfileForm">
+        <div class="health-form-grid">
+          <label>Giới tính sinh học<select id="healthSex" required><option value="">Chọn giới tính</option><option value="male">Nam</option><option value="female">Nữ</option></select></label>
+          <label>Tuổi<input id="healthAge" type="number" min="18" max="100" required></label>
+          <label>Chiều cao (cm)<input id="healthHeight" type="number" min="100" max="250" step="0.1" required></label>
+          <label>Cân nặng (kg)<input id="healthWeight" type="number" min="25" max="350" step="0.1" required></label>
+          <label>Mức vận động<select id="healthActivity"><option value="sedentary">Ít vận động</option><option value="light">Vận động nhẹ</option><option value="moderate">Vận động vừa</option><option value="active">Vận động nhiều</option><option value="very_active">Vận động rất nhiều</option></select></label>
+          <label>Mục tiêu<select id="healthGoal"><option value="maintain">Duy trì</option><option value="lose">Giảm cân</option><option value="gain">Tăng cân</option></select></label>
+        </div>
+        <label>Dị ứng<textarea id="healthAllergies" rows="2" placeholder="Ví dụ: paracetamol, tinh bột ngô..."></textarea></label>
+        <label>Bệnh nền / ghi chú sức khỏe<textarea id="healthConditions" rows="3" placeholder="Ví dụ: hen suyễn, tăng huyết áp..."></textarea></label>
+        <p class="auth-message" id="healthProfileMessage"></p>
+        <button class="auth-submit" type="submit">Lưu hồ sơ</button>
+      </form>
+    </section>
+  </div>
+
+  <script src="{{ url_for('static', filename='common.js', v='20260723-13') }}"></script>
+  <script src="{{ url_for('static', filename='chat.js', v='20260723-13') }}"></script>
+</body>
+</html>
