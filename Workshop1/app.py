@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, render_template, request, session
+from flask import (Flask, jsonify, render_template, request, session,
+                   redirect, url_for, send_file)
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
@@ -63,14 +64,6 @@ Quy tắc an toàn:
 - Nếu ảnh mờ, bị lóa, bị che hoặc quá xa, hãy yêu cầu chụp lại.
 - Nếu phát hiện nhiều thuốc, phải trình bày từng thuốc riêng biệt.
 - Cuối câu trả lời phải nhắc người dùng kiểm tra lại với dược sĩ hoặc bác sĩ.
-QUY TẮC BẮT BUỘC
-
-- Chỉ trả lời bằng TIẾNG VIỆT.
-- Không được sử dụng tiếng Anh.
-- Không hiển thị quá trình suy luận.
-- Không giải thích cách bạn suy nghĩ.
-- Không viết "Analysis", "Reasoning", "Thinking".
-- Chỉ đưa ra kết quả cuối cùng.
 """
 
 # Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
@@ -589,6 +582,8 @@ def initialize_database():
             email TEXT NOT NULL UNIQUE,
             phone TEXT UNIQUE,
             password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user',
+            is_active INTEGER NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -647,6 +642,38 @@ def initialize_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
+    """)
+
+    # Nâng cấp database cũ mà không xóa dữ liệu người dùng.
+    user_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "role" not in user_columns:
+        connection.execute(
+            "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"
+        )
+    if "is_active" not in user_columns:
+        connection.execute(
+            "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
+        )
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS admin_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            target_user_id INTEGER,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+            FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_admin_logs_created
+        ON admin_audit_logs(created_at)
     """)
 
     connection.execute("""
@@ -946,11 +973,17 @@ def login():
     if not check_password_hash(user["password_hash"], password):
         return jsonify({"error": "Mật khẩu không chính xác."}), 401
 
+    if not bool(user["is_active"]):
+        return jsonify({
+            "error": "Tài khoản này đã bị quản trị viên tạm khóa."
+        }), 403
+
     session.clear()
     session["user_id"] = user["id"]
     session["full_name"] = user["full_name"]
     session["email"] = user["email"]
     session["phone"] = user["phone"]
+    session["role"] = user["role"]
 
     return jsonify({
         "message": "Đăng nhập thành công.",
@@ -958,7 +991,8 @@ def login():
             "id": user["id"],
             "full_name": user["full_name"],
             "email": user["email"],
-            "phone": user["phone"]
+            "phone": user["phone"],
+            "role": user["role"]
         }
     })
 
@@ -974,7 +1008,8 @@ def current_user():
             "id": session.get("user_id"),
             "full_name": session.get("full_name"),
             "email": session.get("email"),
-            "phone": session.get("phone")
+            "phone": session.get("phone"),
+            "role": session.get("role", "user")
         }
     })
 
@@ -2061,6 +2096,206 @@ Yêu cầu bắt buộc: 1
         print(f"Groq API error: {type(error).__name__}: {error}")
         return build_error_response(error)
 
+
+
+# =========================
+# ADMIN MANAGEMENT MODULE
+# =========================
+
+def admin_required(view_function):
+    @wraps(view_function)
+    def wrapped(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("index"))
+        if session.get("role") != "admin":
+            return jsonify({"error": "Bạn không có quyền quản trị."}), 403
+        return view_function(*args, **kwargs)
+    return wrapped
+
+
+def write_admin_log(connection, action, target_user_id=None, details=""):
+    connection.execute(
+        """
+        INSERT INTO admin_audit_logs (
+            admin_user_id, action, target_user_id, details
+        ) VALUES (?, ?, ?, ?)
+        """,
+        (
+            session["user_id"],
+            str(action)[:100],
+            target_user_id,
+            str(details)[:1000],
+        ),
+    )
+
+
+@app.get("/admin")
+@admin_required
+def admin_dashboard():
+    connection = get_database()
+    stats = {
+        "users": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
+        "active_users": connection.execute(
+            "SELECT COUNT(*) FROM users WHERE is_active = 1"
+        ).fetchone()[0],
+        "admins": connection.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin'"
+        ).fetchone()[0],
+        "profiles": connection.execute(
+            "SELECT COUNT(*) FROM health_profiles"
+        ).fetchone()[0],
+        "weight_logs": connection.execute(
+            "SELECT COUNT(*) FROM weight_logs"
+        ).fetchone()[0],
+        "water_logs": connection.execute(
+            "SELECT COUNT(*) FROM water_logs"
+        ).fetchone()[0],
+        "reminders": connection.execute(
+            "SELECT COUNT(*) FROM reminders"
+        ).fetchone()[0],
+    }
+    recent_users = connection.execute(
+        """
+        SELECT id, full_name, email, phone, role, is_active, created_at
+        FROM users ORDER BY id DESC LIMIT 8
+        """
+    ).fetchall()
+    recent_logs = connection.execute(
+        """
+        SELECT l.*, a.full_name AS admin_name, u.full_name AS target_name
+        FROM admin_audit_logs l
+        JOIN users a ON a.id = l.admin_user_id
+        LEFT JOIN users u ON u.id = l.target_user_id
+        ORDER BY l.id DESC LIMIT 10
+        """
+    ).fetchall()
+    connection.close()
+    return render_template(
+        "admin/dashboard.html",
+        stats=stats,
+        recent_users=recent_users,
+        recent_logs=recent_logs,
+    )
+
+
+@app.get("/admin/users")
+@admin_required
+def admin_users():
+    keyword = request.args.get("q", "").strip()
+    connection = get_database()
+    if keyword:
+        pattern = f"%{keyword}%"
+        users = connection.execute(
+            """
+            SELECT id, full_name, email, phone, role, is_active, created_at
+            FROM users
+            WHERE full_name LIKE ? OR email LIKE ? OR phone LIKE ?
+            ORDER BY id DESC
+            """,
+            (pattern, pattern, pattern),
+        ).fetchall()
+    else:
+        users = connection.execute(
+            """
+            SELECT id, full_name, email, phone, role, is_active, created_at
+            FROM users ORDER BY id DESC LIMIT 300
+            """
+        ).fetchall()
+    connection.close()
+    return render_template("admin/users.html", users=users, keyword=keyword)
+
+
+@app.post("/admin/users/<int:user_id>/toggle-active")
+@admin_required
+def admin_toggle_user(user_id):
+    if user_id == session["user_id"]:
+        return jsonify({"error": "Bạn không thể tự khóa tài khoản admin đang dùng."}), 400
+    connection = get_database()
+    user = connection.execute(
+        "SELECT id, full_name, is_active FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if user is None:
+        connection.close()
+        return jsonify({"error": "Không tìm thấy người dùng."}), 404
+    new_status = 0 if user["is_active"] else 1
+    connection.execute(
+        "UPDATE users SET is_active = ? WHERE id = ?", (new_status, user_id)
+    )
+    write_admin_log(
+        connection,
+        "unlock_user" if new_status else "lock_user",
+        user_id,
+        f"Đổi trạng thái {user['full_name']} thành {'active' if new_status else 'locked'}",
+    )
+    connection.commit()
+    connection.close()
+    return jsonify({"ok": True, "is_active": bool(new_status)})
+
+
+@app.post("/admin/users/<int:user_id>/role")
+@admin_required
+def admin_change_role(user_id):
+    data = request.get_json(silent=True) or {}
+    new_role = str(data.get("role", "")).strip().lower()
+    if new_role not in {"user", "admin"}:
+        return jsonify({"error": "Quyền không hợp lệ."}), 400
+    if user_id == session["user_id"] and new_role != "admin":
+        return jsonify({"error": "Bạn không thể tự hạ quyền của mình."}), 400
+    connection = get_database()
+    user = connection.execute(
+        "SELECT id, full_name, role FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if user is None:
+        connection.close()
+        return jsonify({"error": "Không tìm thấy người dùng."}), 404
+    connection.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+    write_admin_log(
+        connection,
+        "change_role",
+        user_id,
+        f"Đổi quyền {user['full_name']} từ {user['role']} thành {new_role}",
+    )
+    connection.commit()
+    connection.close()
+    return jsonify({"ok": True, "role": new_role})
+
+
+@app.get("/admin/audit-logs")
+@admin_required
+def admin_audit_logs():
+    connection = get_database()
+    logs = connection.execute(
+        """
+        SELECT l.*, a.full_name AS admin_name, u.full_name AS target_name
+        FROM admin_audit_logs l
+        JOIN users a ON a.id = l.admin_user_id
+        LEFT JOIN users u ON u.id = l.target_user_id
+        ORDER BY l.id DESC LIMIT 500
+        """
+    ).fetchall()
+    connection.close()
+    return render_template("admin/audit_logs.html", logs=logs)
+
+
+@app.get("/admin/backup/users-db")
+@admin_required
+def admin_backup_users_db():
+    connection = get_database()
+    write_admin_log(connection, "backup_database", details="Tải bản sao users.db")
+    connection.commit()
+    connection.close()
+    return send_file(
+        DATABASE_PATH,
+        as_attachment=True,
+        download_name=f"users-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db",
+    )
+
+
+@app.post("/admin/logout")
+@admin_required
+def admin_logout():
+    session.clear()
+    return redirect(url_for("index"))
 
 def open_browser():
     webbrowser.open_new("http://127.0.0.1:5000/")
