@@ -503,3 +503,41 @@
   <script src="{{ url_for('static', filename='dashboard.js', v='20260723-12') }}"></script>
 </body>
 </html>
+<div class="premium-modal hidden" id="premiumModal">
+  <div class="premium-modal-card">
+    <button
+      type="button"
+      class="premium-modal-close"
+      id="closePremiumModal"
+      aria-label="Đóng"
+    >
+      ×
+    </button>
+
+    <div class="premium-modal-header">
+      <div class="premium-modal-icon">💎</div>
+      <h3>MediCare Premium</h3>
+      <p>Nâng cấp tài khoản để mở khóa các tính năng hỗ trợ sức khỏe nâng cao.</p>
+    </div>
+
+    <div class="premium-price-box">
+      <div class="premium-price-main">20.000đ</div>
+      <div class="premium-price-sub">/ tháng</div>
+    </div>
+
+    <div class="premium-benefits">
+      <div class="premium-benefit-item">✓ Lưu nhiều lịch sử tư vấn hơn</div>
+      <div class="premium-benefit-item">✓ Quản lý hồ sơ sức khỏe gia đình</div>
+      <div class="premium-benefit-item">✓ Tạo và theo dõi lịch nhắc sức khỏe</div>
+      <div class="premium-benefit-item">✓ Trải nghiệm đầy đủ các tiện ích nâng cao</div>
+    </div>
+
+    <button
+      type="button"
+      class="premium-confirm-button"
+      id="subscribePremiumButton"
+    >
+      Đăng ký gói 20.000đ
+    </button>
+  </div>
+</div>
