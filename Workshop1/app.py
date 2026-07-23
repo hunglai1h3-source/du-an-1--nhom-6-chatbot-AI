@@ -2446,7 +2446,7 @@ def reminders():
         connection.close()
         return jsonify({"error": "Loại lời nhắc không hợp lệ."}), 400
 
-    t.itle = str(data.get("title", "")).strip()
+    title = str(data.get("title", "")).strip()
     message = str(data.get("message", "")).strip()[:500]
     time_of_day = str(data.get("time_of_day", "")).strip()
     days_of_week = str(
