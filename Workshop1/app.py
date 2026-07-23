@@ -18,6 +18,11 @@ import webbrowser
 import csv
 import shutil
 from uuid import uuid4
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
+from threading import Lock
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -427,6 +432,15 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
+# Bộ nhớ đệm ngắn cho dữ liệu vị trí để tránh gọi API công cộng quá dày.
+LOCATION_CACHE = {}
+LOCATION_CACHE_TTL_SECONDS = 300
+LOCATION_CACHE_LOCK = Lock()
+NOMINATIM_LOCK = Lock()
+NOMINATIM_LAST_REQUEST_AT = 0.0
+APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "").strip()
+
+
 def get_database():
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
@@ -695,6 +709,30 @@ def initialize_database():
     """)
 
     connection.execute("""
+        CREATE TABLE IF NOT EXISTS family_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            full_name TEXT NOT NULL,
+            relationship TEXT NOT NULL DEFAULT 'Khác',
+            age INTEGER,
+            gender TEXT,
+            height_cm REAL,
+            weight_kg REAL,
+            medical_conditions TEXT,
+            allergies TEXT,
+            avatar_seed TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_family_members_user
+        ON family_members(user_id, updated_at)
+    """)
+
+    connection.execute("""
         CREATE TABLE IF NOT EXISTS chat_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -934,9 +972,290 @@ def build_error_response(error):
     }), 500
 
 
+def clamp_number(value, field_name, minimum, maximum):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} không hợp lệ.")
+
+    if not math.isfinite(number) or number < minimum or number > maximum:
+        raise ValueError(f"{field_name} nằm ngoài phạm vi cho phép.")
+
+    return number
+
+
+def http_get_json(url, timeout=15, headers=None):
+    request_headers = {
+        "Accept": "application/json",
+        "User-Agent": (
+            "MediCareAI/1.0"
+            + (f" ({APP_CONTACT_EMAIL})" if APP_CONTACT_EMAIL else "")
+        ),
+    }
+    if headers:
+        request_headers.update(headers)
+
+    request_object = Request(url, headers=request_headers)
+    with urlopen(request_object, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    earth_radius_km = 6371.0088
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    value = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return earth_radius_km * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+def reverse_geocode(latitude, longitude):
+    global NOMINATIM_LAST_REQUEST_AT
+
+    query = urlencode({
+        "lat": f"{latitude:.7f}",
+        "lon": f"{longitude:.7f}",
+        "format": "jsonv2",
+        "addressdetails": 1,
+        "zoom": 18,
+        "accept-language": "vi",
+    })
+
+    # Public Nominatim yêu cầu tần suất thấp. Khóa này giúp một tiến trình
+    # không gửi nhiều request sát nhau và kết quả còn được cache 5 phút.
+    with NOMINATIM_LOCK:
+        wait_seconds = 1.05 - (time.monotonic() - NOMINATIM_LAST_REQUEST_AT)
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
+        result = http_get_json(
+            f"https://nominatim.openstreetmap.org/reverse?{query}",
+            timeout=12,
+        )
+        NOMINATIM_LAST_REQUEST_AT = time.monotonic()
+
+    address = result.get("address") or {}
+    short_parts = [
+        address.get("suburb") or address.get("quarter") or address.get("neighbourhood"),
+        address.get("city_district") or address.get("county"),
+        address.get("city") or address.get("town") or address.get("province") or address.get("state"),
+    ]
+    short_address = ", ".join(dict.fromkeys(part for part in short_parts if part))
+
+    return {
+        "display_name": result.get("display_name") or short_address,
+        "short_address": short_address or result.get("display_name") or "Vị trí hiện tại",
+        "address": address,
+    }
+
+
+def fetch_weather_and_air(latitude, longitude):
+    weather_query = urlencode({
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": (
+            "temperature_2m,apparent_temperature,relative_humidity_2m,"
+            "wind_speed_10m,weather_code"
+        ),
+        "timezone": "auto",
+    })
+    air_query = urlencode({
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": "european_aqi,pm2_5,pm10,nitrogen_dioxide,ozone",
+        "timezone": "auto",
+    })
+
+    weather = http_get_json(
+        f"https://api.open-meteo.com/v1/forecast?{weather_query}",
+        timeout=15,
+    )
+    air = http_get_json(
+        f"https://air-quality-api.open-meteo.com/v1/air-quality?{air_query}",
+        timeout=15,
+    )
+
+    current_weather = weather.get("current") or {}
+    current_air = air.get("current") or {}
+    return {
+        "temperature": current_weather.get("temperature_2m"),
+        "apparent_temperature": current_weather.get("apparent_temperature"),
+        "humidity": current_weather.get("relative_humidity_2m"),
+        "wind_speed": current_weather.get("wind_speed_10m"),
+        "weather_code": current_weather.get("weather_code"),
+        "aqi": current_air.get("european_aqi"),
+        "pm25": current_air.get("pm2_5"),
+        "pm10": current_air.get("pm10"),
+        "nitrogen_dioxide": current_air.get("nitrogen_dioxide"),
+        "ozone": current_air.get("ozone"),
+        "weather_time": current_weather.get("time"),
+        "air_time": current_air.get("time"),
+    }
+
+
+def fetch_nearby_pharmacies(latitude, longitude, radius_m=5000, limit=6):
+    query = (
+        f'[out:json][timeout:20];\n'
+        f'(\n  nwr(around:{int(radius_m)},{latitude:.7f},{longitude:.7f})'
+        '["amenity"="pharmacy"];\n);\nout center tags;'
+    )
+    body = urlencode({"data": query}).encode("utf-8")
+    request_object = Request(
+        "https://overpass-api.de/api/interpreter",
+        data=body,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "User-Agent": (
+                "MediCareAI/1.0"
+                + (f" ({APP_CONTACT_EMAIL})" if APP_CONTACT_EMAIL else "")
+            ),
+        },
+        method="POST",
+    )
+
+    with urlopen(request_object, timeout=25) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    pharmacies = []
+    for element in payload.get("elements", []):
+        center = element.get("center") or {}
+        item_lat = element.get("lat", center.get("lat"))
+        item_lon = element.get("lon", center.get("lon"))
+        if item_lat is None or item_lon is None:
+            continue
+
+        tags = element.get("tags") or {}
+        distance = haversine_km(latitude, longitude, float(item_lat), float(item_lon))
+        street = " ".join(
+            part for part in [tags.get("addr:housenumber"), tags.get("addr:street")]
+            if part
+        )
+        address = street or tags.get("addr:full") or tags.get("addr:place") or "Chưa có địa chỉ chi tiết"
+        pharmacies.append({
+            "id": f"{element.get('type', 'node')}-{element.get('id')}",
+            "name": tags.get("name") or tags.get("brand") or "Nhà thuốc",
+            "address": address,
+            "latitude": float(item_lat),
+            "longitude": float(item_lon),
+            "distance_km": round(distance, 2),
+            "phone": tags.get("phone") or tags.get("contact:phone") or "",
+            "opening_hours": tags.get("opening_hours") or "",
+        })
+
+    pharmacies.sort(key=lambda item: item["distance_km"])
+    return pharmacies[:max(1, min(int(limit), 10))]
+
+
+def get_location_context(latitude, longitude, accuracy=None):
+    cache_key = f"{round(latitude, 4)}:{round(longitude, 4)}"
+    now = time.time()
+
+    with LOCATION_CACHE_LOCK:
+        cached = LOCATION_CACHE.get(cache_key)
+        if cached and now - cached["cached_at"] < LOCATION_CACHE_TTL_SECONDS:
+            result = dict(cached["payload"])
+            result["from_cache"] = True
+            result["accuracy_m"] = accuracy
+            return result
+
+    result = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "accuracy_m": accuracy,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "from_cache": False,
+        "location": {},
+        "environment": {},
+        "pharmacies": [],
+        "warnings": [],
+    }
+
+    jobs = {
+        "location": (reverse_geocode, (latitude, longitude)),
+        "environment": (fetch_weather_and_air, (latitude, longitude)),
+        "pharmacies": (fetch_nearby_pharmacies, (latitude, longitude)),
+    }
+    error_labels = {
+        "location": "Không lấy được địa chỉ",
+        "environment": "Không tải được thời tiết/chất lượng không khí",
+        "pharmacies": "Không tải được danh sách nhà thuốc",
+    }
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_map = {
+            executor.submit(function, *arguments): key
+            for key, (function, arguments) in jobs.items()
+        }
+        for future in as_completed(future_map):
+            key = future_map[future]
+            try:
+                result[key] = future.result()
+            except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError, OSError) as error:
+                result["warnings"].append(f"{error_labels[key]}: {error}")
+
+    if not result["location"]:
+        result["location"] = {
+            "display_name": f"{latitude:.5f}, {longitude:.5f}",
+            "short_address": "Vị trí hiện tại",
+            "address": {},
+        }
+
+    with LOCATION_CACHE_LOCK:
+        LOCATION_CACHE[cache_key] = {"cached_at": now, "payload": dict(result)}
+        if len(LOCATION_CACHE) > 100:
+            oldest_keys = sorted(
+                LOCATION_CACHE,
+                key=lambda key: LOCATION_CACHE[key]["cached_at"],
+            )[:25]
+            for key in oldest_keys:
+                LOCATION_CACHE.pop(key, None)
+
+    return result
+
+
+@app.post("/api/location/context")
+def location_context():
+    data = request.get_json(silent=True) or {}
+    try:
+        latitude = clamp_number(data.get("latitude"), "Vĩ độ", -90, 90)
+        longitude = clamp_number(data.get("longitude"), "Kinh độ", -180, 180)
+        accuracy_value = data.get("accuracy")
+        accuracy = None
+        if accuracy_value not in (None, ""):
+            accuracy = clamp_number(accuracy_value, "Độ chính xác", 0, 100000)
+        result = get_location_context(latitude, longitude, accuracy)
+        return jsonify(result)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except Exception as error:
+        print("Lỗi location context:", repr(error))
+        return jsonify({
+            "error": "Không thể tải dữ liệu vị trí lúc này. Vui lòng thử lại."
+        }), 503
+
+
 @app.get("/")
 def index():
     return render_template("index.html")
+
+
+@app.get("/tu-van")
+def consultation_page():
+    return render_template("chat.html")
+
+
+@app.get("/kien-thuc")
+def knowledge_page():
+    return render_template("knowledge.html")
+
+
+@app.get("/nha-thuoc")
+def pharmacy_page():
+    return render_template("pharmacies.html")
 
 
 @app.get("/health")
@@ -1193,6 +1512,19 @@ def transcribe_audio():
         return build_error_response(error)
 
 
+def parse_optional_json_object(value):
+    """Đọc object JSON tùy chọn từ form-data hoặc JSON body."""
+    if isinstance(value, dict):
+        return value
+    if value in (None, ""):
+        return {}
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 @app.post("/chat")
 def chat():
     if client is None:
@@ -1220,6 +1552,15 @@ def chat():
 
             history = clean_history(history_data)
             image_file = request.files.get("image")
+            selected_profile = parse_optional_json_object(
+                request.form.get("selected_profile", "")
+            )
+            environment_context = parse_optional_json_object(
+                request.form.get("environment", "")
+            )
+            selected_specialty = str(
+                request.form.get("specialty", "")
+            ).strip()[:100]
 
         else:
             data = request.get_json(silent=True)
@@ -1236,6 +1577,15 @@ def chat():
             history = clean_history(
                 data.get("history", [])
             )
+            selected_profile = parse_optional_json_object(
+                data.get("selected_profile")
+            )
+            environment_context = parse_optional_json_object(
+                data.get("environment")
+            )
+            selected_specialty = str(
+                data.get("specialty", "")
+            ).strip()[:100]
 
             image_file = None
 
@@ -1291,6 +1641,57 @@ def chat():
                         )
                         + "\nChỉ dùng hồ sơ này để cá nhân hóa an toàn. "
                         "Không coi dữ liệu tự khai là chẩn đoán."
+                    ),
+                })
+
+        # Hồ sơ thành viên gia đình đang được chọn trên giao diện.
+        if selected_profile:
+            allowed_profile_fields = {
+                key: selected_profile.get(key)
+                for key in (
+                    "id", "name", "relationship", "age", "gender",
+                    "height", "weight", "condition", "allergies"
+                )
+                if selected_profile.get(key) not in (None, "")
+            }
+            if allowed_profile_fields:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "THÀNH VIÊN GIA ĐÌNH ĐANG ĐƯỢC CHỌN ĐỂ TƯ VẤN:\n"
+                        + json.dumps(allowed_profile_fields, ensure_ascii=False)
+                        + "\nDữ liệu do người dùng tự khai. Chỉ dùng để cá nhân hóa "
+                        "và không được nhầm với thành viên khác."
+                    ),
+                })
+
+        if selected_specialty:
+            messages.append({
+                "role": "system",
+                "content": (
+                    f"CHUYÊN KHOA NGƯỜI DÙNG ĐÃ CHỌN: {selected_specialty}. "
+                    "Dùng làm ngữ cảnh định hướng, không khẳng định chẩn đoán."
+                ),
+            })
+
+        if environment_context:
+            allowed_environment_fields = {
+                key: environment_context.get(key)
+                for key in (
+                    "short_address", "temperature", "apparent_temperature",
+                    "humidity", "wind_speed", "weather_code", "aqi",
+                    "pm25", "pm10", "accuracy_m", "updated_at"
+                )
+                if environment_context.get(key) not in (None, "")
+            }
+            if allowed_environment_fields:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "BỐI CẢNH THỜI TIẾT VÀ KHÔNG KHÍ TẠI VỊ TRÍ NGƯỜI DÙNG:\n"
+                        + json.dumps(allowed_environment_fields, ensure_ascii=False)
+                        + "\nDữ liệu thay đổi theo thời gian, chỉ dùng cho khuyến nghị "
+                        "phòng ngừa tổng quát."
                     ),
                 })
 
@@ -1491,6 +1892,151 @@ def login_required(view_function):
         return view_function(*args, **kwargs)
 
     return wrapped
+
+
+def normalize_family_member_payload(data, partial=False):
+    if not isinstance(data, dict):
+        raise ValueError("Dữ liệu thành viên không hợp lệ.")
+
+    result = {}
+    if not partial or "full_name" in data:
+        full_name = str(data.get("full_name", "")).strip()
+        if len(full_name) < 2 or len(full_name) > 120:
+            raise ValueError("Họ tên thành viên phải từ 2 đến 120 ký tự.")
+        result["full_name"] = full_name
+
+    text_fields = {
+        "relationship": 40,
+        "gender": 30,
+        "medical_conditions": 500,
+        "allergies": 500,
+        "avatar_seed": 80,
+    }
+    for field, max_length in text_fields.items():
+        if not partial or field in data:
+            result[field] = str(data.get(field, "")).strip()[:max_length]
+
+    if not partial or "age" in data:
+        value = data.get("age")
+        if value in (None, ""):
+            result["age"] = None
+        else:
+            try:
+                age = int(value)
+            except (TypeError, ValueError):
+                raise ValueError("Tuổi không hợp lệ.")
+            if age < 0 or age > 120:
+                raise ValueError("Tuổi phải từ 0 đến 120.")
+            result["age"] = age
+
+    for field, label, minimum, maximum in (
+        ("height_cm", "Chiều cao", 30, 250),
+        ("weight_kg", "Cân nặng", 1, 350),
+    ):
+        if not partial or field in data:
+            value = data.get(field)
+            result[field] = None if value in (None, "") else clamp_number(
+                value, label, minimum, maximum
+            )
+
+    return result
+
+
+@app.route("/api/family", methods=["GET", "POST"])
+@login_required
+def family_collection():
+    user_id = session["user_id"]
+    connection = get_database()
+
+    if request.method == "GET":
+        rows = connection.execute(
+            "SELECT * FROM family_members WHERE user_id = ? "
+            "ORDER BY updated_at DESC, id DESC",
+            (user_id,),
+        ).fetchall()
+        connection.close()
+        return jsonify({"members": [dict(row) for row in rows]})
+
+    try:
+        payload = normalize_family_member_payload(request.get_json(silent=True) or {})
+        cursor = connection.execute(
+            """
+            INSERT INTO family_members (
+                user_id, full_name, relationship, age, gender, height_cm,
+                weight_kg, medical_conditions, allergies, avatar_seed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                payload["full_name"],
+                payload.get("relationship") or "Khác",
+                payload.get("age"),
+                payload.get("gender"),
+                payload.get("height_cm"),
+                payload.get("weight_kg"),
+                payload.get("medical_conditions"),
+                payload.get("allergies"),
+                payload.get("avatar_seed") or uuid4().hex[:12],
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT * FROM family_members WHERE id = ?", (cursor.lastrowid,)
+        ).fetchone()
+        connection.close()
+        return jsonify({"member": dict(row)}), 201
+    except ValueError as error:
+        connection.close()
+        return jsonify({"error": str(error)}), 400
+
+
+@app.route("/api/family/<int:member_id>", methods=["PUT", "DELETE"])
+@login_required
+def family_item(member_id):
+    user_id = session["user_id"]
+    connection = get_database()
+    existing = connection.execute(
+        "SELECT * FROM family_members WHERE id = ? AND user_id = ?",
+        (member_id, user_id),
+    ).fetchone()
+    if existing is None:
+        connection.close()
+        return jsonify({"error": "Không tìm thấy thành viên."}), 404
+
+    if request.method == "DELETE":
+        connection.execute(
+            "DELETE FROM family_members WHERE id = ? AND user_id = ?",
+            (member_id, user_id),
+        )
+        connection.commit()
+        connection.close()
+        return jsonify({"message": "Đã xóa thành viên."})
+
+    try:
+        changes = normalize_family_member_payload(
+            request.get_json(silent=True) or {}, partial=True
+        )
+        if not changes:
+            connection.close()
+            return jsonify({"member": dict(existing)})
+
+        assignments = ", ".join(f"{field} = ?" for field in changes)
+        values = list(changes.values()) + [member_id, user_id]
+        connection.execute(
+            f"UPDATE family_members SET {assignments}, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+            values,
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT * FROM family_members WHERE id = ? AND user_id = ?",
+            (member_id, user_id),
+        ).fetchone()
+        connection.close()
+        return jsonify({"member": dict(row)})
+    except ValueError as error:
+        connection.close()
+        return jsonify({"error": str(error)}), 400
 
 
 def parse_float(value, field_name, minimum=None, maximum=None):

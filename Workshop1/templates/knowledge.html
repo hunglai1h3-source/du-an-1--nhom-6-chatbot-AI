@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MediCare AI - Thư viện kiến thức sức khỏe thực tế, dễ hiểu">
+  <title>MediCare AI | Kiến thức sức khỏe</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='knowledge.css', v='20260723-6') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="MediCare AI">
+      <span class="brand-mark">+</span>
+      <span><strong>MediCare <em>AI</em></strong><small>AI đồng hành cùng sức khỏe</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Điều hướng chính">
+      <a href="/">Trang chủ</a>
+      <a href="/tu-van">Tư vấn AI</a>
+      <a href="/#family-health">Hồ sơ sức khỏe</a>
+      <a href="/tu-van?openSpecialty=1">Chuyên khoa</a>
+      <a href="/#utilities">Tiện ích</a>
+      <a class="active" href="/kien-thuc">Kiến thức</a>
+    </nav>
+    <div class="top-actions">
+      <button class="icon-button" data-action="toggle-theme" type="button" title="Đổi giao diện">☾</button>
+      <button class="account-button" id="accountButton" type="button">
+        <span class="account-avatar" id="accountAvatar">K</span>
+        <span><strong id="accountName" data-account-name>Khách</strong><small>Tài khoản của tôi</small></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="knowledge-page">
+    <section class="knowledge-hero">
+      <div class="hero-copy">
+        <p class="eyebrow">THƯ VIỆN SỨC KHỎE</p>
+        <h1>Kiến thức dễ hiểu để chăm sóc bản thân và gia đình</h1>
+        <p>Tra cứu nội dung ngắn gọn về triệu chứng thường gặp, sử dụng thuốc an toàn, sức khỏe trẻ em và ảnh hưởng của thời tiết, bụi mịn.</p>
+        <label class="knowledge-search">
+          <span>⌕</span>
+          <input id="knowledgeSearch" type="search" placeholder="Tìm: dị ứng thuốc, bụi mịn, huyết áp, trẻ sốt..." autocomplete="off">
+          <button id="clearKnowledgeSearch" type="button" title="Xóa tìm kiếm">×</button>
+        </label>
+      </div>
+      <aside class="hero-help-card">
+        <span class="help-icon">🤖</span>
+        <div><strong>Không tìm thấy nội dung phù hợp?</strong><p>Chuyển câu hỏi sang trang Tư vấn AI và giữ nguyên hồ sơ sức khỏe đang chọn.</p></div>
+        <a id="askAIFromSearch" href="/tu-van">Hỏi MediCare AI →</a>
+      </aside>
+    </section>
+
+    <section class="category-strip" aria-label="Lọc chủ đề">
+      <button class="active" type="button" data-category="all">Tất cả</button>
+      <button type="button" data-category="environment">Thời tiết & bụi mịn</button>
+      <button type="button" data-category="medicine">Thuốc & dị ứng</button>
+      <button type="button" data-category="family">Gia đình & trẻ em</button>
+      <button type="button" data-category="chronic">Bệnh mạn tính</button>
+      <button type="button" data-category="first-aid">Sơ cứu ban đầu</button>
+    </section>
+
+    <div class="knowledge-layout">
+      <section class="article-section">
+        <div class="section-heading">
+          <div><p>📚</p><span><h2>Nội dung nổi bật</h2><small id="knowledgeResultCount">6 bài viết</small></span></div>
+        </div>
+        <div class="article-grid" id="knowledgeGrid">
+          <article class="knowledge-card" data-category="environment" data-keywords="bụi mịn pm2.5 aqi không khí khẩu trang hô hấp hen suyễn">
+            <div class="card-icon blue">🌫️</div><span class="card-tag">Môi trường</span>
+            <h3>Bụi mịn PM2.5 ảnh hưởng sức khỏe thế nào?</h3>
+            <p>AQI tăng có thể làm nặng ho, hen và khó thở. Trẻ nhỏ, người cao tuổi và người có bệnh hô hấp cần thận trọng hơn.</p>
+            <ul><li>Theo dõi AQI trước khi ra ngoài</li><li>Hạn chế vận động mạnh khi không khí xấu</li><li>Dùng khẩu trang phù hợp và giữ không khí trong nhà sạch</li></ul>
+            <div class="card-actions"><button type="button" data-read-article>Đọc nhanh</button><a href="/tu-van?prompt=Bụi mịn PM2.5 ảnh hưởng sức khỏe thế nào và tôi nên bảo vệ gia đình ra sao">Hỏi AI →</a></div>
+          </article>
+          <article class="knowledge-card" data-category="medicine" data-keywords="paracetamol acetaminophen dị ứng thuốc tá dược tinh bột ngô phản vệ">
+            <div class="card-icon orange">💊</div><span class="card-tag">Thuốc an toàn</span>
+            <h3>Kiểm tra dị ứng trước khi dùng thuốc mới</h3>
+            <p>Không chỉ hoạt chất, tá dược và thành phần phối hợp cũng có thể liên quan đến phản ứng dị ứng.</p>
+            <ul><li>Đọc hoạt chất và tá dược trên nhãn</li><li>Không tự uống một ít để thử</li><li>Khó thở hoặc sưng họng cần gọi cấp cứu</li></ul>
+            <div class="card-actions"><button type="button" data-read-article>Đọc nhanh</button><a href="/tu-van?prompt=Hướng dẫn tôi kiểm tra thành phần thuốc khi có tiền sử dị ứng">Hỏi AI →</a></div>
+          </article>
+          <article class="knowledge-card" data-category="family" data-keywords="trẻ em sốt ho sơ sinh gia đình nhiệt độ chăm sóc">
+            <div class="card-icon pink">🧒</div><span class="card-tag">Trẻ em</span>
+            <h3>Khi trẻ sốt, gia đình nên theo dõi gì?</h3>
+            <p>Mức độ tỉnh táo, khả năng uống nước, nhịp thở và triệu chứng đi kèm quan trọng hơn việc chỉ nhìn con số nhiệt độ.</p>
+            <ul><li>Đo nhiệt độ đúng cách</li><li>Theo dõi dấu hiệu mất nước và khó thở</li><li>Không tự phối hợp nhiều thuốc hạ sốt</li></ul>
+            <div class="card-actions"><button type="button" data-read-article>Đọc nhanh</button><a href="/tu-van?prompt=Trẻ bị sốt thì gia đình cần theo dõi những dấu hiệu nào">Hỏi AI →</a></div>
+          </article>
+          <article class="knowledge-card" data-category="chronic" data-keywords="huyết áp cao đo huyết áp tim mạch thuốc lịch nhắc">
+            <div class="card-icon red">🫀</div><span class="card-tag">Tim mạch</span>
+            <h3>Đo huyết áp tại nhà đúng cách</h3>
+            <p>Nghỉ trước khi đo, đặt tay đúng vị trí và ghi lại kết quả theo cùng khung giờ để bác sĩ dễ đánh giá.</p>
+            <ul><li>Tránh cà phê và vận động ngay trước khi đo</li><li>Đo hai lần, cách nhau khoảng một phút</li><li>Không tự ngừng thuốc khi số đo đã ổn</li></ul>
+            <div class="card-actions"><button type="button" data-read-article>Đọc nhanh</button><a href="/tu-van?prompt=Cách đo và theo dõi huyết áp tại nhà đúng cách">Hỏi AI →</a></div>
+          </article>
+          <article class="knowledge-card" data-category="first-aid" data-keywords="phản vệ khó thở cấp cứu 115 dị ứng sưng môi lưỡi">
+            <div class="card-icon red">🚑</div><span class="card-tag">Cấp cứu</span>
+            <h3>Nhận biết phản vệ và hành động ngay</h3>
+            <p>Khó thở, sưng môi hoặc lưỡi, khò khè, choáng sau tiếp xúc thuốc hay thực phẩm có thể là tình trạng cấp cứu.</p>
+            <ul><li>Gọi 115 hoặc đến cơ sở cấp cứu ngay</li><li>Không tự lái xe khi choáng hoặc khó thở</li><li>Dùng bút adrenaline nếu đã được bác sĩ kê</li></ul>
+            <div class="card-actions"><button type="button" data-read-article>Đọc nhanh</button><a href="/tu-van?prompt=Dấu hiệu phản vệ và cách xử lý khẩn cấp là gì">Hỏi AI →</a></div>
+          </article>
+          <article class="knowledge-card" data-category="environment" data-keywords="nắng nóng thời tiết mất nước sốc nhiệt người cao tuổi trẻ em">
+            <div class="card-icon yellow">☀️</div><span class="card-tag">Thời tiết</span>
+            <h3>Bảo vệ sức khỏe khi thời tiết nắng nóng</h3>
+            <p>Nhiệt độ cao làm tăng nguy cơ mất nước và kiệt sức, đặc biệt ở trẻ nhỏ, người cao tuổi và người làm việc ngoài trời.</p>
+            <ul><li>Uống nước đều, không chờ đến khi khát</li><li>Tránh nắng mạnh giữa trưa</li><li>Đi khám khi lú lẫn, ngất hoặc da nóng bất thường</li></ul>
+            <div class="card-actions"><button type="button" data-read-article>Đọc nhanh</button><a href="/tu-van?prompt=Cách bảo vệ sức khỏe gia đình trong thời tiết nắng nóng">Hỏi AI →</a></div>
+          </article>
+        </div>
+        <div class="empty-results hidden" id="knowledgeEmpty">
+          <span>🔎</span><h3>Chưa có bài viết phù hợp</h3><p>Hãy thử từ khóa khác hoặc chuyển câu hỏi sang Tư vấn AI.</p><a id="emptyAskAI" href="/tu-van">Hỏi MediCare AI</a>
+        </div>
+      </section>
+
+      <aside class="knowledge-sidebar">
+        <section class="side-card safety-card"><h2>⚠ Khi nào cần cấp cứu?</h2><p>Khó thở nặng, tím môi, đau ngực dữ dội, bất tỉnh, co giật hoặc dấu hiệu phản vệ.</p><a href="tel:115">☎ Gọi 115</a></section>
+        <section class="side-card"><h2>Chủ đề được quan tâm</h2><div class="topic-list"><button type="button" data-search-topic="dị ứng thuốc">Dị ứng thuốc</button><button type="button" data-search-topic="bụi mịn">Bụi mịn</button><button type="button" data-search-topic="trẻ sốt">Trẻ sốt</button><button type="button" data-search-topic="huyết áp">Huyết áp</button></div></section>
+        <section class="side-card profile-context"><h2>Hồ sơ đang chọn</h2><div><span id="knowledgeProfileAvatar">K</span><p><strong id="knowledgeProfileName">Khách</strong><small id="knowledgeProfileMeta">Chưa có dữ liệu hồ sơ</small></p></div><a href="/#family-health">Đổi hồ sơ →</a></section>
+        <section class="side-card disclaimer"><h2>Thông tin tham khảo</h2><p>Nội dung trên trang giúp người dùng hiểu và theo dõi sức khỏe ban đầu, không thay thế chẩn đoán hoặc điều trị của bác sĩ.</p></section>
+      </aside>
+    </div>
+  </main>
+
+  <div class="article-modal hidden" id="articleModal" role="dialog" aria-modal="true" aria-labelledby="articleModalTitle">
+    <div class="article-modal-card"><button id="closeArticleModal" type="button" aria-label="Đóng">×</button><span id="articleModalTag"></span><h2 id="articleModalTitle"></h2><div id="articleModalContent"></div><a id="articleModalAskAI" href="/tu-van">Hỏi AI về chủ đề này →</a></div>
+  </div>
+
+  <script src="{{ url_for('static', filename='common.js', v='20260723-6') }}"></script>
+  <script src="{{ url_for('static', filename='knowledge.js', v='20260723-6') }}"></script>
+</body>
+</html>
