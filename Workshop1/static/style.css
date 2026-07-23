@@ -2719,3 +2719,260 @@ body.dark-mode
     animation: none !important;
   }
 }
+/* Tăng chiều cao toàn bộ khung chat */
+.chat-card {
+  height: 800px !important;
+  min-height: 700px !important;
+  max-height: 700px !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Phần nội dung tự giãn theo chiều cao mới */
+.chat-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+}
+/* Thu ngắn sidebar */
+.conversation-sidebar {
+  top: 40px !important;
+  bottom: 40px !important;
+
+  height: auto !important;
+  min-height: 0 !important;
+
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  }
+  /* ==================================================
+   NÚT NỔI THU GỌN — KHÔNG CHE NỘI DUNG
+================================================== */
+
+/* Thiết lập chung */
+.emergency-floating,
+.zalo-floating {
+  width: 56px !important;
+  min-width: 56px !important;
+  height: 56px !important;
+  min-height: 56px !important;
+
+  padding: 6px !important;
+  gap: 8px !important;
+
+  overflow: hidden !important;
+  white-space: nowrap !important;
+
+  transition:
+    width 0.25s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease !important;
+}
+
+/* Nút 115 */
+.emergency-floating {
+  left: 14px !important;
+  bottom: 14px !important;
+}
+
+/* Khi sidebar mở */
+@media (min-width: 901px) {
+  body:not(.sidebar-collapsed)
+  .emergency-floating {
+    left: calc(
+      var(--sidebar-width, 360px) + 14px
+    ) !important;
+  }
+}
+
+/* Nút Zalo */
+.zalo-floating {
+  right: 14px !important;
+  bottom: 14px !important;
+}
+
+/* Kích thước icon */
+.emergency-floating-icon,
+.zalo-circle {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  flex: 0 0 42px !important;
+}
+
+/* Ẩn chữ khi chưa rê chuột */
+.emergency-floating-text,
+.zalo-text {
+  max-width: 0 !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+
+  transition:
+    max-width 0.25s ease,
+    opacity 0.2s ease !important;
+}
+
+/* Rê chuột mới mở rộng */
+.emergency-floating:hover,
+.emergency-floating:focus-visible {
+  width: 190px !important;
+}
+
+.zalo-floating:hover,
+.zalo-floating:focus-visible {
+  width: 170px !important;
+}
+
+.emergency-floating:hover
+.emergency-floating-text,
+.emergency-floating:focus-visible
+.emergency-floating-text,
+.zalo-floating:hover
+.zalo-text,
+.zalo-floating:focus-visible
+.zalo-text {
+  max-width: 150px !important;
+  opacity: 1 !important;
+}
+
+/* Chỉ phát sáng nhẹ, không nhảy lên xuống */
+.emergency-floating {
+  animation: emergencyGlow 1.8s ease-in-out infinite !important;
+}
+
+.zalo-floating {
+  animation: zaloGlow 2s ease-in-out infinite !important;
+}
+
+/* Điện thoại: giữ dạng hình tròn */
+@media (max-width: 600px) {
+  .emergency-floating,
+  .zalo-floating,
+  .emergency-floating:hover,
+  .zalo-floating:hover {
+    width: 52px !important;
+    min-width: 52px !important;
+    height: 52px !important;
+  }
+
+  .emergency-floating-text,
+  .zalo-text {
+    display: none !important;
+  }
+}
+/* Thu ngắn thanh menu trên cùng */
+.site-header {
+  min-height: 84px !important;
+}
+
+.site-header .navbar {
+  min-height: 74px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+/* Thu nhỏ logo */
+.site-header .logo-mark {
+  width: 46px !important;
+  height: 46px !important;
+  flex: 0 0 46px !important;
+  font-size: 27px !important;
+}
+
+.site-header .logo-copy strong {
+  font-size: 25px !important;
+}
+
+.site-header .logo-copy small {
+  font-size: 12px !important;
+}
+
+/* Thu nhỏ menu */
+.site-header .nav-links a,
+.site-header .dropdown-trigger {
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+}
+
+/* Thu nhỏ các nút bên phải */
+.site-header .header-actions .btn {
+  min-height: 46px !important;
+  padding: 10px 20px !important;
+}
+
+.site-header .theme-btn {
+  width: 46px !important;
+  height: 46px !important;
+}
+
+/* Thu nhỏ nút menu bên trái */
+.mobile-menu-btn,
+.sidebar-open-btn {
+  width: 46px !important;
+  height: 46px !important;
+}
+/* Đẩy riêng lời chào đầu tiên xuống */
+#chatBody > .message-row:first-child {
+  margin-top: 24px !important;
+}
+/* Đưa cả nút 115 và Zalo sang bên phải */
+.emergency-floating {
+  left: auto !important;
+  right: 16px !important;
+  bottom: 82px !important;
+}
+
+.zalo-floating {
+  left: auto !important;
+  right: 16px !important;
+  bottom: 16px !important;
+}
+
+/* Vô hiệu hóa vị trí theo sidebar trước đó */
+@media (min-width: 901px) {
+  body:not(.sidebar-collapsed) .emergency-floating {
+    left: auto !important;
+    right: 16px !important;
+  }
+}
+
+/* Điện thoại */
+@media (max-width: 600px) {
+  .emergency-floating {
+    left: auto !important;
+    right: 12px !important;
+    bottom: 76px !important;
+  }
+
+  .zalo-floating {
+    left: auto !important;
+    right: 12px !important;
+    bottom: 12px !important;
+  }
+}
+.nav-links a,
+.nav-links a.active {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+/* Xóa hoàn toàn gạch chân menu Trang chủ */
+.nav-links a,
+.nav-links a.active {
+  text-decoration: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+.nav-links a::before,
+.nav-links a::after,
+.nav-links a.active::before,
+.nav-links a.active::after {
+  display: none !important;
+  content: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
