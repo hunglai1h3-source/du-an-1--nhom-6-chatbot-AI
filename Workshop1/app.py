@@ -63,6 +63,14 @@ Quy tắc an toàn:
 - Nếu ảnh mờ, bị lóa, bị che hoặc quá xa, hãy yêu cầu chụp lại.
 - Nếu phát hiện nhiều thuốc, phải trình bày từng thuốc riêng biệt.
 - Cuối câu trả lời phải nhắc người dùng kiểm tra lại với dược sĩ hoặc bác sĩ.
+QUY TẮC BẮT BUỘC
+
+- Chỉ trả lời bằng TIẾNG VIỆT.
+- Không được sử dụng tiếng Anh.
+- Không hiển thị quá trình suy luận.
+- Không giải thích cách bạn suy nghĩ.
+- Không viết "Analysis", "Reasoning", "Thinking".
+- Chỉ đưa ra kết quả cuối cùng.
 """
 
 # Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
