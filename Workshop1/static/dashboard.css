@@ -915,3 +915,99 @@ html[data-theme="dark"] #selfHealthModal .self-health-modal-card {
 .premium-confirm-button:hover {
   opacity: 0.95;
 }
+/* Khung Zalo riêng bên dưới khung khẩn cấp */
+.zalo-support-card {
+  margin-top: 16px;
+  padding: 18px;
+
+  border: 1px solid #9dcfff;
+  border-radius: 20px;
+
+  background:
+    linear-gradient(
+      145deg,
+      #f5fbff,
+      #e8f4ff
+    );
+
+  box-shadow: 0 12px 28px rgba(0, 104, 255, 0.08);
+}
+
+.zalo-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 15px;
+}
+
+.zalo-card-icon {
+  width: 42px;
+  height: 42px;
+
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+
+  border-radius: 13px;
+
+  color: #ffffff;
+  background: #0068ff;
+
+  font-size: 20px;
+}
+
+.zalo-card-heading h2 {
+  margin: 0;
+  color: #0054cc;
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.zalo-card-heading p {
+  margin: 5px 0 0;
+  color: #58728c;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.zalo-support-button {
+  width: 100%;
+  min-height: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  padding: 0 14px;
+
+  border: 0;
+  border-radius: 12px;
+
+  color: #ffffff;
+  background:
+    linear-gradient(
+      135deg,
+      #1598f2,
+      #0068ff
+    );
+
+  box-shadow: 0 9px 20px rgba(0, 104, 255, 0.24);
+
+  font-size: 14px;
+  font-weight: 850;
+  text-decoration: none;
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.zalo-support-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 13px 25px rgba(0, 104, 255, 0.31);
+}
+
+.zalo-support-button:active {
+  transform: translateY(0);
+}
