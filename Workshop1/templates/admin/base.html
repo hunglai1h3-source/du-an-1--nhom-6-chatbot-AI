@@ -1,1 +1,46 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{% block title %}MediCare Admin{% endblock %}</title><link rel="stylesheet" href="{{ url_for('static',filename='admin/admin.css') }}"><script src="https://cdn.jsdelivr.net/npm/chart.js"></script></head><body><aside class="sidebar"><div class="brand">✚ <span>MediCare</span> Admin</div><nav><a href="{{url_for('admin_dashboard')}}">▦ Tổng quan</a><a href="{{url_for('admin_users')}}">👥 Người dùng</a><a href="{{url_for('admin_chats')}}">💬 Lịch sử chat</a><a href="{{url_for('admin_datasets')}}">🗂 Dataset</a><a href="{{url_for('admin_prompt')}}">🧠 Prompt</a><a href="{{url_for('admin_ai_settings')}}">⚙ AI & API</a><a href="{{url_for('admin_audit_logs')}}">📝 Nhật ký</a><a href="{{url_for('admin_backup_users_db')}}">⬇ Sao lưu DB</a><a href="{{url_for('index')}}">↗ Chatbot</a></nav><form method="post" action="{{url_for('admin_logout')}}"><button class="logout">Đăng xuất</button></form></aside><main class="main"><header class="topbar"><div><b>{% block heading %}Quản trị hệ thống{% endblock %}</b><small>Xin chào, {{session.get('full_name')}}</small></div><span class="badge success">● Hệ thống hoạt động</span></header><section class="content">{% block content %}{% endblock %}</section></main><div id="toast"></div><script>async function api(url,opt={}){const r=await fetch(url,opt);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Có lỗi');return d}function toast(t){const e=document.getElementById('toast');e.textContent=t;e.className='show';setTimeout(()=>e.className='',2200)}</script>{% block scripts %}{% endblock %}</body></html>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}MediCare Admin{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css') }}?v=20260723">
+  <script defer src="{{ url_for('static', filename='admin/admin.js') }}?v=20260723"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('admin_dashboard') }}">
+      <span class="brand-mark">+</span>
+      <span><strong>MediCare</strong><small>Admin Console</small></span>
+    </a>
+    <nav>
+      <a class="{{ 'active' if request.endpoint=='admin_dashboard' }}" href="{{ url_for('admin_dashboard') }}">⌂ <span>Tổng quan</span></a>
+      <a class="{{ 'active' if request.endpoint in ['admin_users','admin_user_detail'] }}" href="{{ url_for('admin_users') }}">♟ <span>Người dùng</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_chats' }}" href="{{ url_for('admin_chats') }}">◌ <span>Lịch sử chat</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_datasets' }}" href="{{ url_for('admin_datasets') }}">▦ <span>Dataset</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_prompt' }}" href="{{ url_for('admin_prompt') }}">✦ <span>Prompt</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_ai_settings' }}" href="{{ url_for('admin_ai_settings') }}">⚙ <span>AI & API</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_audit_logs' }}" href="{{ url_for('admin_audit_logs') }}">⌁ <span>Nhật ký</span></a>
+    </nav>
+    <div class="sidebar-bottom">
+      <a href="{{ url_for('admin_backup_users_db') }}">⇩ <span>Sao lưu DB</span></a>
+      <a href="{{ url_for('index') }}">↗ <span>Về Chatbot</span></a>
+      <form action="{{ url_for('admin_logout') }}" method="post"><button>⇥ <span>Đăng xuất</span></button></form>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn mobile-menu" id="menuToggle">☰</button>
+      <div><h1>{% block page_title %}Admin{% endblock %}</h1><p>{% block page_subtitle %}Quản trị hệ thống MediCare AI{% endblock %}</p></div>
+      <div class="top-actions"><span class="live-dot"></span><span id="syncLabel">Đang đồng bộ</span><button class="icon-btn" id="themeToggle" title="Đổi giao diện">◐</button><div class="avatar">{{ (session.get('full_name') or 'A')[0] }}</div></div>
+    </header>
+    <section class="content">{% block content %}{% endblock %}</section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

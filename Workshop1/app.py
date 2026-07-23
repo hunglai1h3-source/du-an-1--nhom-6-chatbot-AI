@@ -2979,6 +2979,148 @@ def admin_backup_users_db():
 def admin_logout():
     session.clear(); return redirect(url_for("index"))
 
+
+# =========================
+# ADMIN LIVE DATA API
+# =========================
+
+def admin_dashboard_payload():
+    connection = get_database()
+    stats = {
+        "users": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
+        "active_users": connection.execute("SELECT COUNT(*) FROM users WHERE is_active = 1").fetchone()[0],
+        "admins": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
+        "chats": connection.execute("SELECT COUNT(*) FROM chat_logs").fetchone()[0],
+        "images": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE has_image = 1").fetchone()[0],
+        "errors": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE status != 'success'").fetchone()[0],
+        "avg_latency": connection.execute(
+            "SELECT COALESCE(ROUND(AVG(latency_ms)),0) FROM chat_logs WHERE latency_ms > 0"
+        ).fetchone()[0],
+        "tokens": connection.execute(
+            "SELECT COALESCE(SUM(prompt_tokens + completion_tokens),0) FROM chat_logs"
+        ).fetchone()[0],
+        "new_today": connection.execute(
+            "SELECT COUNT(*) FROM users WHERE date(created_at)=date('now','localtime')"
+        ).fetchone()[0],
+        "chats_today": connection.execute(
+            "SELECT COUNT(*) FROM chat_logs WHERE date(created_at)=date('now','localtime')"
+        ).fetchone()[0],
+    }
+    chart_rows = connection.execute("""
+        WITH RECURSIVE dates(day) AS (
+            SELECT date('now','localtime','-6 day')
+            UNION ALL
+            SELECT date(day,'+1 day') FROM dates WHERE day < date('now','localtime')
+        )
+        SELECT day,
+               (SELECT COUNT(*) FROM chat_logs WHERE date(created_at)=day) chats,
+               (SELECT COUNT(*) FROM users WHERE date(created_at)=day) users
+        FROM dates
+    """).fetchall()
+    recent_users = connection.execute("""
+        SELECT id, full_name, email, role, is_active, created_at
+        FROM users ORDER BY id DESC LIMIT 6
+    """).fetchall()
+    recent_chats = connection.execute("""
+        SELECT c.id, c.question, c.model, c.status, c.latency_ms, c.created_at,
+               COALESCE(u.full_name, 'Khách') AS full_name
+        FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id
+        ORDER BY c.id DESC LIMIT 6
+    """).fetchall()
+    connection.close()
+    return {
+        "stats": stats,
+        "chart": [dict(row) for row in chart_rows],
+        "recent_users": [dict(row) for row in recent_users],
+        "recent_chats": [dict(row) for row in recent_chats],
+        "server_time": datetime.now().strftime("%H:%M:%S"),
+    }
+
+
+@app.get("/admin/api/dashboard")
+@admin_required
+def admin_api_dashboard():
+    response = jsonify(admin_dashboard_payload())
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
+@app.get("/admin/api/users")
+@admin_required
+def admin_api_users():
+    keyword = request.args.get("q", "").strip()
+    role = request.args.get("role", "").strip()
+    status = request.args.get("status", "").strip()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 5), 100)
+    where, params = [], []
+    if keyword:
+        where.append("(u.full_name LIKE ? OR u.email LIKE ? OR COALESCE(u.phone,'') LIKE ?)")
+        params.extend([f"%{keyword}%"] * 3)
+    if role in {"user", "admin"}:
+        where.append("u.role = ?")
+        params.append(role)
+    if status in {"0", "1"}:
+        where.append("u.is_active = ?")
+        params.append(int(status))
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    connection = get_database()
+    total = connection.execute(
+        f"SELECT COUNT(*) FROM users u {clause}", params
+    ).fetchone()[0]
+    rows = connection.execute(f"""
+        SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.created_at,
+               (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id=u.id) AS chat_count,
+               (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) AS last_activity
+        FROM users u {clause}
+        ORDER BY u.id DESC LIMIT ? OFFSET ?
+    """, params + [per_page, (page - 1) * per_page]).fetchall()
+    connection.close()
+    return jsonify({
+        "items": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "pages": max(1, (total + per_page - 1) // per_page),
+        "server_time": datetime.now().strftime("%H:%M:%S"),
+    })
+
+
+@app.get("/admin/api/chats")
+@admin_required
+def admin_api_chats():
+    q = request.args.get("q", "").strip()
+    model = request.args.get("model", "").strip()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = 25
+    where, params = [], []
+    if q:
+        where.append("(c.question LIKE ? OR c.answer LIKE ? OR COALESCE(u.full_name,'') LIKE ?)")
+        params.extend([f"%{q}%"] * 3)
+    if model:
+        where.append("c.model = ?")
+        params.append(model)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    connection = get_database()
+    total = connection.execute(
+        f"SELECT COUNT(*) FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id {clause}",
+        params,
+    ).fetchone()[0]
+    rows = connection.execute(f"""
+        SELECT c.id, c.question, c.answer, c.model, c.has_image, c.latency_ms,
+               c.prompt_tokens, c.completion_tokens, c.status, c.created_at,
+               COALESCE(u.full_name,'Khách') AS full_name, u.email
+        FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id
+        {clause} ORDER BY c.id DESC LIMIT ? OFFSET ?
+    """, params + [per_page, (page - 1) * per_page]).fetchall()
+    connection.close()
+    return jsonify({
+        "items": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "pages": max(1, (total + per_page - 1) // per_page),
+        "server_time": datetime.now().strftime("%H:%M:%S"),
+    })
+
 def open_browser():
     webbrowser.open_new("http://127.0.0.1:5000/")
 
