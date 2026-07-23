@@ -2976,30 +2976,3 @@ body.dark-mode
   border: none !important;
   background: transparent !important;
 }
-.pharmacy-button{
-    position: fixed;
-
-    right: 25px;
-    bottom: 150px;
-
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    padding: 14px 22px;
-
-    border: none;
-    border-radius: 999px;
-
-    background: #22c55e;
-    color: white;
-
-    font-size: 15px;
-    font-weight: 600;
-
-    cursor: pointer;
-
-    box-shadow: 0 10px 30px rgba(0,0,0,.25);
-
-    z-index: 9999;
-}
