@@ -3075,14 +3075,27 @@ def admin_api_users():
         FROM users u {clause}
         ORDER BY u.id DESC LIMIT ? OFFSET ?
     """, params + [per_page, (page - 1) * per_page]).fetchall()
+    role_counts = {
+        "all": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
+        "user": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'user'").fetchone()[0],
+        "admin": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
+    }
+    latest_id = connection.execute("SELECT COALESCE(MAX(id), 0) FROM users").fetchone()[0]
+    database_file = str(DATABASE_PATH.resolve())
     connection.close()
-    return jsonify({
+    response = jsonify({
         "items": [dict(row) for row in rows],
         "total": total,
+        "counts": role_counts,
+        "latest_id": latest_id,
+        "database_file": database_file,
         "page": page,
         "pages": max(1, (total + per_page - 1) // per_page),
         "server_time": datetime.now().strftime("%H:%M:%S"),
     })
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.get("/admin/api/chats")

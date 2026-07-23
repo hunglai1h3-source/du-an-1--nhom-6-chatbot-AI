@@ -1,16 +1,23 @@
 {% extends "admin/base.html" %}
 {% block title %}Người dùng | MediCare Admin{% endblock %}
-{% block page_title %}Quản lý người dùng{% endblock %}
-{% block page_subtitle %}Tài khoản mới sẽ tự xuất hiện trong tối đa 5 giây{% endblock %}
+{% block page_title %}Quản lý tài khoản{% endblock %}
+{% block page_subtitle %}Tách riêng tài khoản User và Admin, tự đồng bộ mỗi 3 giây{% endblock %}
 {% block content %}
+<div class="account-tabs" id="accountTabs">
+ <button type="button" class="account-tab active" data-role-tab="user">Người dùng <span id="userCount">0</span></button>
+ <button type="button" class="account-tab" data-role-tab="admin">Quản trị viên <span id="adminCount">0</span></button>
+ <button type="button" class="account-tab" data-role-tab="">Tất cả <span id="allCount">0</span></button>
+</div>
 <form class="filter-bar" id="userFilters">
- <input name="q" value="{{keyword}}" placeholder="Tìm tên, email hoặc số điện thoại">
- <select name="role"><option value="">Tất cả quyền</option><option value="user" {{'selected' if role=='user'}}>User</option><option value="admin" {{'selected' if role=='admin'}}>Admin</option></select>
- <select name="status"><option value="">Tất cả trạng thái</option><option value="1" {{'selected' if status=='1'}}>Hoạt động</option><option value="0" {{'selected' if status=='0'}}>Đã khóa</option></select>
- <button class="btn" type="submit">Tìm kiếm</button><button class="btn primary" type="button" id="refreshUsers">↻ Làm mới</button>
+ <input name="q" value="{{keyword}}" placeholder="Tìm tên, email hoặc số điện thoại" autocomplete="off">
+ <input type="hidden" name="role" id="roleFilter" value="user">
+ <select name="status"><option value="">Tất cả trạng thái</option><option value="1">Hoạt động</option><option value="0">Đã khóa</option></select>
+ <button class="btn" type="submit">Tìm kiếm</button>
+ <button class="btn primary" type="button" id="refreshUsers">↻ Làm mới ngay</button>
+ <button class="btn" type="button" id="clearUserFilters">Xóa lọc</button>
 </form>
 <div class="panel">
- <div class="panel-head"><div><h2>Danh sách tài khoản</h2><p><b id="userTotal">{{total}}</b> người dùng · Đồng bộ <span id="usersSync">--:--:--</span></p></div><span class="badge success">Tự động 5 giây</span></div>
+ <div class="panel-head"><div><h2 id="accountListTitle">Tài khoản người dùng</h2><p><b id="userTotal">0</b> kết quả · Đồng bộ <span id="usersSync">--:--:--</span> · ID mới nhất <b id="latestUserId">0</b></p><small id="databaseInfo" class="muted"></small></div><span class="badge success">Tự động 3 giây</span></div>
  <div class="table-wrap"><table><thead><tr><th>Người dùng</th><th>Liên hệ</th><th>Quyền</th><th>Trạng thái</th><th>Chat</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody id="usersBody"></tbody></table></div>
  <div class="pagination" id="usersPagination"></div>
 </div>
