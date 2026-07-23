@@ -121,6 +121,45 @@ function formatText(value) {
     .replace(/\n/g, "<br>");
 }
 
+
+function renderEmergencyPanel(message) {
+  const emergency = message?.emergency;
+  if (!emergency?.active) return "";
+
+  const phone = String(emergency.phone || "115").replace(/[^\d+]/g, "") || "115";
+  const phoneUri = String(emergency.phone_uri || emergency.call || `tel:${phone}`);
+  const title = emergency.title || "DẤU HIỆU CÓ THỂ CẦN CẤP CỨU";
+  const primaryAction = emergency.primary_action || `Gọi ${phone} ngay`;
+
+  return `
+    <section class="chat-emergency-panel" role="alert" aria-live="assertive">
+      <div class="chat-emergency-heading">
+        <span class="chat-emergency-icon" aria-hidden="true">🚨</span>
+        <div>
+          <strong>${M.escapeHTML(title)}</strong>
+          <small>Ưu tiên liên hệ cấp cứu thay vì tiếp tục chờ tư vấn trực tuyến.</small>
+        </div>
+      </div>
+
+      <a
+        class="chat-emergency-call"
+        href="${M.escapeHTML(phoneUri)}"
+        aria-label="${M.escapeHTML(primaryAction)}"
+      >
+        <span aria-hidden="true">☎</span>
+        <span>
+          <b>${M.escapeHTML(primaryAction)}</b>
+          <small>Chạm để mở cuộc gọi đến ${M.escapeHTML(phone)}</small>
+        </span>
+      </a>
+
+      <p class="chat-emergency-note">
+        Không tự lái xe nếu đang khó thở, choáng hoặc có nguy cơ mất ý thức.
+        Hãy nhờ người ở gần hỗ trợ.
+      </p>
+    </section>`;
+}
+
 function renderMessages() {
   const session = ensureSession();
   const list = $("#messageList");
@@ -134,6 +173,7 @@ function renderMessages() {
         <div class="message-bubble">
           ${message.imagePreview ? `<img src="${message.imagePreview}" alt="Ảnh người dùng gửi" style="display:block;max-width:240px;max-height:190px;object-fit:cover;border-radius:11px;margin-bottom:9px">` : ""}
           <div>${formatText(message.content)}</div>
+          ${isUser ? "" : renderEmergencyPanel(message)}
           <div class="message-meta"><time>${M.escapeHTML(message.time || "")}</time>${isUser ? "<span>✓✓</span>" : ""}</div>
           ${isUser ? "" : `<div class="message-actions"><button type="button" data-copy-index="${index}">Sao chép</button><button type="button" data-like-index="${index}">${message.liked ? "♥ Đã lưu" : "♡ Lưu"}</button></div>`}
         </div>
@@ -406,7 +446,12 @@ async function sendMessage(event) {
     const response = await fetch("/chat", { method: "POST", body: formData, credentials: "same-origin" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "AI chưa thể phản hồi.");
-    session.messages.push({ role: "assistant", content: data.reply, time: nowTime() });
+    session.messages.push({
+      role: "assistant",
+      content: data.reply,
+      time: nowTime(),
+      emergency: data.emergency?.active ? data.emergency : null
+    });
   } catch (error) {
     session.messages.push({ role: "assistant", content: `Xin lỗi, hệ thống gặp lỗi: ${error.message}`, time: nowTime(), error: true });
   } finally {
