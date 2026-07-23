@@ -2067,7 +2067,7 @@ def calculate_age(birth_date_text=None, supplied_age=None):
         today = date.today()
         age = today.year - born.year - (
             (today.month, today.day) < (born.month, born.day)
-        )
+        )git checkout --ours Workshop1/users.db
     else:
         try:
             age = int(supplied_age)
