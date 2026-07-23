@@ -525,9 +525,27 @@
     </section>
   </div>
 
-  <div class="toast hidden" id="toast"></div>
-  <script src="{{ url_for('static', filename='common.js', v='20260723-12') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard.js', v='20260723-12') }}"></script>
+  <div id="toastMessage"></div>
+
+  <script
+    src="{{ url_for('static', filename='app.js') }}"
+  ></script>
+  <a
+  class="emergency-floating"
+  href="tel:115"
+  aria-label="Gọi cấp cứu 115"
+  title="Gọi cấp cứu 115"
+>
+  <span class="emergency-floating-icon">🚨</span>
+  <span class="emergency-floating-text">
+    Gọi cấp cứu 115
+  </span>
+</a>
+
+<script
+  src="{{ url_for('static', filename='app.js') }}"
+></script>
+
 </body>
 </html>
 <div class="premium-modal hidden" id="premiumModal">

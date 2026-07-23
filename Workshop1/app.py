@@ -17,7 +17,6 @@ import time
 import webbrowser
 import csv
 import shutil
-import unicodedata
 from uuid import uuid4
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -103,8 +102,8 @@ if API_KEY:
     client = OpenAI(
         api_key=API_KEY,
         base_url="https://api.groq.com/openai/v1",
-        timeout=40.0,
-        max_retries=2,
+        timeout=90.0,
+        max_retries=1,
     )
 else:
     client = None
@@ -824,7 +823,7 @@ def clean_history(history):
 
     cleaned = []
 
-    for item in history[-8:]:
+    for item in history[-12:]:
         if not isinstance(item, dict):
             continue
 
@@ -842,7 +841,7 @@ def clean_history(history):
         if content:
             cleaned.append({
                 "role": role,
-                "content": content[:1200]
+                "content": content[:2000]
             })
 
     return cleaned
@@ -1513,128 +1512,6 @@ def transcribe_audio():
         return build_error_response(error)
 
 
-
-# =========================
-# EMERGENCY FAST PATH
-# =========================
-
-EMERGENCY_PATTERNS = {
-    "breathing": (
-        r"\bkho tho\b",
-        r"\bkhong tho duoc\b",
-        r"\bnghet tho\b",
-        r"\bthieu hoi\b",
-        r"\btho gap\b",
-        r"\btim moi\b",
-        r"\btim tai\b",
-    ),
-    "chest_pain": (
-        r"\bdau nguc du doi\b",
-        r"\bdau that nguc\b",
-        r"\bdau nguc lan\b",
-    ),
-    "stroke": (
-        r"\bmeo mieng\b",
-        r"\bye[u]? liet\b",
-        r"\bnoi kho dot ngot\b",
-    ),
-    "unconscious": (
-        r"\bbat tinh\b",
-        r"\bkhong danh thuc duoc\b",
-        r"\blu lan nghiem trong\b",
-    ),
-    "seizure": (
-        r"\bco giat\b",
-    ),
-    "severe_bleeding": (
-        r"\bchay mau nhieu\b",
-        r"\bchay mau khong cam\b",
-    ),
-    "anaphylaxis": (
-        r"\bsung moi\b.*\bkho tho\b",
-        r"\bsung luoi\b",
-        r"\bsung hong\b.*\bkho tho\b",
-    ),
-}
-
-EMERGENCY_NEGATIONS = (
-    "khong kho tho",
-    "khong con kho tho",
-    "het kho tho",
-    "khong dau nguc",
-    "khong bat tinh",
-    "khong co giat",
-)
-
-
-def normalize_vietnamese_for_matching(value):
-    """Chuẩn hóa chữ thường, bỏ dấu để dò cụm từ cấp cứu ổn định."""
-    value = str(value or "").strip().lower()
-    value = unicodedata.normalize("NFD", value)
-    value = "".join(
-        char for char in value
-        if unicodedata.category(char) != "Mn"
-    )
-    value = value.replace("đ", "d")
-    value = re.sub(r"[^a-z0-9\s]", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def detect_emergency_message(message):
-    """
-    Phát hiện nhanh dấu hiệu nguy hiểm.
-
-    Hàm này chạy cục bộ nên phản hồi gần như tức thì, kể cả khi Groq lỗi,
-    quá tải hoặc chưa cấu hình API key.
-    """
-    normalized = normalize_vietnamese_for_matching(message)
-
-    if not normalized:
-        return None
-
-    if any(phrase in normalized for phrase in EMERGENCY_NEGATIONS):
-        return None
-
-    for emergency_type, patterns in EMERGENCY_PATTERNS.items():
-        if any(re.search(pattern, normalized) for pattern in patterns):
-            return {
-                "type": emergency_type,
-                "title": "DẤU HIỆU CÓ THỂ CẦN CẤP CỨU",
-                "phone": "115",
-                "phone_uri": "tel:115",
-                "severity": "critical",
-                "reply": (
-                    "Bạn đang mô tả một dấu hiệu có thể nguy hiểm.\n\n"
-                    "HÃY GỌI 115 NGAY hoặc nhờ người bên cạnh gọi giúp.\n\n"
-                    "- Ngồi hoặc nằm ở tư thế dễ thở, nới lỏng quần áo chật.\n"
-                    "- Không tự lái xe đến bệnh viện.\n"
-                    "- Nhờ một người ở cạnh và mở cửa để nhân viên cấp cứu dễ tiếp cận.\n"
-                    "- Nếu môi tím, đau ngực, lơ mơ, ngất hoặc tình trạng nặng lên, "
-                    "hãy báo rõ với tổng đài 115.\n\n"
-                    "Đây không phải tình huống nên chờ chatbot tư vấn thêm."
-                ),
-            }
-
-    return None
-
-
-def emergency_json_response(emergency):
-    """Chuẩn hóa JSON để giao diện có thể hiện thẻ đỏ và nút gọi 115."""
-    return jsonify({
-        "reply": emergency["reply"],
-        "emergency": {
-            "active": True,
-            "type": emergency["type"],
-            "title": emergency["title"],
-            "severity": emergency["severity"],
-            "phone": emergency["phone"],
-            "phone_uri": emergency["phone_uri"],
-            "primary_action": "Gọi 115 ngay",
-            "secondary_action": "Nhờ người bên cạnh hỗ trợ",
-        },
-        "fast_path": True,
-    })
-
 def parse_optional_json_object(value):
     """Đọc object JSON tùy chọn từ form-data hoặc JSON body."""
     if isinstance(value, dict):
@@ -1650,6 +1527,14 @@ def parse_optional_json_object(value):
 
 @app.post("/chat")
 def chat():
+    if client is None:
+        return jsonify({
+            "error": (
+                "Chưa cấu hình Groq API key. "
+                "Hãy kiểm tra file .env trong thư mục Workshop1."
+            )
+        }), 503
+
     try:
         content_type = request.content_type or ""
 
@@ -1715,28 +1600,6 @@ def chat():
             return jsonify({
                 "error": "Nội dung quá dài. Vui lòng nhập dưới 4.000 ký tự."
             }), 400
-
-        # Ưu tiên tuyệt đối tình huống cấp cứu: không gọi database, không chờ AI.
-        if user_message and not has_image:
-            emergency = detect_emergency_message(user_message)
-            if emergency:
-                record_chat_log(
-                    user_message,
-                    emergency["reply"],
-                    "local-emergency-detector",
-                    False,
-                    0,
-                    status="emergency",
-                )
-                return emergency_json_response(emergency)
-
-        if client is None:
-            return jsonify({
-                "error": (
-                    "Chưa cấu hình Groq API key. "
-                    "Hãy kiểm tra file .env trong thư mục Workshop1."
-                )
-            }), 503
 
         messages = [get_active_system_prompt()]
 
@@ -1837,7 +1700,7 @@ def chat():
         if user_message and not has_image:
             medical_context = build_medical_context(
                 user_message,
-                limit=2
+                limit=3
             )
 
             if medical_context:
@@ -1936,7 +1799,7 @@ YÊU CẦU TRẢ LỜI:
             else MODEL_NAME
         )
 
-        max_output_tokens = 1200 if has_image else 600
+        max_output_tokens = 1500 if has_image else 1000
 
         response = client.chat.completions.create(
             model=selected_model,
@@ -2583,7 +2446,7 @@ def reminders():
         connection.close()
         return jsonify({"error": "Loại lời nhắc không hợp lệ."}), 400
 
-    title = str(data.get("title", "")).strip()
+    t.itle = str(data.get("title", "")).strip()
     message = str(data.get("message", "")).strip()[:500]
     time_of_day = str(data.get("time_of_day", "")).strip()
     days_of_week = str(
