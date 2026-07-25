@@ -4,7 +4,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
 from threading import Timer
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from functools import wraps
 import math
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -34,9 +34,15 @@ app.config["SECRET_KEY"] = os.getenv(
     "SECRET_KEY",
     "change-this-secret-key-before-deploy"
 )
+
+# Lưu đăng nhập 30 ngày
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
+# Đang chạy localhost thì để False
+app.config["SESSION_COOKIE_SECURE"] = False
 API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
 # Model dùng cho các câu hỏi chỉ có văn bản.
@@ -1347,7 +1353,9 @@ def login():
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
-        return jsonify({"error": "Dữ liệu đăng nhập không hợp lệ."}), 400
+        return jsonify({
+            "error": "Dữ liệu đăng nhập không hợp lệ."
+        }), 400
 
     account = str(data.get("account", "")).strip().lower()
     password = str(data.get("password", ""))
@@ -1358,6 +1366,7 @@ def login():
         }), 400
 
     connection = get_database()
+
     user = connection.execute(
         """
         SELECT *
@@ -1366,13 +1375,18 @@ def login():
         """,
         (account, account)
     ).fetchone()
+
     connection.close()
 
     if user is None:
-        return jsonify({"error": "Tài khoản không tồn tại."}), 401
+        return jsonify({
+            "error": "Tài khoản không tồn tại."
+        }), 401
 
     if not check_password_hash(user["password_hash"], password):
-        return jsonify({"error": "Mật khẩu không chính xác."}), 401
+        return jsonify({
+            "error": "Mật khẩu không chính xác."
+        }), 401
 
     if not bool(user["is_active"]):
         return jsonify({
@@ -1380,6 +1394,10 @@ def login():
         }), 403
 
     session.clear()
+
+    # Giữ phiên đăng nhập trong 30 ngày
+    session.permanent = True
+
     session["user_id"] = user["id"]
     session["full_name"] = user["full_name"]
     session["email"] = user["email"]
