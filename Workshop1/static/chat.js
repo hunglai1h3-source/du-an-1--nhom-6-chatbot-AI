@@ -434,7 +434,22 @@ async function sendMessage(event) {
   const formData = new FormData();
   formData.append("message", text);
   formData.append("history", JSON.stringify(previousHistory));
-  formData.append("selected_profile", JSON.stringify(M.getSelectedProfile()));
+
+  // Gửi ảnh chụp hồ sơ đang chọn trong MỖI lượt chat để backend/AI không hỏi lại dữ liệu đã có.
+  const activeProfile = profileForSession(session) || M.getSelectedProfile();
+  formData.append("selected_profile", JSON.stringify({
+    id: activeProfile.id,
+    name: activeProfile.name,
+    relationship: activeProfile.relationship,
+    age: activeProfile.age,
+    gender: activeProfile.gender,
+    height: activeProfile.height,
+    weight: activeProfile.weight,
+    condition: activeProfile.condition,
+    allergies: activeProfile.allergies
+  }));
+  formData.append("profile_context_version", "2");
+
   const environment = M.readJSON(M.KEYS.locationContext, null);
   if (environment) formData.append("environment", JSON.stringify(environment));
   const specialty = localStorage.getItem(M.KEYS.specialty) || "";

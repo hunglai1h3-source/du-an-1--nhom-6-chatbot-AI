@@ -1776,6 +1776,10 @@ def chat():
 
         messages = [get_active_system_prompt()]
 
+        # Gom hồ sơ từ database và hồ sơ đang chọn trên giao diện thành một
+        # ngữ cảnh duy nhất để tránh AI hỏi lại thông tin đã có.
+        database_profile_context = {}
+
         if "user_id" in session:
             connection = get_database()
 
@@ -1792,51 +1796,70 @@ def chat():
             connection.close()
 
             if profile:
-                profile_context = {
+                database_profile_context = {
+                    "name": session.get("full_name"),
+                    "relationship": "Bản thân",
                     "age": profile["age"],
-                    "sex": profile["sex"],
+                    "gender": profile["sex"],
                     "height_cm": profile["height_cm"],
-                    "latest_weight_kg": latest_weight,
+                    "weight_kg": latest_weight,
                     "activity_level": profile["activity_level"],
                     "goal": profile["goal"],
                     "diet_preference": profile["diet_preference"],
                     "allergies": profile["allergies"],
-                    "medical_notes": profile["medical_notes"],
+                    "medical_conditions": profile["medical_notes"],
                 }
 
-                messages.append({
-                    "role": "system",
-                    "content": (
-                        "HỒ SƠ SỨC KHỎE DO NGƯỜI DÙNG TỰ KHAI:\n"
-                        + json.dumps(
-                            profile_context,
-                            ensure_ascii=False
-                        )
-                        + "\nChỉ dùng hồ sơ này để cá nhân hóa an toàn. "
-                        "Không coi dữ liệu tự khai là chẩn đoán."
-                    ),
-                })
-
-        # Hồ sơ thành viên gia đình đang được chọn trên giao diện.
+        selected_profile_context = {}
         if selected_profile:
-            allowed_profile_fields = {
-                key: selected_profile.get(key)
-                for key in (
-                    "id", "name", "relationship", "age", "gender",
-                    "height", "weight", "condition", "allergies"
-                )
-                if selected_profile.get(key) not in (None, "")
+            selected_profile_context = {
+                "id": selected_profile.get("id"),
+                "name": selected_profile.get("name"),
+                "relationship": selected_profile.get("relationship"),
+                "age": selected_profile.get("age"),
+                "gender": selected_profile.get("gender"),
+                "height_cm": selected_profile.get("height"),
+                "weight_kg": selected_profile.get("weight"),
+                "medical_conditions": selected_profile.get("condition"),
+                "allergies": selected_profile.get("allergies"),
             }
-            if allowed_profile_fields:
-                messages.append({
-                    "role": "system",
-                    "content": (
-                        "THÀNH VIÊN GIA ĐÌNH ĐANG ĐƯỢC CHỌN ĐỂ TƯ VẤN:\n"
-                        + json.dumps(allowed_profile_fields, ensure_ascii=False)
-                        + "\nDữ liệu do người dùng tự khai. Chỉ dùng để cá nhân hóa "
-                        "và không được nhầm với thành viên khác."
-                    ),
-                })
+
+        # Hồ sơ được chọn trên giao diện có độ ưu tiên cao nhất. Với các trường
+        # giao diện chưa có, bổ sung từ hồ sơ cá nhân trong database.
+        effective_profile = dict(database_profile_context)
+        for key, value in selected_profile_context.items():
+            if value not in (None, "", "--", "Chưa cập nhật"):
+                effective_profile[key] = value
+
+        effective_profile = {
+            key: value
+            for key, value in effective_profile.items()
+            if value not in (None, "", "--", "Chưa cập nhật")
+        }
+
+        if effective_profile:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "HỒ SƠ SỨC KHỎE ĐANG ĐƯỢC CHỌN ĐỂ TƯ VẤN:\n"
+                    + json.dumps(effective_profile, ensure_ascii=False)
+                    + "\n\nQUY TẮC BẮT BUỘC KHI DÙNG HỒ SƠ:\n"
+                    "- Đây là nguồn dữ liệu nền đã có sẵn của người đang được tư vấn.\n"
+                    "- Không hỏi lại tên, tuổi, giới tính, chiều cao, cân nặng, "
+                    "bệnh nền hoặc dị ứng nếu trường tương ứng đã có giá trị.\n"
+                    "- Khi người dùng yêu cầu khám sức khỏe, lên lịch khám, "
+                    "đánh giá thể trạng, dinh dưỡng hoặc vận động, phải sử dụng "
+                    "ngay dữ liệu hồ sơ để đưa ra đề xuất ban đầu.\n"
+                    "- Chỉ hỏi thêm đúng một thông tin còn thiếu và thật sự cần thiết, "
+                    "ví dụ triệu chứng hiện tại, mục tiêu khám, thời gian thuận tiện, "
+                    "thuốc đang dùng hoặc tiền sử gia đình.\n"
+                    "- Nếu hồ sơ ghi 'Không' ở bệnh nền hoặc dị ứng, hiểu là hiện "
+                    "chưa ghi nhận, không được hỏi lại ngay lập tức.\n"
+                    "- Mở đầu câu trả lời phù hợp bằng cụm 'Dựa trên hồ sơ hiện có' "
+                    "để người dùng biết hồ sơ đã được sử dụng.\n"
+                    "- Không coi dữ liệu tự khai là chẩn đoán và không tự bịa dữ liệu."
+                ),
+            })
 
         if selected_specialty:
             messages.append({
