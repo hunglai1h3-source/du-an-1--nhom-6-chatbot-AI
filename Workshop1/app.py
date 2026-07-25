@@ -53,7 +53,7 @@ app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
 # Model dùng cho các câu hỏi chỉ có văn bản.
-MODEL_NAME = "llama-3.1-8b-instant"
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant").strip()
 
 VISION_MODEL_NAME = os.getenv(
     "VISION_MODEL_NAME",
@@ -456,8 +456,13 @@ APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "").strip()
 
 
 def get_database():
-    connection = sqlite3.connect(DATABASE_PATH)
+    """Tạo kết nối SQLite riêng cho từng request và giảm lỗi database is locked."""
+    connection = sqlite3.connect(DATABASE_PATH, timeout=20)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 20000")
+    connection.execute("PRAGMA journal_mode = WAL")
+    connection.execute("PRAGMA synchronous = NORMAL")
     return connection
 
 
@@ -1671,6 +1676,158 @@ def emergency_json_response(emergency):
         "fast_path": True,
     })
 
+def first_present(mapping, *keys):
+    """Lấy giá trị đầu tiên có ý nghĩa từ nhiều tên trường frontend/backend."""
+    if not isinstance(mapping, dict):
+        return None
+    for key in keys:
+        value = mapping.get(key)
+        if value not in (None, "", "--", "Chưa cập nhật", "null"):
+            return value
+    return None
+
+
+def compact_profile(profile):
+    return {
+        key: value for key, value in (profile or {}).items()
+        if value not in (None, "", "--", "Chưa cập nhật", "null")
+    }
+
+
+def load_self_profile_context(connection, user_id):
+    profile = connection.execute(
+        "SELECT * FROM health_profiles WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if profile is None:
+        return {}
+
+    latest_weight = get_latest_weight(connection, user_id)
+    try:
+        age = calculate_age(profile["birth_date"], profile["age"])
+    except (ValueError, TypeError):
+        age = profile["age"]
+
+    user = connection.execute(
+        "SELECT full_name FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    return compact_profile({
+        "profile_type": "self",
+        "id": "self",
+        "name": user["full_name"] if user else session.get("full_name"),
+        "relationship": "Bản thân",
+        "age": age,
+        "gender": profile["sex"],
+        "height_cm": profile["height_cm"],
+        "weight_kg": latest_weight,
+        "activity_level": profile["activity_level"],
+        "goal": profile["goal"],
+        "diet_preference": profile["diet_preference"],
+        "allergies": profile["allergies"],
+        "medical_conditions": profile["medical_notes"],
+    })
+
+
+def load_family_profile_context(connection, user_id, member_id):
+    try:
+        member_id = int(member_id)
+    except (TypeError, ValueError):
+        return {}
+    row = connection.execute(
+        "SELECT * FROM family_members WHERE id = ? AND user_id = ?",
+        (member_id, user_id),
+    ).fetchone()
+    if row is None:
+        return {}
+    return compact_profile({
+        "profile_type": "family",
+        "id": row["id"],
+        "name": row["full_name"],
+        "relationship": row["relationship"],
+        "age": row["age"],
+        "gender": row["gender"],
+        "height_cm": row["height_cm"],
+        "weight_kg": row["weight_kg"],
+        "medical_conditions": row["medical_conditions"],
+        "allergies": row["allergies"],
+    })
+
+
+def resolve_effective_profile(selected_profile):
+    """Luôn xác minh hồ sơ theo user đang đăng nhập; không trộn dữ liệu hai người."""
+    if "user_id" not in session:
+        return compact_profile({
+            "id": first_present(selected_profile, "id", "profile_id"),
+            "name": first_present(selected_profile, "name", "full_name"),
+            "relationship": first_present(selected_profile, "relationship"),
+            "age": first_present(selected_profile, "age"),
+            "gender": first_present(selected_profile, "gender", "sex"),
+            "height_cm": first_present(selected_profile, "height_cm", "height"),
+            "weight_kg": first_present(selected_profile, "weight_kg", "weight"),
+            "medical_conditions": first_present(
+                selected_profile, "medical_conditions", "condition", "medical_notes"
+            ),
+            "allergies": first_present(selected_profile, "allergies"),
+            "activity_level": first_present(selected_profile, "activity_level"),
+            "goal": first_present(selected_profile, "goal"),
+            "diet_preference": first_present(selected_profile, "diet_preference"),
+        })
+
+    user_id = session["user_id"]
+    selected_id = first_present(selected_profile, "id", "profile_id", "member_id")
+    selected_type = str(first_present(selected_profile, "profile_type", "type") or "").lower()
+    connection = get_database()
+    try:
+        is_self = selected_id in (None, "self", "me", user_id, str(user_id)) or selected_type == "self"
+        if not is_self:
+            family_profile = load_family_profile_context(connection, user_id, selected_id)
+            if family_profile:
+                return family_profile
+        return load_self_profile_context(connection, user_id)
+    finally:
+        connection.close()
+
+
+def is_weight_plan_request(text):
+    normalized = normalize_search_text(text)
+    return any(phrase in normalized for phrase in (
+        "tăng cân", "tang can", "giảm cân", "giam can", "lộ trình cân",
+        "lộ trình tăng", "lộ trình giảm", "kế hoạch tăng", "kế hoạch giảm"
+    ))
+
+
+AI_CONCURRENCY = max(1, int(os.getenv("AI_CONCURRENCY", "8")))
+AI_REQUEST_SEMAPHORE = __import__("threading").BoundedSemaphore(AI_CONCURRENCY)
+
+
+def create_chat_completion_with_retry(**kwargs):
+    """Giới hạn tải cục bộ và thử lại lỗi tạm thời/rate-limit có backoff."""
+    attempts = max(1, int(os.getenv("AI_RETRY_ATTEMPTS", "3")))
+    last_error = None
+    acquired = AI_REQUEST_SEMAPHORE.acquire(timeout=10)
+    if not acquired:
+        raise TimeoutError("Máy chủ đang xử lý quá nhiều yêu cầu cùng lúc")
+    try:
+        for attempt in range(attempts):
+            try:
+                return client.chat.completions.create(**kwargs)
+            except Exception as error:
+                last_error = error
+                status = get_error_status(error)
+                text = str(error).lower()
+                retryable = status in {408, 409, 429, 500, 502, 503, 504} or any(
+                    token in text for token in (
+                        "timeout", "timed out", "rate limit", "overloaded",
+                        "connection reset", "temporarily unavailable"
+                    )
+                )
+                if not retryable or attempt >= attempts - 1:
+                    raise
+                time.sleep(min(6.0, 0.8 * (2 ** attempt)))
+        raise last_error
+    finally:
+        AI_REQUEST_SEMAPHORE.release()
+
+
 def parse_optional_json_object(value):
     """Đọc object JSON tùy chọn từ form-data hoặc JSON body."""
     if isinstance(value, dict):
@@ -1776,88 +1933,44 @@ def chat():
 
         messages = [get_active_system_prompt()]
 
-        # Gom hồ sơ từ database và hồ sơ đang chọn trên giao diện thành một
-        # ngữ cảnh duy nhất để tránh AI hỏi lại thông tin đã có.
-        database_profile_context = {}
-
-        if "user_id" in session:
-            connection = get_database()
-
-            profile = connection.execute(
-                "SELECT * FROM health_profiles WHERE user_id = ?",
-                (session["user_id"],),
-            ).fetchone()
-
-            latest_weight = get_latest_weight(
-                connection,
-                session["user_id"]
-            )
-
-            connection.close()
-
-            if profile:
-                database_profile_context = {
-                    "name": session.get("full_name"),
-                    "relationship": "Bản thân",
-                    "age": profile["age"],
-                    "gender": profile["sex"],
-                    "height_cm": profile["height_cm"],
-                    "weight_kg": latest_weight,
-                    "activity_level": profile["activity_level"],
-                    "goal": profile["goal"],
-                    "diet_preference": profile["diet_preference"],
-                    "allergies": profile["allergies"],
-                    "medical_conditions": profile["medical_notes"],
-                }
-
-        selected_profile_context = {}
-        if selected_profile:
-            selected_profile_context = {
-                "id": selected_profile.get("id"),
-                "name": selected_profile.get("name"),
-                "relationship": selected_profile.get("relationship"),
-                "age": selected_profile.get("age"),
-                "gender": selected_profile.get("gender"),
-                "height_cm": selected_profile.get("height"),
-                "weight_kg": selected_profile.get("weight"),
-                "medical_conditions": selected_profile.get("condition"),
-                "allergies": selected_profile.get("allergies"),
-            }
-
-        # Hồ sơ được chọn trên giao diện có độ ưu tiên cao nhất. Với các trường
-        # giao diện chưa có, bổ sung từ hồ sơ cá nhân trong database.
-        effective_profile = dict(database_profile_context)
-        for key, value in selected_profile_context.items():
-            if value not in (None, "", "--", "Chưa cập nhật"):
-                effective_profile[key] = value
-
-        effective_profile = {
-            key: value
-            for key, value in effective_profile.items()
-            if value not in (None, "", "--", "Chưa cập nhật")
-        }
+        # Hồ sơ được xác minh lại từ database theo đúng tài khoản đăng nhập.
+        # Không tin hoàn toàn dữ liệu frontend và tuyệt đối không trộn hồ sơ bản thân
+        # với hồ sơ thành viên gia đình.
+        effective_profile = resolve_effective_profile(selected_profile)
 
         if effective_profile:
+            profile_json = json.dumps(effective_profile, ensure_ascii=False)
+            weight_plan_rule = ""
+            if is_weight_plan_request(user_message):
+                weight_plan_rule = (
+                    "\n- Người dùng đang yêu cầu lộ trình tăng/giảm cân. "
+                    "Phải dùng ngay tuổi, giới tính, chiều cao, cân nặng, mức vận động, "
+                    "mục tiêu, dị ứng và bệnh nền đang có trong hồ sơ. "
+                    "Nếu đã có tuổi + chiều cao + cân nặng thì đưa đánh giá và khung kế hoạch ban đầu ngay; "
+                    "chỉ hỏi thêm đúng một thông tin quan trọng còn thiếu như cân nặng mục tiêu hoặc số buổi tập."
+                )
             messages.append({
                 "role": "system",
                 "content": (
-                    "HỒ SƠ SỨC KHỎE ĐANG ĐƯỢC CHỌN ĐỂ TƯ VẤN:\n"
-                    + json.dumps(effective_profile, ensure_ascii=False)
-                    + "\n\nQUY TẮC BẮT BUỘC KHI DÙNG HỒ SƠ:\n"
-                    "- Đây là nguồn dữ liệu nền đã có sẵn của người đang được tư vấn.\n"
-                    "- Không hỏi lại tên, tuổi, giới tính, chiều cao, cân nặng, "
-                    "bệnh nền hoặc dị ứng nếu trường tương ứng đã có giá trị.\n"
-                    "- Khi người dùng yêu cầu khám sức khỏe, lên lịch khám, "
-                    "đánh giá thể trạng, dinh dưỡng hoặc vận động, phải sử dụng "
-                    "ngay dữ liệu hồ sơ để đưa ra đề xuất ban đầu.\n"
-                    "- Chỉ hỏi thêm đúng một thông tin còn thiếu và thật sự cần thiết, "
-                    "ví dụ triệu chứng hiện tại, mục tiêu khám, thời gian thuận tiện, "
-                    "thuốc đang dùng hoặc tiền sử gia đình.\n"
-                    "- Nếu hồ sơ ghi 'Không' ở bệnh nền hoặc dị ứng, hiểu là hiện "
-                    "chưa ghi nhận, không được hỏi lại ngay lập tức.\n"
-                    "- Mở đầu câu trả lời phù hợp bằng cụm 'Dựa trên hồ sơ hiện có' "
-                    "để người dùng biết hồ sơ đã được sử dụng.\n"
-                    "- Không coi dữ liệu tự khai là chẩn đoán và không tự bịa dữ liệu."
+                    "HỒ SƠ SỨC KHỎE ĐÃ XÁC MINH CHO CUỘC TƯ VẤN NÀY:\n"
+                    + profile_json
+                    + "\n\nQUY TẮC BẮT BUỘC:\n"
+                    "- Chỉ tư vấn cho đúng người trong hồ sơ trên.\n"
+                    "- Không hỏi lại dữ liệu đã có trong hồ sơ.\n"
+                    "- Không được nói rằng chưa có hồ sơ khi JSON trên có dữ liệu.\n"
+                    "- Mở đầu phù hợp bằng 'Dựa trên hồ sơ hiện có'.\n"
+                    "- Nếu thiếu dữ liệu, chỉ hỏi một câu quan trọng nhất.\n"
+                    "- Không tự bịa dữ liệu và không coi dữ liệu tự khai là chẩn đoán."
+                    + weight_plan_rule
+                ),
+            })
+        elif is_weight_plan_request(user_message):
+            messages.append({
+                "role": "system",
+                "content": (
+                    "Người dùng muốn lộ trình tăng/giảm cân nhưng chưa có hồ sơ khả dụng. "
+                    "Chỉ hỏi đúng một câu đầu tiên: tuổi, chiều cao và cân nặng hiện tại; "
+                    "không hỏi một danh sách dài trong cùng một lượt."
                 ),
             })
 
@@ -1995,9 +2108,9 @@ YÊU CẦU TRẢ LỜI:
             else MODEL_NAME
         )
 
-        max_output_tokens = 1200 if has_image else 600
+        max_output_tokens = 1200 if has_image else 900
 
-        response = client.chat.completions.create(
+        response = create_chat_completion_with_retry(
             model=selected_model,
             messages=messages,
             temperature=0.2 if has_image else 0.3,
@@ -2043,7 +2156,8 @@ YÊU CẦU TRẢ LỜI:
             }
         record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data)
         return jsonify({
-            "reply": reply
+            "reply": reply,
+            "profile_used": effective_profile or None,
         })
 
     except ValueError as error:
@@ -2056,7 +2170,16 @@ YÊU CẦU TRẢ LỜI:
             f"Groq API error: "
             f"{type(error).__name__}: {error}"
         )
-
+        try:
+            record_chat_log(
+                locals().get("user_message", "[request lỗi]"), "",
+                locals().get("selected_model", MODEL_NAME),
+                locals().get("has_image", False),
+                round((time.perf_counter() - locals().get("start_time", time.perf_counter())) * 1000),
+                status="error", error_message=str(error),
+            )
+        except Exception:
+            pass
         return build_error_response(error)
 
 
