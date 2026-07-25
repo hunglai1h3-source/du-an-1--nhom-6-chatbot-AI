@@ -806,15 +806,60 @@ def get_setting(key, default=""):
     return row["setting_value"] if row else default
 
 
+PROFILE_PRIORITY_RULES = """
+=========================================================
+QUY TẮC ƯU TIÊN TUYỆT ĐỐI VỀ HỒ SƠ
+=========================================================
+
+- Hồ sơ sức khỏe được gửi kèm trong yêu cầu là thông tin người dùng
+  đã cung cấp và phải được sử dụng trực tiếp.
+
+- Không hỏi lại tuổi, giới tính, chiều cao, cân nặng, bệnh nền,
+  dị ứng hoặc mục tiêu nếu trường tương ứng đã có dữ liệu.
+
+- Tuyệt đối không đưa ra danh sách nhiều câu hỏi đánh số.
+
+- Trong một phản hồi chỉ được hỏi tối đa một câu bổ sung.
+
+- Khi người dùng yêu cầu lộ trình tăng cân và hồ sơ đã có tuổi,
+  giới tính, chiều cao và cân nặng:
+  + Phải xác nhận ngắn gọn rằng đã sử dụng hồ sơ.
+  + Phải bắt đầu đưa ra đánh giá hoặc lộ trình ban đầu ngay.
+  + Chỉ hỏi thêm một thông tin thiết yếu còn thiếu, ưu tiên
+    cân nặng mục tiêu hoặc thời gian mong muốn.
+
+- Không được yêu cầu người dùng nhập lại toàn bộ hồ sơ.
+
+- Chỉ hỏi lại một trường khi trường đó bị thiếu hoặc có dữ liệu
+  mâu thuẫn rõ ràng.
+"""
+
+
 def get_active_system_prompt():
     connection = get_database()
+
     row = connection.execute(
-        "SELECT content FROM prompt_versions WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+        """
+        SELECT content
+        FROM prompt_versions
+        WHERE is_active = 1
+        ORDER BY id DESC
+        LIMIT 1
+        """
     ).fetchone()
+
     connection.close()
-    if row:
-        return {"role": "system", "content": row["content"]}
-    return SYSTEM_PROMPT
+
+    base_content = (
+        row["content"]
+        if row and row["content"]
+        else SYSTEM_PROMPT["content"]
+    )
+
+    return {
+        "role": "system",
+        "content": base_content + "\n\n" + PROFILE_PRIORITY_RULES
+    }
 
 
 def record_chat_log(question, answer, model, has_image, latency_ms, status="success", error_message="", usage=None):
@@ -1787,6 +1832,87 @@ def resolve_effective_profile(selected_profile):
         connection.close()
 
 
+PROFILE_LABELS = {
+    "name": "Họ và tên",
+    "relationship": "Quan hệ",
+    "age": "Tuổi",
+    "sex": "Giới tính",
+    "gender": "Giới tính",
+    "height_cm": "Chiều cao",
+    "height": "Chiều cao",
+    "latest_weight_kg": "Cân nặng",
+    "weight_kg": "Cân nặng",
+    "weight": "Cân nặng",
+    "activity_level": "Mức vận động",
+    "goal": "Mục tiêu",
+    "diet_preference": "Chế độ ăn",
+    "medical_notes": "Bệnh nền / ghi chú sức khỏe",
+    "medical_conditions": "Bệnh nền / ghi chú sức khỏe",
+    "condition": "Bệnh nền / ghi chú sức khỏe",
+    "allergies": "Dị ứng",
+}
+
+PROFILE_VALUE_LABELS = {
+    "sedentary": "Ít vận động",
+    "light": "Vận động nhẹ",
+    "lightly_active": "Vận động nhẹ",
+    "moderate": "Vận động vừa",
+    "moderately_active": "Vận động vừa",
+    "active": "Vận động nhiều",
+    "very_active": "Vận động rất nhiều",
+    "maintain": "Duy trì cân nặng",
+    "gain": "Tăng cân",
+    "gain_weight": "Tăng cân",
+    "lose": "Giảm cân",
+    "lose_weight": "Giảm cân",
+    "male": "Nam",
+    "female": "Nữ",
+}
+
+
+def format_profile_for_prompt(profile):
+    """Định dạng hồ sơ bằng tiếng Việt, không lộ tên trường kỹ thuật hoặc JSON."""
+    if not isinstance(profile, dict) or not profile:
+        return "Chưa có thông tin hồ sơ."
+
+    ignored_keys = {"id", "profile_id", "member_id", "profile_type", "type"}
+    preferred_order = (
+        "name", "relationship", "age", "sex", "gender",
+        "height_cm", "height", "latest_weight_kg", "weight_kg", "weight",
+        "activity_level", "goal", "diet_preference",
+        "medical_notes", "medical_conditions", "condition", "allergies",
+    )
+
+    lines = []
+    used_labels = set()
+
+    for key in preferred_order:
+        if key in ignored_keys or key not in profile:
+            continue
+
+        value = profile.get(key)
+        if value in (None, "", "--", "Chưa cập nhật"):
+            continue
+
+        label = PROFILE_LABELS.get(key, key)
+        if label in used_labels:
+            continue
+
+        display_value = PROFILE_VALUE_LABELS.get(str(value).strip().lower(), value)
+
+        if key == "age":
+            display_value = f"{display_value} tuổi"
+        elif key in {"height_cm", "height"}:
+            display_value = f"{display_value} cm"
+        elif key in {"latest_weight_kg", "weight_kg", "weight"}:
+            display_value = f"{display_value} kg"
+
+        lines.append(f"- {label}: {display_value}")
+        used_labels.add(label)
+
+    return "\n".join(lines) if lines else "Chưa có thông tin hồ sơ."
+
+
 def is_weight_plan_request(text):
     normalized = normalize_search_text(text)
     return any(phrase in normalized for phrase in (
@@ -1933,44 +2059,114 @@ def chat():
 
         messages = [get_active_system_prompt()]
 
-        # Hồ sơ được xác minh lại từ database theo đúng tài khoản đăng nhập.
-        # Không tin hoàn toàn dữ liệu frontend và tuyệt đối không trộn hồ sơ bản thân
-        # với hồ sơ thành viên gia đình.
-        effective_profile = resolve_effective_profile(selected_profile)
+        # Hồ sơ của chủ tài khoản lấy từ database.
+        account_profile_context = {}
+
+        if "user_id" in session:
+            connection = get_database()
+
+            profile = connection.execute(
+                "SELECT * FROM health_profiles WHERE user_id = ?",
+                (session["user_id"],),
+            ).fetchone()
+
+            latest_weight = get_latest_weight(
+                connection,
+                session["user_id"]
+            )
+
+            connection.close()
+
+            if profile:
+                account_profile_context = {
+                    "age": profile["age"],
+                    "sex": profile["sex"],
+                    "height_cm": profile["height_cm"],
+                    "latest_weight_kg": latest_weight,
+                    "activity_level": profile["activity_level"],
+                    "goal": profile["goal"],
+                    "diet_preference": profile["diet_preference"],
+                    "allergies": profile["allergies"],
+                    "medical_notes": profile["medical_notes"],
+                }
+
+        # Hồ sơ đang được chọn trên giao diện.
+        selected_profile_context = {}
+
+        if selected_profile:
+            selected_profile_context = {
+                "id": selected_profile.get("id"),
+                "name": selected_profile.get("name"),
+                "relationship": selected_profile.get("relationship"),
+                "age": selected_profile.get("age"),
+                "sex": selected_profile.get("gender"),
+                "height_cm": selected_profile.get("height"),
+                "latest_weight_kg": selected_profile.get("weight"),
+                "medical_notes": selected_profile.get("condition"),
+                "allergies": selected_profile.get("allergies"),
+            }
+
+        unknown_values = {
+            None,
+            "",
+            "--",
+            "Chưa cập nhật",
+        }
+
+        # Loại dữ liệu trống trước khi ghép để dữ liệu rỗng trên giao diện
+        # không ghi đè tuổi, chiều cao hoặc cân nặng đã lưu trong database.
+        account_profile_context = {
+            key: value
+            for key, value in account_profile_context.items()
+            if value not in unknown_values
+        }
+        selected_profile_context = {
+            key: value
+            for key, value in selected_profile_context.items()
+            if value not in unknown_values
+        }
+
+        # Chỉ gửi một hồ sơ duy nhất cho AI.
+        if selected_profile_context:
+            if selected_profile_context.get("relationship") == "Bản thân":
+                # Hồ sơ bản thân: kết hợp dữ liệu giao diện với dữ liệu database.
+                effective_profile = {
+                    **account_profile_context,
+                    **selected_profile_context,
+                }
+            else:
+                # Đang tư vấn cho người nhà:
+                # không gửi lẫn hồ sơ của chủ tài khoản.
+                effective_profile = selected_profile_context
+        else:
+            effective_profile = account_profile_context
 
         if effective_profile:
-            profile_json = json.dumps(effective_profile, ensure_ascii=False)
-            weight_plan_rule = ""
-            if is_weight_plan_request(user_message):
-                weight_plan_rule = (
-                    "\n- Người dùng đang yêu cầu lộ trình tăng/giảm cân. "
-                    "Phải dùng ngay tuổi, giới tính, chiều cao, cân nặng, mức vận động, "
-                    "mục tiêu, dị ứng và bệnh nền đang có trong hồ sơ. "
-                    "Nếu đã có tuổi + chiều cao + cân nặng thì đưa đánh giá và khung kế hoạch ban đầu ngay; "
-                    "chỉ hỏi thêm đúng một thông tin quan trọng còn thiếu như cân nặng mục tiêu hoặc số buổi tập."
-                )
             messages.append({
                 "role": "system",
                 "content": (
-                    "HỒ SƠ SỨC KHỎE ĐÃ XÁC MINH CHO CUỘC TƯ VẤN NÀY:\n"
-                    + profile_json
-                    + "\n\nQUY TẮC BẮT BUỘC:\n"
-                    "- Chỉ tư vấn cho đúng người trong hồ sơ trên.\n"
-                    "- Không hỏi lại dữ liệu đã có trong hồ sơ.\n"
-                    "- Không được nói rằng chưa có hồ sơ khi JSON trên có dữ liệu.\n"
-                    "- Mở đầu phù hợp bằng 'Dựa trên hồ sơ hiện có'.\n"
-                    "- Nếu thiếu dữ liệu, chỉ hỏi một câu quan trọng nhất.\n"
-                    "- Không tự bịa dữ liệu và không coi dữ liệu tự khai là chẩn đoán."
-                    + weight_plan_rule
-                ),
-            })
-        elif is_weight_plan_request(user_message):
-            messages.append({
-                "role": "system",
-                "content": (
-                    "Người dùng muốn lộ trình tăng/giảm cân nhưng chưa có hồ sơ khả dụng. "
-                    "Chỉ hỏi đúng một câu đầu tiên: tuổi, chiều cao và cân nặng hiện tại; "
-                    "không hỏi một danh sách dài trong cùng một lượt."
+                    "HỒ SƠ DUY NHẤT ĐANG ĐƯỢC DÙNG ĐỂ TƯ VẤN:\n"
+                    + format_profile_for_prompt(effective_profile)
+                    + "\n\nQUY TẮC BẮT BUỘC KHI DÙNG HỒ SƠ:\n"
+                    "- Mọi trường xuất hiện trong hồ sơ trên đều được xem là "
+                    "thông tin người dùng đã cung cấp.\n"
+                    "- Không hỏi lại tuổi, giới tính, chiều cao, cân nặng, "
+                    "bệnh nền hoặc dị ứng nếu trường đó đã có giá trị.\n"
+                    "- Khi người dùng yêu cầu lộ trình tăng cân hoặc giảm cân "
+                    "và hồ sơ đã có tuổi, giới tính, chiều cao, cân nặng, "
+                    "hãy sử dụng trực tiếp các thông tin đó để đánh giá "
+                    "ban đầu và trả lời.\n"
+                    "- Chỉ hỏi thêm một câu ngắn về thông tin thiết yếu còn "
+                    "thiếu, ví dụ cân nặng mục tiêu, thời gian mong muốn, "
+                    "khẩu vị hoặc mức vận động.\n"
+                    "- Không yêu cầu người dùng nhập lại toàn bộ hồ sơ.\n"
+                    "- Nếu dữ liệu có mâu thuẫn, chỉ hỏi xác nhận đúng trường "
+                    "đang bị mâu thuẫn.\n"
+                    "- Dữ liệu do người dùng tự khai, không coi là chẩn đoán.\n"
+                    "- Không hiển thị JSON hoặc các tên trường kỹ thuật như age, sex, "
+                    "name, height_cm, latest_weight_kg trong câu trả lời.\n"
+                    "- Khi cần nhắc lại hồ sơ, chỉ viết bằng tiếng Việt tự nhiên, ví dụ: "
+                    "18 tuổi, Nam, cao 180 cm, nặng 75 kg."
                 ),
             })
 
@@ -2038,6 +2234,46 @@ def chat():
                 )
 
         messages.extend(history)
+
+        # Với yêu cầu tăng/giảm cân, nhắc lại hồ sơ ngay trước câu hỏi hiện tại
+        # để mô hình không hỏi lại tuổi, chiều cao và cân nặng đã có.
+        normalized_intent = unicodedata.normalize(
+            "NFD",
+            user_message.casefold()
+        )
+        normalized_intent = "".join(
+            character
+            for character in normalized_intent
+            if unicodedata.category(character) != "Mn"
+        )
+
+        weight_plan_type = ""
+        if any(keyword in normalized_intent for keyword in (
+            "tang can", "len can", "lo trinh tang", "ke hoach tang"
+        )):
+            weight_plan_type = "tăng cân"
+        elif any(keyword in normalized_intent for keyword in (
+            "giam can", "xuong can", "lo trinh giam", "ke hoach giam"
+        )):
+            weight_plan_type = "giảm cân"
+
+        if weight_plan_type and effective_profile:
+            messages.append({
+                "role": "system",
+                "content": (
+                    f"YÊU CẦU HIỆN TẠI LÀ LẬP LỘ TRÌNH {weight_plan_type.upper()}.\n"
+                    "Hồ sơ đã biết và phải dùng trực tiếp:\n"
+                    + format_profile_for_prompt(effective_profile)
+                    + "\n- Không hỏi lại bất kỳ trường nào đã có trong hồ sơ.\n"
+                    "- Không đưa danh sách nhiều câu hỏi khảo sát.\n"
+                    "- Hãy bắt đầu đánh giá và đưa lộ trình sơ bộ ngay.\n"
+                    "- Cuối câu trả lời chỉ được hỏi tối đa một thông tin "
+                    "thiết yếu còn thiếu, ưu tiên cân nặng mục tiêu hoặc "
+                    "thời gian mong muốn.\n"
+                    "- Không sao chép nguyên khối hồ sơ vào câu trả lời và không hiển thị "
+                    "các tên trường kỹ thuật bằng tiếng Anh."
+                ),
+            })
 
         if has_image:
             data_url = image_to_data_url(image_file)
