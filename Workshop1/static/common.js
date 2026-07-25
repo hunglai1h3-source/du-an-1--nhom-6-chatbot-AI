@@ -412,14 +412,42 @@
 
     $("#sharedLoginForm").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const message = $("[data-auth-message]", event.currentTarget);
-      const body = Object.fromEntries(new FormData(event.currentTarget));
-      const response = await fetch("/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) { message.textContent = data.error || "Đăng nhập thất bại."; return; }
-      modal.classList.add("hidden");
-      showToast("Đăng nhập thành công.", "success");
-      window.dispatchEvent(new CustomEvent("medicare:auth-changed", { detail: data.user }));
+      const form = event.currentTarget;
+      const message = $("[data-auth-message]", form);
+      const submitButton = $("button[type=submit]", form);
+      message.textContent = "";
+      submitButton.disabled = true;
+      submitButton.textContent = "Đang đăng nhập...";
+
+      try {
+        const body = Object.fromEntries(new FormData(form));
+        const response = await fetch("/login", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Đăng nhập thất bại.");
+
+        modal.classList.add("hidden");
+        form.reset();
+        showToast("Đăng nhập thành công.", "success");
+        window.dispatchEvent(new CustomEvent("medicare:auth-changed", { detail: data.user }));
+
+        const params = new URLSearchParams(window.location.search);
+        const next = params.get("next");
+        if (next && next.startsWith("/")) {
+          window.location.assign(next);
+        } else if (data.user?.role === "admin" && params.get("login") === "1") {
+          window.location.assign("/admin");
+        }
+      } catch (error) {
+        message.textContent = error.message || "Không thể kết nối máy chủ.";
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "Đăng nhập";
+      }
     });
 
     $("#sharedRegisterForm").addEventListener("submit", async (event) => {
@@ -438,6 +466,14 @@
     if (!button) return { logged_in: false };
     ensureAuthModal();
 
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("login") === "1") {
+      $("#authModal").classList.remove("hidden");
+    }
+    if (params.get("admin_error") === "1") {
+      showToast("Tài khoản này chưa có quyền quản trị.", "error");
+    }
+
     const refresh = async () => {
       const data = await currentUser();
       button.dataset.loggedIn = data.logged_in ? "true" : "false";
@@ -455,6 +491,10 @@
       const data = await refresh();
       if (!data.logged_in) {
         $("#authModal").classList.remove("hidden");
+        return;
+      }
+      if (data.user?.role === "admin") {
+        window.location.assign("/admin");
         return;
       }
       const shouldLogout = confirm(`Bạn đang đăng nhập với tên ${data.user?.full_name || "người dùng"}. Bạn muốn đăng xuất?`);

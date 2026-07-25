@@ -526,11 +526,7 @@
   </div>
 
   <div id="toastMessage"></div>
-
-  <script
-    src="{{ url_for('static', filename='app.js') }}"
-  ></script>
-  <a
+<a
   class="emergency-floating"
   href="tel:115"
   aria-label="Gọi cấp cứu 115"
@@ -542,12 +538,6 @@
   </span>
 </a>
 
-<script
-  src="{{ url_for('static', filename='app.js') }}"
-></script>
-
-</body>
-</html>
 <div class="premium-modal hidden" id="premiumModal">
   <div class="premium-modal-card">
     <button
@@ -586,3 +576,8 @@
     </button>
   </div>
 </div>
+
+  <script src="{{ url_for('static', filename='common.js', v='20260725-auth-fix-1') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard.js', v='20260725-auth-fix-1') }}"></script>
+</body>
+</html>

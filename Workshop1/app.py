@@ -4,7 +4,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
 from threading import Timer
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from functools import wraps
 import math
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -34,8 +34,21 @@ app.config["SECRET_KEY"] = os.getenv(
     "SECRET_KEY",
     "change-this-secret-key-before-deploy"
 )
+# Giữ phiên đăng nhập tối đa 30 ngày.
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
+# Cấu hình cookie đăng nhập.
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# False khi chạy localhost bằng http://127.0.0.1:5000.
+# Khi triển khai website HTTPS thật, đặt biến SESSION_COOKIE_SECURE=true trong .env.
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() == "true"
+)
+
+# Làm mới thời hạn cookie khi người dùng tiếp tục sử dụng website.
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
@@ -1380,6 +1393,9 @@ def login():
         }), 403
 
     session.clear()
+
+    # Ghi nhớ đăng nhập trong 30 ngày.
+    session.permanent = True
     session["user_id"] = user["id"]
     session["full_name"] = user["full_name"]
     session["email"] = user["email"]
@@ -1400,17 +1416,37 @@ def login():
 
 @app.get("/current-user")
 def current_user():
-    if "user_id" not in session:
+    user_id = session.get("user_id")
+    if not user_id:
         return jsonify({"logged_in": False})
+
+    # Luôn đọc lại quyền từ CSDL. Nhờ vậy tài khoản vừa được cấp admin
+    # có thể vào /admin mà không bị giữ quyền cũ trong cookie phiên.
+    connection = get_database()
+    user = connection.execute(
+        "SELECT id, full_name, email, phone, role, is_active FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    connection.close()
+
+    if user is None or not bool(user["is_active"]):
+        session.clear()
+        return jsonify({"logged_in": False})
+
+    session["full_name"] = user["full_name"]
+    session["email"] = user["email"]
+    session["phone"] = user["phone"]
+    session["role"] = user["role"]
+    session.permanent = True
 
     return jsonify({
         "logged_in": True,
         "user": {
-            "id": session.get("user_id"),
-            "full_name": session.get("full_name"),
-            "email": session.get("email"),
-            "phone": session.get("phone"),
-            "role": session.get("role", "user")
+            "id": user["id"],
+            "full_name": user["full_name"],
+            "email": user["email"],
+            "phone": user["phone"],
+            "role": user["role"]
         }
     })
 
@@ -2878,10 +2914,27 @@ Yêu cầu bắt buộc: 1
 def admin_required(view_function):
     @wraps(view_function)
     def wrapped(*args, **kwargs):
-        if "user_id" not in session:
-            return redirect(url_for("index"))
-        if session.get("role") != "admin":
-            return jsonify({"error": "Bạn không có quyền quản trị."}), 403
+        user_id = session.get("user_id")
+        if not user_id:
+            return redirect(url_for("index", login="1", next=request.path))
+
+        # Không tin quyền cũ trong session; kiểm tra trực tiếp CSDL mỗi lần vào admin.
+        connection = get_database()
+        user = connection.execute(
+            "SELECT role, is_active FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        connection.close()
+
+        if user is None or not bool(user["is_active"]):
+            session.clear()
+            return redirect(url_for("index", login="1", next=request.path))
+
+        session["role"] = user["role"]
+        session.permanent = True
+        if user["role"] != "admin":
+            return redirect(url_for("index", admin_error="1"))
+
         return view_function(*args, **kwargs)
     return wrapped
 
