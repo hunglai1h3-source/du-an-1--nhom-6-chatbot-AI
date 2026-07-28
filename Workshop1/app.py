@@ -13,6 +13,8 @@ import json
 import re
 import os
 import sqlite3
+from psycopg.errors import UniqueViolation
+from database import get_connection
 import time
 import webbrowser
 import csv
@@ -456,14 +458,8 @@ APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "").strip()
 
 
 def get_database():
-    """Tạo kết nối SQLite riêng cho từng request và giảm lỗi database is locked."""
-    connection = sqlite3.connect(DATABASE_PATH, timeout=20)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute("PRAGMA busy_timeout = 20000")
-    connection.execute("PRAGMA journal_mode = WAL")
-    connection.execute("PRAGMA synchronous = NORMAL")
-    return connection
+    """Tạo kết nối PostgreSQL cho dữ liệu tài khoản và ứng dụng."""
+    return get_connection()
 
 
 MEDICAL_SEARCH_STOPWORDS = {
@@ -611,187 +607,216 @@ def build_medical_context(user_question, limit=3):
 
 def initialize_database():
     connection = get_database()
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            full_name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            phone TEXT UNIQUE,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'user',
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS health_profiles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL UNIQUE,
-            sex TEXT NOT NULL,
-            birth_date TEXT,
-            age INTEGER,
-            height_cm REAL NOT NULL,
-            activity_level TEXT NOT NULL DEFAULT 'sedentary',
-            goal TEXT NOT NULL DEFAULT 'maintain',
-            diet_preference TEXT,
-            allergies TEXT,
-            medical_notes TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
 
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS weight_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            weight_kg REAL NOT NULL,
-            note TEXT,
-            logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
+    try:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                full_name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                phone TEXT UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS water_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            amount_ml INTEGER NOT NULL,
-            logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS health_profiles (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE,
+                sex TEXT NOT NULL,
+                birth_date TEXT,
+                age INTEGER,
+                height_cm DOUBLE PRECISION NOT NULL,
+                activity_level TEXT NOT NULL DEFAULT 'sedentary',
+                goal TEXT NOT NULL DEFAULT 'maintain',
+                diet_preference TEXT,
+                allergies TEXT,
+                medical_notes TEXT,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_health_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
 
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS reminders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            reminder_type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            message TEXT,
-            time_of_day TEXT NOT NULL,
-            days_of_week TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
-            medicine_name TEXT,
-            dosage_note TEXT,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            last_triggered_date TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS weight_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                weight_kg DOUBLE PRECISION NOT NULL,
+                note TEXT,
+                logged_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_weight_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
 
-    # Nâng cấp database cũ mà không xóa dữ liệu người dùng.
-    user_columns = {
-        row["name"]
-        for row in connection.execute("PRAGMA table_info(users)").fetchall()
-    }
-    if "role" not in user_columns:
-        connection.execute(
-            "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"
-        )
-    if "is_active" not in user_columns:
-        connection.execute(
-            "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
-        )
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS water_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                amount_ml INTEGER NOT NULL,
+                logged_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_water_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
 
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS admin_audit_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            admin_user_id INTEGER NOT NULL,
-            action TEXT NOT NULL,
-            target_user_id INTEGER,
-            details TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE RESTRICT,
-            FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
-        )
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS reminders (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                reminder_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT,
+                time_of_day TEXT NOT NULL,
+                days_of_week TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
+                medicine_name TEXT,
+                dosage_note TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                last_triggered_date TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_reminder_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
 
-    connection.execute("""
-        CREATE INDEX IF NOT EXISTS idx_admin_logs_created
-        ON admin_audit_logs(created_at)
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS family_members (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                full_name TEXT NOT NULL,
+                relationship TEXT NOT NULL DEFAULT 'Khác',
+                age INTEGER,
+                gender TEXT,
+                height_cm DOUBLE PRECISION,
+                weight_kg DOUBLE PRECISION,
+                medical_conditions TEXT,
+                allergies TEXT,
+                avatar_seed TEXT,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_family_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
 
-    connection.execute("""
-        CREATE INDEX IF NOT EXISTS idx_weight_user_date
-        ON weight_logs(user_id, logged_at)
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS chat_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
+                question TEXT NOT NULL,
+                answer TEXT,
+                model TEXT,
+                has_image INTEGER NOT NULL DEFAULT 0,
+                latency_ms INTEGER,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'success',
+                error_message TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_chat_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE SET NULL
+            )
+        """)
 
-    connection.execute("""
-        CREATE INDEX IF NOT EXISTS idx_water_user_date
-        ON water_logs(user_id, logged_at)
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS admin_audit_logs (
+                id SERIAL PRIMARY KEY,
+                admin_user_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                target_user_id INTEGER,
+                details TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_audit_admin
+                    FOREIGN KEY (admin_user_id)
+                    REFERENCES users(id)
+                    ON DELETE RESTRICT,
+                CONSTRAINT fk_audit_target
+                    FOREIGN KEY (target_user_id)
+                    REFERENCES users(id)
+                    ON DELETE SET NULL
+            )
+        """)
 
-    connection.execute("""
-        CREATE INDEX IF NOT EXISTS idx_reminder_user_active
-        ON reminders(user_id, is_active)
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                setting_key TEXT PRIMARY KEY,
+                setting_value TEXT,
+                updated_by INTEGER,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS family_members (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            full_name TEXT NOT NULL,
-            relationship TEXT NOT NULL DEFAULT 'Khác',
-            age INTEGER,
-            gender TEXT,
-            height_cm REAL,
-            weight_kg REAL,
-            medical_conditions TEXT,
-            allergies TEXT,
-            avatar_seed TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS prompt_versions (
+                id SERIAL PRIMARY KEY,
+                prompt_name TEXT NOT NULL DEFAULT 'system',
+                content TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 0,
+                created_by INTEGER,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    connection.execute("""
-        CREATE INDEX IF NOT EXISTS idx_family_members_user
-        ON family_members(user_id, updated_at)
-    """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_admin_logs_created
+            ON admin_audit_logs(created_at)
+        """)
 
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS chat_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            question TEXT NOT NULL,
-            answer TEXT,
-            model TEXT,
-            has_image INTEGER NOT NULL DEFAULT 0,
-            latency_ms INTEGER,
-            prompt_tokens INTEGER NOT NULL DEFAULT 0,
-            completion_tokens INTEGER NOT NULL DEFAULT 0,
-            status TEXT NOT NULL DEFAULT 'success',
-            error_message TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-        )
-    """)
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS system_settings (
-            setting_key TEXT PRIMARY KEY,
-            setting_value TEXT,
-            updated_by INTEGER,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    connection.execute("""
-        CREATE TABLE IF NOT EXISTS prompt_versions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            prompt_name TEXT NOT NULL DEFAULT 'system',
-            content TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 0,
-            created_by INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_chat_logs_created ON chat_logs(created_at)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_chat_logs_user ON chat_logs(user_id)")
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_weight_user_date
+            ON weight_logs(user_id, logged_at)
+        """)
 
-    connection.commit()
-    connection.close()
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_water_user_date
+            ON water_logs(user_id, logged_at)
+        """)
 
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_reminder_user_active
+            ON reminders(user_id, is_active)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_family_members_user
+            ON family_members(user_id, updated_at)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chat_logs_created
+            ON chat_logs(created_at)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chat_logs_user
+            ON chat_logs(user_id)
+        """)
+
+        connection.commit()
+        print("✅ Đã khởi tạo các bảng PostgreSQL.")
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
 
 initialize_database()
 
@@ -1379,7 +1404,7 @@ def register():
         connection.commit()
         user_id = cursor.lastrowid
 
-    except sqlite3.IntegrityError as error:
+    except UniqueViolation as error:
         error_text = str(error).lower()
 
         if "email" in error_text:
@@ -3543,7 +3568,12 @@ def admin_audit_logs():
 @app.get("/admin/backup/users-db")
 @admin_required
 def admin_backup_users_db():
-    connection=get_database(); write_admin_log(connection,"backup_database",details="Tải bản sao users.db"); connection.commit(); connection.close(); return send_file(DATABASE_PATH,as_attachment=True,download_name=f"users-backup-{datetime.now():%Y%m%d-%H%M%S}.db")
+    return jsonify({
+        "error": (
+            "Dữ liệu hiện được lưu trên PostgreSQL. "
+            "File users.db không còn là cơ sở dữ liệu chính."
+        )
+    }), 501
 
 
 @app.post("/admin/logout")

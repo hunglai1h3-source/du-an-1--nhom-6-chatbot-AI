@@ -4,3 +4,7 @@ python-dotenv
 gunicorn
 pandas
 pyarrow
+SQLAlchemy==2.0.43
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
+psycopg[binary]==3.3.4
