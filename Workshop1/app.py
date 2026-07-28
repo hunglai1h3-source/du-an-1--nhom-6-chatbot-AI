@@ -3394,12 +3394,24 @@ def admin_dashboard():
         "tokens": connection.execute("SELECT COALESCE(SUM(prompt_tokens + completion_tokens),0) FROM chat_logs").fetchone()[0],
     }
     chart_rows = connection.execute("""
-        WITH RECURSIVE dates(day) AS (
-            SELECT date('now','-6 day') UNION ALL SELECT date(day,'+1 day') FROM dates WHERE day < date('now')
-        )
-        SELECT day, (SELECT COUNT(*) FROM chat_logs WHERE date(created_at)=day) chats,
-                    (SELECT COUNT(*) FROM users WHERE date(created_at)=day) users
-        FROM dates
+        SELECT
+            day::date AS day,
+            (
+                SELECT COUNT(*)
+                FROM chat_logs
+                WHERE created_at::date = day::date
+            ) AS chats,
+            (
+                SELECT COUNT(*)
+                FROM users
+                WHERE created_at::date = day::date
+            ) AS users
+        FROM generate_series(
+            CURRENT_DATE - INTERVAL '6 days',
+            CURRENT_DATE,
+            INTERVAL '1 day'
+        ) AS day
+        ORDER BY day
     """).fetchall()
     recent_chats = connection.execute("""
         SELECT c.*, u.full_name FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id
@@ -3588,48 +3600,127 @@ def admin_logout():
 
 def admin_dashboard_payload():
     connection = get_database()
+
     stats = {
-        "users": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
-        "active_users": connection.execute("SELECT COUNT(*) FROM users WHERE is_active = 1").fetchone()[0],
-        "admins": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
-        "chats": connection.execute("SELECT COUNT(*) FROM chat_logs").fetchone()[0],
-        "images": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE has_image = 1").fetchone()[0],
-        "errors": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE status != 'success'").fetchone()[0],
+        "users": connection.execute(
+            "SELECT COUNT(*) FROM users"
+        ).fetchone()[0],
+
+        "active_users": connection.execute(
+            "SELECT COUNT(*) FROM users WHERE is_active = 1"
+        ).fetchone()[0],
+
+        "admins": connection.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin'"
+        ).fetchone()[0],
+
+        "chats": connection.execute(
+            "SELECT COUNT(*) FROM chat_logs"
+        ).fetchone()[0],
+
+        "images": connection.execute(
+            "SELECT COUNT(*) FROM chat_logs WHERE has_image = 1"
+        ).fetchone()[0],
+
+        "errors": connection.execute(
+            "SELECT COUNT(*) FROM chat_logs WHERE status != 'success'"
+        ).fetchone()[0],
+
         "avg_latency": connection.execute(
-            "SELECT COALESCE(ROUND(AVG(latency_ms)),0) FROM chat_logs WHERE latency_ms > 0"
+            """
+            SELECT COALESCE(ROUND(AVG(latency_ms)), 0)
+            FROM chat_logs
+            WHERE latency_ms > 0
+            """
         ).fetchone()[0],
+
         "tokens": connection.execute(
-            "SELECT COALESCE(SUM(prompt_tokens + completion_tokens),0) FROM chat_logs"
+            """
+            SELECT COALESCE(
+                SUM(
+                    COALESCE(prompt_tokens, 0)
+                    + COALESCE(completion_tokens, 0)
+                ),
+                0
+            )
+            FROM chat_logs
+            """
         ).fetchone()[0],
+
         "new_today": connection.execute(
-            "SELECT COUNT(*) FROM users WHERE date(created_at)=date('now','localtime')"
+            """
+            SELECT COUNT(*)
+            FROM users
+            WHERE created_at::date = CURRENT_DATE
+            """
         ).fetchone()[0],
+
         "chats_today": connection.execute(
-            "SELECT COUNT(*) FROM chat_logs WHERE date(created_at)=date('now','localtime')"
+            """
+            SELECT COUNT(*)
+            FROM chat_logs
+            WHERE created_at::date = CURRENT_DATE
+            """
         ).fetchone()[0],
     }
-    chart_rows = connection.execute("""
-        WITH RECURSIVE dates(day) AS (
-            SELECT date('now','localtime','-6 day')
-            UNION ALL
-            SELECT date(day,'+1 day') FROM dates WHERE day < date('now','localtime')
-        )
-        SELECT day,
-               (SELECT COUNT(*) FROM chat_logs WHERE date(created_at)=day) chats,
-               (SELECT COUNT(*) FROM users WHERE date(created_at)=day) users
-        FROM dates
-    """).fetchall()
-    recent_users = connection.execute("""
-        SELECT id, full_name, email, role, is_active, created_at
-        FROM users ORDER BY id DESC LIMIT 6
-    """).fetchall()
-    recent_chats = connection.execute("""
-        SELECT c.id, c.question, c.model, c.status, c.latency_ms, c.created_at,
-               COALESCE(u.full_name, 'Khách') AS full_name
-        FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id
-        ORDER BY c.id DESC LIMIT 6
-    """).fetchall()
+
+    chart_rows = connection.execute(
+        """
+        SELECT
+            day::date AS day,
+            (
+                SELECT COUNT(*)
+                FROM chat_logs
+                WHERE created_at::date = day::date
+            ) AS chats,
+            (
+                SELECT COUNT(*)
+                FROM users
+                WHERE created_at::date = day::date
+            ) AS users
+        FROM generate_series(
+            CURRENT_DATE - INTERVAL '6 days',
+            CURRENT_DATE,
+            INTERVAL '1 day'
+        ) AS day
+        ORDER BY day
+        """
+    ).fetchall()
+
+    recent_users = connection.execute(
+        """
+        SELECT
+            id,
+            full_name,
+            email,
+            role,
+            is_active,
+            created_at
+        FROM users
+        ORDER BY id DESC
+        LIMIT 6
+        """
+    ).fetchall()
+
+    recent_chats = connection.execute(
+        """
+        SELECT
+            c.id,
+            c.question,
+            c.model,
+            c.status,
+            c.latency_ms,
+            c.created_at,
+            COALESCE(u.full_name, 'Khách') AS full_name
+        FROM chat_logs c
+        LEFT JOIN users u ON u.id = c.user_id
+        ORDER BY c.id DESC
+        LIMIT 6
+        """
+    ).fetchall()
+
     connection.close()
+
     return {
         "stats": stats,
         "chart": [dict(row) for row in chart_rows],
@@ -3654,55 +3745,205 @@ def admin_api_users():
     role = request.args.get("role", "").strip()
     status = request.args.get("status", "").strip()
     page = max(request.args.get("page", 1, type=int), 1)
-    per_page = min(max(request.args.get("per_page", 20, type=int), 5), 100)
-    where, params = [], []
+    per_page = min(
+        max(request.args.get("per_page", 20, type=int), 5),
+        100,
+    )
+
+    where = []
+    params = []
+
     if keyword:
-        where.append("(u.full_name LIKE ? OR u.email LIKE ? OR COALESCE(u.phone,'') LIKE ?)")
+        where.append(
+            """
+            (
+                u.full_name ILIKE ?
+                OR u.email ILIKE ?
+                OR COALESCE(u.phone, '') ILIKE ?
+            )
+            """
+        )
         params.extend([f"%{keyword}%"] * 3)
+
     if role in {"user", "admin"}:
         where.append("u.role = ?")
         params.append(role)
+
     if status in {"0", "1"}:
         where.append("u.is_active = ?")
         params.append(int(status))
-    clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+    clause = (
+        "WHERE " + " AND ".join(where)
+        if where
+        else ""
+    )
+
     connection = get_database()
+
     total = connection.execute(
-        f"SELECT COUNT(*) FROM users u {clause}", params
+        f"""
+        SELECT COUNT(*)
+        FROM users u
+        {clause}
+        """,
+        params,
     ).fetchone()[0]
-    rows = connection.execute(f"""
-        SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.created_at,
-               (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id=u.id) AS chat_count,
-               (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) AS last_activity
-        FROM users u {clause}
-        ORDER BY u.id DESC LIMIT ? OFFSET ?
-    """, params + [per_page, (page - 1) * per_page]).fetchall()
+
+    rows = connection.execute(
+        f"""
+        SELECT
+            u.id,
+            u.full_name,
+            u.email,
+            u.phone,
+            u.role,
+            u.is_active,
+            u.created_at,
+            (
+                SELECT COUNT(*)
+                FROM chat_logs c
+                WHERE c.user_id = u.id
+            ) AS chat_count,
+            (
+                SELECT MAX(created_at)
+                FROM chat_logs c
+                WHERE c.user_id = u.id
+            ) AS last_activity
+        FROM users u
+        {clause}
+        ORDER BY u.id DESC
+        LIMIT ?
+        OFFSET ?
+        """,
+        params + [per_page, (page - 1) * per_page],
+    ).fetchall()
+
     role_counts = {
-        "all": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
-        "user": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'user'").fetchone()[0],
-        "admin": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
+        "all": connection.execute(
+            "SELECT COUNT(*) FROM users"
+        ).fetchone()[0],
+
+        "user": connection.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'user'"
+        ).fetchone()[0],
+
+        "admin": connection.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin'"
+        ).fetchone()[0],
     }
-    latest_id = connection.execute("SELECT COALESCE(MAX(id), 0) FROM users").fetchone()[0]
-    database_file = str(DATABASE_PATH.resolve())
+
+    latest_id = connection.execute(
+        "SELECT COALESCE(MAX(id), 0) FROM users"
+    ).fetchone()[0]
+
     connection.close()
+
     response = jsonify({
         "items": [dict(row) for row in rows],
         "total": total,
         "counts": role_counts,
         "latest_id": latest_id,
-        "database_file": database_file,
+        "database_file": "PostgreSQL",
         "page": page,
-        "pages": max(1, (total + per_page - 1) // per_page),
+        "pages": max(
+            1,
+            (total + per_page - 1) // per_page,
+        ),
         "server_time": datetime.now().strftime("%H:%M:%S"),
     })
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store, no-cache, must-revalidate, max-age=0"
+
     response.headers["Pragma"] = "no-cache"
+
     return response
 
 
 @app.get("/admin/api/chats")
 @admin_required
 def admin_api_chats():
+    q = request.args.get("q", "").strip()
+    model = request.args.get("model", "").strip()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = 25
+
+    where = []
+    params = []
+
+    if q:
+        where.append(
+            """
+            (
+                c.question ILIKE ?
+                OR c.answer ILIKE ?
+                OR COALESCE(u.full_name, '') ILIKE ?
+            )
+            """
+        )
+        params.extend([f"%{q}%"] * 3)
+
+    if model:
+        where.append("c.model = ?")
+        params.append(model)
+
+    clause = (
+        "WHERE " + " AND ".join(where)
+        if where
+        else ""
+    )
+
+    connection = get_database()
+
+    total = connection.execute(
+        f"""
+        SELECT COUNT(*)
+        FROM chat_logs c
+        LEFT JOIN users u ON u.id = c.user_id
+        {clause}
+        """,
+        params,
+    ).fetchone()[0]
+
+    rows = connection.execute(
+        f"""
+        SELECT
+            c.id,
+            c.question,
+            c.answer,
+            c.model,
+            c.has_image,
+            c.latency_ms,
+            c.prompt_tokens,
+            c.completion_tokens,
+            c.status,
+            c.created_at,
+            COALESCE(u.full_name, 'Khách') AS full_name,
+            u.email
+        FROM chat_logs c
+        LEFT JOIN users u ON u.id = c.user_id
+        {clause}
+        ORDER BY c.id DESC
+        LIMIT ?
+        OFFSET ?
+        """,
+        params + [per_page, (page - 1) * per_page],
+    ).fetchall()
+
+    connection.close()
+
+    return jsonify({
+        "items": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "pages": max(
+            1,
+            (total + per_page - 1) // per_page,
+        ),
+        "server_time": datetime.now().strftime("%H:%M:%S"),
+    })
     q = request.args.get("q", "").strip()
     model = request.args.get("model", "").strip()
     page = max(request.args.get("page", 1, type=int), 1)
