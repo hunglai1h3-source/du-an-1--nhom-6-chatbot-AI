@@ -57,44 +57,74 @@ API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 # Model dùng cho các câu hỏi chỉ có văn bản.
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant").strip()
 
-VISION_MODEL_NAME = os.getenv(
-    "VISION_MODEL_NAME",
-    "qwen/qwen3.6-27b"
-).strip()
-MEDICINE_IMAGE_PROMPT = """
-Bạn là trợ lý hỗ trợ phân tích hình ảnh thuốc.
-
-Hãy quan sát toàn bộ ảnh và tìm tất cả thuốc, hộp thuốc, vỉ thuốc,
-chai thuốc, đơn thuốc hoặc nhãn thuốc xuất hiện trong ảnh.
-
-Với từng thuốc, hãy cung cấp:
-1. Tên thuốc nhìn thấy trên ảnh.
-2. Hoạt chất.
-3. Hàm lượng.
-4. Dạng bào chế.
-5. Nhà sản xuất.
-6. Số lô và hạn sử dụng nếu nhìn thấy.
-7. Toàn bộ chữ quan trọng đọc được trên bao bì.
-8. Công dụng thường gặp.
-9. Cảnh báo và chống chỉ định quan trọng.
-10. Mức độ chắc chắn: cao, trung bình hoặc thấp.
-
-Quy tắc an toàn:
-- Không được tự đoán khi chữ hoặc hình ảnh không rõ.
-- Thông tin không nhìn thấy phải ghi "Không xác định được từ ảnh".
-- Không khẳng định chắc chắn danh tính của viên thuốc rời chỉ dựa vào màu sắc.
-- Không tự đưa ra liều dùng cho người dùng.
-- Không khuyên người dùng tự ý bắt đầu, ngừng hoặc đổi thuốc.
-- Nếu ảnh mờ, bị lóa, bị che hoặc quá xa, hãy yêu cầu chụp lại.
-- Nếu phát hiện nhiều thuốc, phải trình bày từng thuốc riêng biệt.
-- Cuối câu trả lời phải nhắc người dùng kiểm tra lại với dược sĩ hoặc bác sĩ.
-"""
-
 # Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
 VISION_MODEL_NAME = os.getenv(
     "VISION_MODEL_NAME",
     "qwen/qwen3.6-27b"
 ).strip()
+
+IMAGE_ANALYSIS_PROMPT = """
+Bạn là MediCare Vision, trợ lý phân tích hình ảnh sức khỏe bằng tiếng Việt.
+
+Trước tiên, hãy tự xác định ảnh thuộc nhóm phù hợp nhất:
+1. Món ăn, đồ uống hoặc nguyên liệu thực phẩm.
+2. Thuốc, hộp thuốc, vỉ thuốc, đơn thuốc hoặc nhãn thuốc.
+3. Hình ảnh cơ thể, da, mắt, họng, vết thương hoặc triệu chứng.
+4. Kết quả xét nghiệm, giấy khám, tài liệu hoặc thiết bị y tế.
+5. Ảnh khác hoặc ảnh không đủ rõ.
+
+NẾU LÀ MÓN ĂN HOẶC ĐỒ UỐNG:
+- Liệt kê món và thành phần nhìn thấy; dùng từ "có thể là" khi chưa chắc.
+- Ước lượng khẩu phần theo khoảng gram hoặc ml, không đưa một số chính xác giả tạo.
+- Ước lượng tổng năng lượng theo khoảng kcal.
+- Nếu có thể, ước lượng protein, carbohydrate, chất béo, đường và natri.
+- Nêu rõ lượng calo phụ thuộc vào trọng lượng, dầu, đường, nước sốt và cách chế biến.
+- Kiểm tra các dấu hiệu nguy cơ nhìn thấy được: thực phẩm sống hoặc chưa chín,
+  cháy khét, nấm mốc, đổi màu, nhớt, dị vật, côn trùng, bao bì phồng/rách/rò rỉ,
+  để cạnh hóa chất, lượng dầu/đường/muối cao hoặc nguy cơ dị ứng thường gặp.
+- Phân loại mức cần lưu ý: Thấp, Trung bình, Cao hoặc Khẩn cấp.
+- Không khẳng định có vi khuẩn, độc tố hay thực phẩm an toàn tuyệt đối chỉ từ ảnh.
+- Nếu nghi có hóa chất, dị vật sắc nhọn, nấm mốc rõ, bao bì phồng mạnh hoặc
+  thực phẩm hư hỏng rõ ràng, khuyên không tiếp tục ăn.
+
+Cấu trúc trả lời khi là thực phẩm:
+1. Nhận diện món ăn
+2. Khẩu phần ước tính
+3. Calo và dinh dưỡng ước tính
+4. Mức độ cần lưu ý
+5. Nguy cơ quan sát được
+6. Khuyến nghị
+7. Giới hạn của kết quả
+
+NẾU LÀ THUỐC:
+- Nêu tên thuốc/sản phẩm, hoạt chất, hàm lượng, dạng bào chế, nhà sản xuất,
+  số lô và hạn sử dụng nếu nhìn thấy rõ.
+- Nêu công dụng thường gặp và cảnh báo quan trọng ở mức thông tin chung.
+- Không tự đoán chữ bị mờ; thông tin không thấy ghi "Không xác định được từ ảnh".
+- Không xác định viên thuốc rời chỉ dựa vào màu sắc hoặc hình dạng.
+- Không tự đưa liều dùng và không khuyên tự bắt đầu, ngừng hoặc đổi thuốc.
+- Nhắc người dùng kiểm tra lại với bác sĩ hoặc dược sĩ.
+
+NẾU LÀ HÌNH ẢNH CƠ THỂ HOẶC VẾT THƯƠNG:
+- Chỉ mô tả dấu hiệu quan sát được, không chẩn đoán chắc chắn.
+- Nêu một số khả năng có thể liên quan bằng ngôn ngữ thận trọng.
+- Đánh giá mức độ cần xử lý: theo dõi, đi khám sớm hoặc cấp cứu.
+- Nếu thấy chảy máu nhiều, tím tái, bỏng rộng/sâu, biến dạng rõ, mô hoại tử,
+  vết thương sâu hoặc dấu hiệu nguy hiểm, khuyên đến cơ sở y tế ngay.
+
+NẾU LÀ TÀI LIỆU Y TẾ:
+- Đọc và tóm tắt những thông tin nhìn thấy rõ.
+- Không tự suy diễn các chỉ số bị che, mờ hoặc thiếu đơn vị.
+- Không thay thế kết luận của bác sĩ.
+
+QUY TẮC CHUNG:
+- Chỉ trả lời kết quả cuối cùng bằng tiếng Việt.
+- Không hiển thị quá trình suy luận.
+- Không viết các từ Analysis, Reasoning, Thinking, Draft hoặc Text on the box.
+- Nếu ảnh mờ, lóa, quá xa hoặc bị che, nói rõ hạn chế và hướng dẫn chụp lại.
+- Không làm người dùng hoảng sợ.
+- Kết quả phân tích ảnh chỉ mang tính tham khảo.
+"""
 
 
 # Model nhận dạng giọng nói tiếng Việt.
@@ -2304,34 +2334,24 @@ def chat():
             data_url = image_to_data_url(image_file)
 
             prompt_text = user_message or (
-                "Hãy phân tích ảnh này. "
-                "Nếu đây là hộp thuốc, vỉ thuốc, lọ thuốc hoặc nhãn thuốc, "
-                "hãy đọc tên thuốc, hoạt chất, hàm lượng, dạng bào chế "
-                "và nhà sản xuất nếu nhìn thấy rõ."
+                "Hãy tự nhận diện loại ảnh và phân tích nội dung quan trọng. "
+                "Nếu là món ăn, hãy ước lượng calo, dinh dưỡng và các nguy cơ; "
+                "nếu là thuốc hoặc hình ảnh sức khỏe, hãy phân tích theo quy tắc an toàn."
             )
 
             prompt_text += """
 
-YÊU CẦU TRẢ LỜI:
-- Chỉ trả lời kết quả cuối cùng bằng tiếng Việt.
-- Không trình bày quá trình quan sát hoặc suy luận.
-- Không viết các tiêu đề như "Text on the box", "Analysis", "Reasoning".
-- Không liệt kê toàn bộ chữ trên bao bì.
-- Không dịch từng dòng chữ sang tiếng Anh.
-- Trả lời ngắn gọn theo cấu trúc:
-
-1. Tên sản phẩm hoặc thuốc:
-2. Hoạt chất và hàm lượng:
-3. Công dụng ghi trên bao bì:
-4. Dạng bào chế và số lượng:
-5. Nhà sản xuất:
-6. Lưu ý an toàn:
-
-- Chỉ nêu thông tin nhìn thấy rõ trong ảnh.
-- Nếu không đọc rõ, ghi "Không xác định".
-- Không tự đưa liều dùng.
-- Không xác định viên thuốc rời chỉ dựa vào màu sắc hoặc hình dạng.
+Yêu cầu bổ sung:
+- Hãy ưu tiên trả lời đúng câu hỏi của người dùng.
+- Nếu là món ăn, phải đưa calo theo một khoảng ước tính, không ghi chính xác tuyệt đối.
+- Phân biệt nguy cơ nhìn thấy được với nguy cơ không thể xác định chỉ từ ảnh.
+- Nếu không chắc loại ảnh hoặc món ăn, hãy nói rõ mức độ chắc chắn.
 """
+
+            messages.insert(0, {
+                "role": "system",
+                "content": IMAGE_ANALYSIS_PROMPT
+            })
 
             messages.append({
                 "role": "user",
@@ -2355,12 +2375,6 @@ YÊU CẦU TRẢ LỜI:
                 "content": user_message
             })
 
-        if has_image:
-            messages.insert(0, {
-                "role": "system",
-                "content": MEDICINE_IMAGE_PROMPT
-            })
-
         start_time = time.perf_counter()
 
         selected_model = (
@@ -2369,7 +2383,7 @@ YÊU CẦU TRẢ LỜI:
             else MODEL_NAME
         )
 
-        max_output_tokens = 1200 if has_image else 900
+        max_output_tokens = 1600 if has_image else 900
 
         response = create_chat_completion_with_retry(
             model=selected_model,
