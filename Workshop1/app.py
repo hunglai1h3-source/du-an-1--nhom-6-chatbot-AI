@@ -61,41 +61,75 @@ VISION_MODEL_NAME = os.getenv(
     "VISION_MODEL_NAME",
     "qwen/qwen3.6-27b"
 ).strip()
-MEDICINE_IMAGE_PROMPT = """
-Bạn là trợ lý hỗ trợ phân tích hình ảnh thuốc.
+HEALTH_IMAGE_PROMPT = """
+Bạn là mô-đun thị giác của MediCare AI, chuyên hỗ trợ phân tích hình ảnh sức khỏe.
 
-Hãy quan sát toàn bộ ảnh và tìm tất cả thuốc, hộp thuốc, vỉ thuốc,
-chai thuốc, đơn thuốc hoặc nhãn thuốc xuất hiện trong ảnh.
+Mục tiêu đầu tiên là xác định LOẠI ẢNH phù hợp nhất:
+- medicine: thuốc, hộp/vỉ/lọ thuốc, đơn thuốc, nhãn thuốc.
+- food: món ăn, đồ uống, khẩu phần, thực phẩm đóng gói.
+- skin: da, phát ban, mụn, nốt, sưng, bầm, tổn thương ngoài da.
+- wound: vết cắt, bỏng, trầy xước, vết thương, chảy dịch/chảy máu.
+- eye_throat: mắt, miệng, họng, lưỡi hoặc vùng niêm mạc nhìn thấy được.
+- lab_document: phiếu xét nghiệm, kết quả khám, đơn thuốc, tài liệu y tế.
+- device: nhiệt kế, máy đo huyết áp, máy đo SpO2, cân hoặc thiết bị sức khỏe.
+- general: ảnh sức khỏe khác hoặc không đủ rõ để phân loại.
 
-Với từng thuốc, hãy cung cấp:
-1. Tên thuốc nhìn thấy trên ảnh.
-2. Hoạt chất.
-3. Hàm lượng.
-4. Dạng bào chế.
-5. Nhà sản xuất.
-6. Số lô và hạn sử dụng nếu nhìn thấy.
-7. Toàn bộ chữ quan trọng đọc được trên bao bì.
-8. Công dụng thường gặp.
-9. Cảnh báo và chống chỉ định quan trọng.
-10. Mức độ chắc chắn: cao, trung bình hoặc thấp.
+NGUYÊN TẮC CHUNG:
+- Chỉ mô tả những gì thực sự quan sát được trong ảnh.
+- Tách rõ "Quan sát được" và "Nhận định tham khảo".
+- Không khẳng định chẩn đoán bệnh chỉ dựa trên ảnh.
+- Nếu ảnh mờ, lóa, quá xa, thiếu góc chụp hoặc chữ không đọc được, phải nói rõ.
+- Không bịa tên thuốc, chỉ số, thành phần, khối lượng hoặc thông tin không nhìn thấy.
+- Nếu có dấu hiệu có thể nguy hiểm, nêu cảnh báo ngắn gọn và khuyên đi khám/cấp cứu phù hợp.
+- Không hiển thị quá trình suy luận nội bộ.
+- Trả lời hoàn toàn bằng tiếng Việt.
 
-Quy tắc an toàn:
-- Không được tự đoán khi chữ hoặc hình ảnh không rõ.
-- Thông tin không nhìn thấy phải ghi "Không xác định được từ ảnh".
-- Không khẳng định chắc chắn danh tính của viên thuốc rời chỉ dựa vào màu sắc.
-- Không tự đưa ra liều dùng cho người dùng.
-- Không khuyên người dùng tự ý bắt đầu, ngừng hoặc đổi thuốc.
-- Nếu ảnh mờ, bị lóa, bị che hoặc quá xa, hãy yêu cầu chụp lại.
-- Nếu phát hiện nhiều thuốc, phải trình bày từng thuốc riêng biệt.
-- Cuối câu trả lời phải nhắc người dùng kiểm tra lại với dược sĩ hoặc bác sĩ.
+QUY TẮC THEO LOẠI ẢNH:
+
+1) MEDICINE
+- Đọc tên thuốc/sản phẩm, hoạt chất, hàm lượng, dạng bào chế, nhà sản xuất,
+  số lô, hạn dùng nếu nhìn thấy rõ.
+- Nếu có nhiều thuốc, phân tích từng thuốc riêng.
+- Có thể nêu công dụng thường gặp và lưu ý an toàn ở mức thông tin chung.
+- Không tự đưa liều dùng, không yêu cầu tự ngừng/đổi thuốc.
+- Không xác định viên thuốc rời chỉ dựa vào màu sắc/hình dạng.
+
+2) FOOD
+- Nhận diện từng món/thành phần nhìn thấy được.
+- Ước lượng khẩu phần theo khoảng, không giả vờ chính xác tuyệt đối.
+- Ước lượng tổng kcal theo khoảng và có thể ước lượng protein/carbohydrate/fat nếu hợp lý.
+- Nêu yếu tố làm sai số: dầu, đường, nước sốt, cách chế biến, kích thước khẩu phần.
+- Nếu có hồ sơ sức khỏe/mục tiêu, đưa gợi ý phù hợp nhưng không áp đặt chế độ cực đoan.
+
+3) SKIN / WOUND / EYE_THROAT
+- Mô tả vị trí, màu sắc, hình dạng, mức độ sưng, dịch, chảy máu hoặc dấu hiệu nhìn thấy được.
+- Nêu một số khả năng có thể liên quan, dùng ngôn ngữ không chắc chắn.
+- Không kết luận ung thư, nhiễm trùng hay bệnh cụ thể chỉ từ ảnh.
+- Hỏi tối đa 1 câu bổ sung quan trọng nếu cần: thời gian xuất hiện, đau/ngứa, sốt, chảy dịch,
+  lan rộng, chấn thương hoặc triệu chứng toàn thân.
+- Cảnh báo đi khám sớm/cấp cứu nếu có dấu hiệu nguy hiểm rõ ràng.
+
+4) LAB_DOCUMENT
+- Trích các chỉ số, đơn vị và khoảng tham chiếu chỉ khi đọc thấy rõ.
+- Nếu phiếu có đánh dấu H/L hoặc khoảng tham chiếu, có thể giải thích chỉ số cao/thấp theo chính phiếu đó.
+- Không tự tạo khoảng tham chiếu khi ảnh không có hoặc không đọc rõ.
+- Tóm tắt ý nghĩa chung; không chẩn đoán bệnh từ một chỉ số đơn lẻ.
+- Không hiển thị thông tin cá nhân không cần thiết nếu xuất hiện trên giấy tờ.
+
+5) DEVICE
+- Đọc chỉ số và đơn vị nếu nhìn thấy rõ.
+- Nêu ý nghĩa tổng quát, độ tin cậy phụ thuộc cách đo và bối cảnh.
+- Nếu chỉ số có vẻ đáng lo, khuyên đo lại đúng kỹ thuật và tìm hỗ trợ y tế khi có triệu chứng nguy hiểm.
+
+CẤU TRÚC TRẢ LỜI ƯU TIÊN:
+- Loại ảnh:
+- Quan sát được:
+- Đánh giá tham khảo:
+- Mức độ chắc chắn: cao / trung bình / thấp
+- Bạn nên làm gì tiếp theo:
+
+Chỉ dùng các mục phù hợp. Không kéo dài câu trả lời nếu ảnh đơn giản.
 """
-
-# Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
-VISION_MODEL_NAME = os.getenv(
-    "VISION_MODEL_NAME",
-    "qwen/qwen3.6-27b"
-).strip()
-
 
 # Model nhận dạng giọng nói tiếng Việt.
 AUDIO_TRANSCRIPTION_MODEL = os.getenv(
@@ -936,8 +970,56 @@ def clean_history(history):
     return cleaned
 
 
+def detect_image_request_mode(user_message):
+    """Định hướng loại phân tích từ câu hỏi; model vẫn phải tự kiểm tra nội dung ảnh."""
+    text = unicodedata.normalize("NFD", str(user_message or "").casefold())
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+
+    keyword_groups = {
+        "medicine": ("thuoc", "vien thuoc", "vo thuoc", "don thuoc", "hoat chat", "ham luong"),
+        "food": ("calo", "kcal", "mon an", "do an", "thuc an", "protein", "carb", "chat beo", "khau phan"),
+        "lab_document": ("xet nghiem", "ket qua mau", "chi so", "phieu kham", "cong thuc mau"),
+        "device": ("huyet ap", "spo2", "nhip tim", "nhiet do", "nhiet ke", "may do"),
+        "wound": ("vet thuong", "vet cat", "bong", "tray", "chay mau", "mui"),
+        "skin": ("da", "mun", "phat ban", "noi man", "not", "ngua", "sung"),
+        "eye_throat": ("mat", "hong", "luoi", "mieng", "amidan"),
+    }
+
+    for mode, keywords in keyword_groups.items():
+        if any(keyword in text for keyword in keywords):
+            return mode
+    return "auto"
+
+
+def build_image_user_prompt(user_message, effective_profile=None):
+    """Tạo yêu cầu vision theo ngữ cảnh thay vì ép mọi ảnh vào luồng nhận diện thuốc."""
+    mode = detect_image_request_mode(user_message)
+    question = str(user_message or "").strip()
+
+    parts = [
+        f"Chế độ gợi ý từ câu hỏi: {mode}.",
+        (f"Câu hỏi của người dùng: {question}" if question else
+         "Người dùng chưa ghi câu hỏi. Hãy tự xác định loại ảnh và phân tích nội dung sức khỏe hữu ích nhất."),
+        "Hãy tự kiểm tra loại ảnh thực tế; nếu chế độ gợi ý không khớp ảnh thì ưu tiên nội dung ảnh.",
+        "Không bịa thông tin không nhìn thấy. Nếu cần ước lượng (ví dụ calo/khẩu phần), phải dùng khoảng và nêu sai số.",
+    ]
+
+    if effective_profile:
+        try:
+            profile_text = format_profile_for_prompt(effective_profile)
+        except Exception:
+            profile_text = ""
+        if profile_text:
+            parts.append(
+                "Hồ sơ sức khỏe đã biết (chỉ dùng khi liên quan, không lặp lại máy móc):\n"
+                + profile_text
+            )
+
+    return "\n\n".join(parts)
+
+
 def image_to_data_url(image_file):
-    mime_type = image_file.mimetype
+    mime_type = (image_file.mimetype or "").lower().strip()
 
     if mime_type not in ALLOWED_IMAGE_TYPES:
         raise ValueError("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.")
@@ -949,6 +1031,20 @@ def image_to_data_url(image_file):
 
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise ValueError("Ảnh vượt quá dung lượng tối đa 5 MB.")
+
+    # Kiểm tra chữ ký file cơ bản để tránh file khác chỉ đổi đuôi/MIME thành ảnh.
+    is_jpeg = image_bytes.startswith(b"\xff\xd8\xff")
+    is_png = image_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+    is_webp = len(image_bytes) >= 12 and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP"
+
+    signature_ok = {
+        "image/jpeg": is_jpeg,
+        "image/png": is_png,
+        "image/webp": is_webp,
+    }.get(mime_type, False)
+
+    if not signature_ok:
+        raise ValueError("File tải lên không phải ảnh hợp lệ hoặc định dạng không khớp.")
 
     encoded = base64.b64encode(image_bytes).decode("utf-8")
     return f"data:{mime_type};base64,{encoded}"
@@ -2302,36 +2398,11 @@ def chat():
 
         if has_image:
             data_url = image_to_data_url(image_file)
-
-            prompt_text = user_message or (
-                "Hãy phân tích ảnh này. "
-                "Nếu đây là hộp thuốc, vỉ thuốc, lọ thuốc hoặc nhãn thuốc, "
-                "hãy đọc tên thuốc, hoạt chất, hàm lượng, dạng bào chế "
-                "và nhà sản xuất nếu nhìn thấy rõ."
+            vision_mode = detect_image_request_mode(user_message)
+            prompt_text = build_image_user_prompt(
+                user_message,
+                effective_profile=effective_profile,
             )
-
-            prompt_text += """
-
-YÊU CẦU TRẢ LỜI:
-- Chỉ trả lời kết quả cuối cùng bằng tiếng Việt.
-- Không trình bày quá trình quan sát hoặc suy luận.
-- Không viết các tiêu đề như "Text on the box", "Analysis", "Reasoning".
-- Không liệt kê toàn bộ chữ trên bao bì.
-- Không dịch từng dòng chữ sang tiếng Anh.
-- Trả lời ngắn gọn theo cấu trúc:
-
-1. Tên sản phẩm hoặc thuốc:
-2. Hoạt chất và hàm lượng:
-3. Công dụng ghi trên bao bì:
-4. Dạng bào chế và số lượng:
-5. Nhà sản xuất:
-6. Lưu ý an toàn:
-
-- Chỉ nêu thông tin nhìn thấy rõ trong ảnh.
-- Nếu không đọc rõ, ghi "Không xác định".
-- Không tự đưa liều dùng.
-- Không xác định viên thuốc rời chỉ dựa vào màu sắc hoặc hình dạng.
-"""
 
             messages.append({
                 "role": "user",
@@ -2358,7 +2429,7 @@ YÊU CẦU TRẢ LỜI:
         if has_image:
             messages.insert(0, {
                 "role": "system",
-                "content": MEDICINE_IMAGE_PROMPT
+                "content": HEALTH_IMAGE_PROMPT
             })
 
         start_time = time.perf_counter()
@@ -2369,7 +2440,7 @@ YÊU CẦU TRẢ LỜI:
             else MODEL_NAME
         )
 
-        max_output_tokens = 1200 if has_image else 900
+        max_output_tokens = 1500 if has_image else 900
 
         response = create_chat_completion_with_retry(
             model=selected_model,
@@ -2416,10 +2487,13 @@ YÊU CẦU TRẢ LỜI:
                 "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
             }
         record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data)
-        return jsonify({
+        result_payload = {
             "reply": reply,
             "profile_used": effective_profile or None,
-        })
+        }
+        if has_image:
+            result_payload["vision_mode"] = vision_mode
+        return jsonify(result_payload)
 
     except ValueError as error:
         return jsonify({
