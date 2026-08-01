@@ -29,9 +29,9 @@ function currentSession() {
   return sessions.find((session) => String(session.id) === String(currentChatId)) || null;
 }
 
-function createSession({ keepExisting = false } = {}) {
+function createSession({ keepExisting = false, profile = null } = {}) {
   if (keepExisting && currentSession()) return currentSession();
-  const profile = M.getSelectedProfile();
+  profile = profile || M.getSelectedProfile();
   const session = {
     id: `chat-${Date.now()}`,
     title: `Tư vấn cho ${profile.name}`,
@@ -62,6 +62,57 @@ function ensureSession() {
 
 function profileForSession(session) {
   return M.getProfiles().find((profile) => String(profile.id) === String(session?.profileId)) || M.getSelectedProfile();
+}
+
+function latestSessionForProfile(profileId) {
+  return sessions
+    .filter((item) => String(item.profileId) === String(profileId))
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0] || null;
+}
+
+function switchToProfile(profileId) {
+  const profiles = M.getProfiles();
+  const nextProfile = profiles.find((profile) => String(profile.id) === String(profileId));
+
+  if (!nextProfile) {
+    M.showToast("Không tìm thấy hồ sơ đã chọn.", "error");
+    return;
+  }
+
+  const oldSession = currentSession();
+  const oldProfileId = oldSession?.profileId;
+
+  if (String(oldProfileId) === String(nextProfile.id)) {
+    M.selectProfile(nextProfile);
+    renderProfiles();
+    closeMenus();
+    return;
+  }
+
+  // Không thay profileId của cuộc trò chuyện cũ để tránh trộn lịch sử giữa các thành viên.
+  M.selectProfile(nextProfile);
+  let targetSession = latestSessionForProfile(nextProfile.id);
+
+  if (!targetSession) {
+    targetSession = createSession({ profile: nextProfile });
+  } else {
+    currentChatId = targetSession.id;
+  }
+
+  // Dọn dữ liệu tạm của hồ sơ trước.
+  clearSelectedImage();
+  $("#chatInput").value = "";
+  autoResizeInput();
+  localStorage.removeItem(M.KEYS.specialty);
+  renderSpecialty();
+
+  persistSessions();
+  renderProfiles();
+  renderHistory();
+  renderMessages();
+  renderEnvironmentAdvice(M.readJSON(M.KEYS.locationContext, null));
+  closeMenus();
+  M.showToast(`Đã chuyển sang hồ sơ ${nextProfile.name}. Lịch sử và ngữ cảnh đã được tách riêng.`, "success");
 }
 
 function renderProfiles() {
@@ -100,16 +151,7 @@ function renderProfiles() {
     </button>`).join("");
 
   $$('[data-profile-id]', $("#profileMenu")).forEach((button) => button.addEventListener("click", () => {
-    M.selectProfile(button.dataset.profileId);
-    const session = ensureSession();
-    session.profileId = button.dataset.profileId;
-    session.updatedAt = new Date().toISOString();
-    persistSessions();
-    renderProfiles();
-    renderHistory();
-    renderEnvironmentAdvice(M.readJSON(M.KEYS.locationContext, null));
-    closeMenus();
-    M.showToast(`Đã chuyển sang hồ sơ ${M.getSelectedProfile().name}.`, "success");
+    switchToProfile(button.dataset.profileId);
   }));
 }
 
@@ -413,9 +455,17 @@ async function sendMessage(event) {
   const text = input.value.trim();
   if (!text && !selectedImage) { M.showToast("Hãy nhập câu hỏi hoặc chọn ảnh."); return; }
 
+  const selectedProfile = M.getSelectedProfile();
+  let session = ensureSession();
+
+  // Nếu giao diện vừa đổi hồ sơ nhưng cuộc trò chuyện chưa đổi, đồng bộ trước khi gửi.
+  if (String(session.profileId) !== String(selectedProfile.id)) {
+    switchToProfile(selectedProfile.id);
+    session = ensureSession();
+  }
+
   isSending = true;
   $("#sendButton").disabled = true;
-  const session = ensureSession();
   const previousHistory = session.messages.map(({ role, content }) => ({ role, content })).slice(-12);
   const imageForDisplay = selectedImageUrl;
   session.messages.push({ role: "user", content: text || "Hãy phân tích ảnh này.", time: nowTime(), imagePreview: imageForDisplay });
@@ -446,9 +496,11 @@ async function sendMessage(event) {
     height: activeProfile.height,
     weight: activeProfile.weight,
     condition: activeProfile.condition,
-    allergies: activeProfile.allergies
+    allergies: activeProfile.allergies,
+    profile_type: activeProfile.relationship === "Bản thân" ? "self" : "family"
   }));
-  formData.append("profile_context_version", "2");
+  formData.append("profile_context_version", "3");
+  formData.append("conversation_id", String(session.id));
 
   const environment = M.readJSON(M.KEYS.locationContext, null);
   if (environment) formData.append("environment", JSON.stringify(environment));
@@ -461,6 +513,12 @@ async function sendMessage(event) {
     const response = await fetch("/chat", { method: "POST", body: formData, credentials: "same-origin" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "AI chưa thể phản hồi.");
+
+    const returnedProfileId = data.profile_used?.id;
+    if (returnedProfileId != null && String(returnedProfileId) !== String(activeProfile.id)) {
+      throw new Error("Máy chủ trả về sai hồ sơ tư vấn. Vui lòng tải lại trang.");
+    }
+
     session.messages.push({
       role: "assistant",
       content: data.reply,
@@ -770,7 +828,15 @@ async function initialize() {
   $("#askEnvironmentButton").addEventListener("click", askAboutCurrentEnvironment);
   $("#viewAllPharmaciesButton").addEventListener("click", () => window.open(M.mapsSearchUrl(M.readJSON(M.KEYS.locationContext, null)), "_blank", "noopener,noreferrer"));
   $("#notificationButton").addEventListener("click", () => M.showToast("Bạn có 3 nhắc nhở sức khỏe chưa xem."));
-  window.addEventListener("medicare:profile-changed", () => { renderProfiles(); renderEnvironmentAdvice(M.readJSON(M.KEYS.locationContext, null)); });
+  window.addEventListener("medicare:profile-changed", () => {
+    const selected = M.getSelectedProfile();
+    if (String(currentSession()?.profileId) !== String(selected.id)) {
+      switchToProfile(selected.id);
+      return;
+    }
+    renderProfiles();
+    renderEnvironmentAdvice(M.readJSON(M.KEYS.locationContext, null));
+  });
   window.addEventListener("medicare:auth-changed", async (event) => {
     if (event.detail) {
       await M.syncProfiles(event.detail);

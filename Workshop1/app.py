@@ -19,6 +19,8 @@ import time
 import webbrowser
 import csv
 import shutil
+import subprocess
+import tempfile
 import unicodedata
 from uuid import uuid4
 from urllib.parse import urlencode
@@ -52,16 +54,16 @@ app.config["SESSION_COOKIE_SECURE"] = (
 # Làm mới thời hạn cookie khi người dùng tiếp tục sử dụng website.
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
-API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # Model dùng cho các câu hỏi chỉ có văn bản.
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant").strip()
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash").strip().removeprefix("models/")
 
 # Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
 VISION_MODEL_NAME = os.getenv(
     "VISION_MODEL_NAME",
-    "qwen/qwen3.6-27b"
-).strip()
+    "gemini-2.5-flash"
+).strip().removeprefix("models/")
 
 IMAGE_ANALYSIS_PROMPT = """
 Bạn là MediCare Vision, trợ lý phân tích hình ảnh sức khỏe bằng tiếng Việt.
@@ -130,8 +132,8 @@ QUY TẮC CHUNG:
 # Model nhận dạng giọng nói tiếng Việt.
 AUDIO_TRANSCRIPTION_MODEL = os.getenv(
     "AUDIO_TRANSCRIPTION_MODEL",
-    "whisper-large-v3-turbo"
-).strip()
+    "gemini-2.5-flash"
+).strip().removeprefix("models/")
 
 ALLOWED_AUDIO_EXTENSIONS = {
     ".webm", ".wav", ".mp3", ".m4a",
@@ -147,14 +149,14 @@ print("MODEL GIỌNG NÓI ĐANG DÙNG:", AUDIO_TRANSCRIPTION_MODEL)
 if API_KEY:
     client = OpenAI(
         api_key=API_KEY,
-        base_url="https://api.groq.com/openai/v1",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         timeout=40.0,
         max_retries=2,
     )
 else:
     client = None
     print(
-        "CẢNH BÁO: Chưa có Groq API key. "
+        "CẢNH BÁO: Chưa có Gemini API key. "
         "Đăng ký và đăng nhập vẫn hoạt động."
     )
 
@@ -764,6 +766,17 @@ def initialize_database():
             )
         """)
 
+        # Liên kết mỗi lượt chat với đúng hồ sơ đang được tư vấn.
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS profile_type TEXT"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS profile_ref TEXT"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS profile_name TEXT"
+        )
+
         connection.execute("""
             CREATE TABLE IF NOT EXISTS admin_audit_logs (
                 id SERIAL PRIMARY KEY,
@@ -917,18 +930,44 @@ def get_active_system_prompt():
     }
 
 
-def record_chat_log(question, answer, model, has_image, latency_ms, status="success", error_message="", usage=None):
+def record_chat_log(
+    question,
+    answer,
+    model,
+    has_image,
+    latency_ms,
+    status="success",
+    error_message="",
+    usage=None,
+    profile=None,
+):
+    """Ghi log và gắn log với đúng hồ sơ đang được tư vấn."""
     try:
         usage = usage or {}
+        profile = profile or {}
         connection = get_database()
         connection.execute(
-            """INSERT INTO chat_logs (user_id, question, answer, model, has_image, latency_ms,
-                   prompt_tokens, completion_tokens, status, error_message)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (session.get("user_id"), str(question)[:4000], str(answer or "")[:12000],
-             str(model)[:120], int(bool(has_image)), int(latency_ms or 0),
-             int(usage.get("prompt_tokens", 0) or 0), int(usage.get("completion_tokens", 0) or 0),
-             str(status)[:30], str(error_message or "")[:1000]),
+            """INSERT INTO chat_logs (
+                   user_id, question, answer, model, has_image, latency_ms,
+                   prompt_tokens, completion_tokens, status, error_message,
+                   profile_type, profile_ref, profile_name
+               )
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                session.get("user_id"),
+                str(question)[:4000],
+                str(answer or "")[:12000],
+                str(model)[:120],
+                int(bool(has_image)),
+                int(latency_ms or 0),
+                int(usage.get("prompt_tokens", 0) or 0),
+                int(usage.get("completion_tokens", 0) or 0),
+                str(status)[:30],
+                str(error_message or "")[:1000],
+                str(profile.get("profile_type") or "self")[:30],
+                str(profile.get("id") or profile.get("profile_ref") or "self")[:120],
+                str(profile.get("name") or "")[:200],
+            ),
         )
         connection.commit()
         connection.close()
@@ -1000,7 +1039,7 @@ def build_error_response(error):
     status_code = get_error_status(error)
     error_text = str(error).lower()
 
-    print("CHI TIẾT LỖI GROQ:", repr(error))
+    print("CHI TIẾT LỖI GEMINI:", repr(error))
     print("STATUS CODE:", status_code)
 
     if (
@@ -1012,7 +1051,7 @@ def build_error_response(error):
         ):
             return jsonify({
                 "error": (
-                    "Groq đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
+                    "Gemini đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
                     "Vui lòng chờ hạn mức được đặt lại."
                 )
             }), 429
@@ -1043,7 +1082,7 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Hệ thống Groq đang quá tải hoặc tạm thời không khả dụng. "
+                "Hệ thống Gemini đang quá tải hoặc tạm thời không khả dụng. "
                 "Vui lòng đợi một lúc rồi thử lại."
             )
         }), 503
@@ -1056,9 +1095,10 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Không thể sử dụng model Groq đã cấu hình. "
+                "Không tìm thấy model Gemini phù hợp với API key hiện tại. "
                 f"Text model: {MODEL_NAME}; vision model: {VISION_MODEL_NAME}. "
-                "Hãy kiểm tra MODEL_NAME và VISION_MODEL_NAME trong file .env."
+                "Hãy dùng API key tạo trực tiếp tại Google AI Studio, kiểm tra thanh toán/quyền truy cập, "
+                "hoặc đặt MODEL_NAME=gemini-2.5-flash trong file .env."
             )
         }), 404
 
@@ -1068,7 +1108,7 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Groq phản hồi quá lâu. Vui lòng gửi lại câu hỏi."
+                "Gemini phản hồi quá lâu. Vui lòng gửi lại câu hỏi."
             )
         }), 504
 
@@ -1078,7 +1118,7 @@ def build_error_response(error):
     ):
         return jsonify({
             "error": (
-                "Không thể kết nối tới máy chủ Groq. "
+                "Không thể kết nối tới máy chủ Gemini. "
                 "Hãy kiểm tra mạng Internet rồi thử lại."
             )
         }), 503
@@ -1565,94 +1605,174 @@ def logout():
 
 @app.post("/transcribe")
 def transcribe_audio():
-    """Nhận file ghi âm từ trình duyệt và chuyển giọng nói tiếng Việt thành chữ."""
-    if client is None:
+    """Nhận bản ghi âm và chuyển lời nói tiếng Việt thành văn bản bằng Gemini native API."""
+    if not API_KEY:
         return jsonify({
-            "error": (
-                "Chưa cấu hình Groq API key. "
-                "Hãy kiểm tra file .env."
-            )
+            "error": "Chưa cấu hình GEMINI_API_KEY trong file .env."
         }), 503
 
     audio_file = request.files.get("audio")
-
     if audio_file is None or not audio_file.filename:
-        return jsonify({
-            "error": "Bạn chưa gửi file âm thanh."
-        }), 400
+        return jsonify({"error": "Bạn chưa gửi file âm thanh."}), 400
 
     extension = Path(audio_file.filename).suffix.lower()
-
     if extension not in ALLOWED_AUDIO_EXTENSIONS:
         return jsonify({
-            "error": (
-                "Định dạng âm thanh không được hỗ trợ. "
-                "Hãy dùng WEBM, WAV, MP3, M4A, OGG hoặc FLAC."
-            )
+            "error": "Định dạng âm thanh không được hỗ trợ. Hãy dùng WEBM, WAV, MP3, M4A, OGG hoặc FLAC."
         }), 400
 
     audio_bytes = audio_file.read()
-
     if not audio_bytes:
-        return jsonify({
-            "error": "File âm thanh đang trống."
-        }), 400
-
+        return jsonify({"error": "File âm thanh đang trống."}), 400
     if len(audio_bytes) > MAX_AUDIO_BYTES:
-        return jsonify({
-            "error": "File âm thanh vượt quá dung lượng tối đa 5 MB."
-        }), 400
+        return jsonify({"error": "File âm thanh vượt quá dung lượng tối đa 5 MB."}), 400
 
-    mime_type = (
-        audio_file.mimetype
-        or "application/octet-stream"
-    )
+    # Gemini hỗ trợ trực tiếp WAV, MP3, AIFF, AAC, OGG và FLAC.
+    # Trình duyệt thường ghi WEBM/M4A nên chuyển sang WAV bằng ffmpeg trước khi gửi.
+    direct_mime_types = {
+        ".wav": "audio/wav",
+        ".mp3": "audio/mp3",
+        ".aiff": "audio/aiff",
+        ".aac": "audio/aac",
+        ".ogg": "audio/ogg",
+        ".flac": "audio/flac",
+    }
 
-    safe_filename = f"voice{extension}"
-
+    converted_path = None
     try:
-        transcription = (
-            client.audio.transcriptions.create(
-                file=(
-                    safe_filename,
-                    audio_bytes,
-                    mime_type
-                ),
-                model=AUDIO_TRANSCRIPTION_MODEL,
-                language="vi",
-                response_format="json",
-                temperature=0.0,
-                prompt=(
-                    "Đây là câu hỏi sức khỏe bằng tiếng Việt. "
-                    "Giữ đúng tên thuốc, triệu chứng và thuật ngữ y tế."
-                )
-            )
-        )
+        if extension in direct_mime_types:
+            gemini_audio_bytes = audio_bytes
+            gemini_mime_type = direct_mime_types[extension]
+        else:
+            ffmpeg_path = shutil.which("ffmpeg")
+            if not ffmpeg_path:
+                return jsonify({
+                    "error": (
+                        "Máy chủ chưa có FFmpeg nên không đọc được bản ghi WEBM/M4A từ trình duyệt. "
+                        "Hãy cài FFmpeg rồi khởi động lại ứng dụng."
+                    )
+                }), 503
 
-        transcript_text = str(
-            getattr(transcription, "text", "") or ""
+            with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as source_file:
+                source_file.write(audio_bytes)
+                source_path = source_file.name
+
+            converted_path = source_path + ".wav"
+            conversion = subprocess.run(
+                [
+                    ffmpeg_path, "-y", "-i", source_path,
+                    "-vn", "-ac", "1", "-ar", "16000",
+                    "-c:a", "pcm_s16le", converted_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            try:
+                os.remove(source_path)
+            except OSError:
+                pass
+
+            if conversion.returncode != 0 or not os.path.isfile(converted_path):
+                detail = conversion.stderr.decode("utf-8", errors="ignore")[-500:]
+                print("FFmpeg conversion error:", detail)
+                return jsonify({
+                    "error": "Không thể xử lý bản ghi âm. Hãy thử nói lại hoặc kiểm tra quyền micro."
+                }), 422
+
+            with open(converted_path, "rb") as converted_file:
+                gemini_audio_bytes = converted_file.read()
+            gemini_mime_type = "audio/wav"
+
+        encoded_audio = base64.b64encode(gemini_audio_bytes).decode("ascii")
+        model_name = AUDIO_TRANSCRIPTION_MODEL.removeprefix("models/")
+        endpoint = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model_name}:generateContent?key={API_KEY}"
+        )
+        payload = {
+            "contents": [{
+                "role": "user",
+                "parts": [
+                    {
+                        "text": (
+                            "Phiên âm chính xác lời nói tiếng Việt trong đoạn âm thanh này. "
+                            "Chỉ trả về nội dung đã nghe, không thêm giải thích, tiêu đề hay dấu ngoặc. "
+                            "Giữ nguyên tên thuốc, triệu chứng, con số và thuật ngữ y tế. "
+                            "Nếu không nghe rõ, chỉ ghi phần nghe rõ; không tự đoán."
+                        )
+                    },
+                    {
+                        "inlineData": {
+                            "mimeType": gemini_mime_type,
+                            "data": encoded_audio,
+                        }
+                    },
+                ],
+            }],
+            "generationConfig": {
+                "temperature": 0.0,
+                "maxOutputTokens": 800,
+            },
+        }
+
+        request_object = Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(request_object, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+
+        candidates = result.get("candidates") or []
+        parts = (((candidates[0] if candidates else {}).get("content") or {}).get("parts") or [])
+        transcript_text = "".join(
+            str(part.get("text") or "") for part in parts if isinstance(part, dict)
         ).strip()
+        transcript_text = re.sub(r"^```(?:text)?\s*|\s*```$", "", transcript_text, flags=re.I).strip()
 
         if not transcript_text:
+            block_reason = ((result.get("promptFeedback") or {}).get("blockReason") or "")
+            print("Gemini transcription empty response:", result)
             return jsonify({
                 "error": (
-                    "Không nhận dạng được lời nói. "
-                    "Hãy nói lại gần micro hơn."
+                    "Không nhận dạng được lời nói. Hãy nói gần micro hơn và thử lại."
+                    + (f" ({block_reason})" if block_reason else "")
                 )
             }), 422
 
-        return jsonify({
-            "text": transcript_text,
-            "model": AUDIO_TRANSCRIPTION_MODEL
-        })
+        return jsonify({"text": transcript_text, "model": model_name})
 
+    except HTTPError as error:
+        error_body = ""
+        try:
+            error_body = error.read().decode("utf-8", errors="ignore")
+        except Exception:
+            pass
+        print("Gemini speech HTTP error:", error.code, error_body)
+        if error.code in {401, 403}:
+            return jsonify({"error": "Gemini API key không hợp lệ hoặc chưa được cấp quyền."}), 401
+        if error.code == 404:
+            return jsonify({
+                "error": f"Model {AUDIO_TRANSCRIPTION_MODEL} không hỗ trợ hoặc không tồn tại."
+            }), 404
+        if error.code == 429:
+            return jsonify({"error": "Gemini đang vượt giới hạn sử dụng. Hãy thử lại sau."}), 429
+        return jsonify({"error": "Gemini không thể xử lý âm thanh lúc này."}), 502
+    except (URLError, TimeoutError) as error:
+        print("Gemini speech network error:", repr(error))
+        return jsonify({"error": "Không thể kết nối Gemini hoặc yêu cầu đã quá thời gian."}), 504
     except Exception as error:
-        print(
-            "Groq speech-to-text error: "
-            f"{type(error).__name__}: {error}"
-        )
-        return build_error_response(error)
-
+        print("Gemini speech-to-text error:", type(error).__name__, repr(error))
+        return jsonify({"error": "Hệ thống nhận dạng giọng nói đang gặp lỗi tạm thời."}), 500
+    finally:
+        if converted_path:
+            try:
+                os.remove(converted_path)
+            except OSError:
+                pass
 
 
 # =========================
@@ -1725,7 +1845,7 @@ def detect_emergency_message(message):
     """
     Phát hiện nhanh dấu hiệu nguy hiểm.
 
-    Hàm này chạy cục bộ nên phản hồi gần như tức thì, kể cả khi Groq lỗi,
+    Hàm này chạy cục bộ nên phản hồi gần như tức thì, kể cả khi Gemini lỗi,
     quá tải hoặc chưa cấu hình API key.
     """
     normalized = normalize_vietnamese_for_matching(message)
@@ -1852,11 +1972,53 @@ def load_family_profile_context(connection, user_id, member_id):
     })
 
 
+def normalize_profile_reference(selected_profile, user_id=None):
+    """Chuẩn hóa ID hồ sơ do frontend gửi lên.
+
+    Hỗ trợ các dạng: self, self-12, user-12, 7, family-7, member-7.
+    """
+    raw_id = first_present(selected_profile, "id", "profile_id", "member_id")
+    selected_type = str(
+        first_present(selected_profile, "profile_type", "type") or ""
+    ).strip().lower()
+
+    raw_text = str(raw_id or "").strip()
+    lowered = raw_text.lower()
+
+    if selected_type == "self" or lowered in {"", "self", "me"}:
+        return "self", "self", raw_id
+
+    if lowered.startswith(("self-", "user-")):
+        return "self", "self", raw_id
+
+    if user_id is not None and raw_id in (user_id, str(user_id)):
+        return "self", "self", raw_id
+
+    family_match = re.fullmatch(r"(?:family|member)[-_:]?(\d+)", lowered)
+    if family_match:
+        return "family", int(family_match.group(1)), raw_id
+
+    if selected_type in {"family", "member"}:
+        try:
+            return "family", int(raw_id), raw_id
+        except (TypeError, ValueError):
+            return "family", None, raw_id
+
+    try:
+        return "family", int(raw_id), raw_id
+    except (TypeError, ValueError):
+        return selected_type or "unknown", None, raw_id
+
+
 def resolve_effective_profile(selected_profile):
-    """Luôn xác minh hồ sơ theo user đang đăng nhập; không trộn dữ liệu hai người."""
+    """Xác minh hồ sơ theo user đang đăng nhập và không trộn dữ liệu hai người."""
+    selected_profile = selected_profile if isinstance(selected_profile, dict) else {}
+
     if "user_id" not in session:
         return compact_profile({
+            "profile_type": first_present(selected_profile, "profile_type", "type"),
             "id": first_present(selected_profile, "id", "profile_id"),
+            "client_profile_id": first_present(selected_profile, "id", "profile_id"),
             "name": first_present(selected_profile, "name", "full_name"),
             "relationship": first_present(selected_profile, "relationship"),
             "age": first_present(selected_profile, "age"),
@@ -1873,16 +2035,33 @@ def resolve_effective_profile(selected_profile):
         })
 
     user_id = session["user_id"]
-    selected_id = first_present(selected_profile, "id", "profile_id", "member_id")
-    selected_type = str(first_present(selected_profile, "profile_type", "type") or "").lower()
+    profile_kind, canonical_id, client_id = normalize_profile_reference(
+        selected_profile,
+        user_id,
+    )
+
     connection = get_database()
     try:
-        is_self = selected_id in (None, "self", "me", user_id, str(user_id)) or selected_type == "self"
-        if not is_self:
-            family_profile = load_family_profile_context(connection, user_id, selected_id)
+        if profile_kind == "family" and canonical_id is not None:
+            family_profile = load_family_profile_context(
+                connection,
+                user_id,
+                canonical_id,
+            )
             if family_profile:
+                family_profile["canonical_id"] = family_profile.get("id")
+                family_profile["client_profile_id"] = (
+                    client_id if client_id not in (None, "") else family_profile.get("id")
+                )
                 return family_profile
-        return load_self_profile_context(connection, user_id)
+
+        self_profile = load_self_profile_context(connection, user_id)
+        if self_profile:
+            self_profile["canonical_id"] = "self"
+            self_profile["client_profile_id"] = (
+                client_id if client_id not in (None, "") else "self"
+            )
+        return self_profile
     finally:
         connection.close()
 
@@ -1976,6 +2155,61 @@ def is_weight_plan_request(text):
     ))
 
 
+GEMINI_FALLBACK_MODELS = [
+    name.strip().removeprefix("models/")
+    for name in os.getenv(
+        "GEMINI_FALLBACK_MODELS",
+        "gemini-2.5-flash,gemini-flash-latest"
+    ).split(",")
+    if name.strip()
+]
+
+
+def gemini_model_candidates(preferred_model):
+    """Trả về danh sách model không trùng để tự chuyển khi model cấu hình bị 404."""
+    candidates = [str(preferred_model or "").strip().removeprefix("models/")]
+    candidates.extend(GEMINI_FALLBACK_MODELS)
+    return list(dict.fromkeys(name for name in candidates if name))
+
+
+def is_model_not_found_error(error):
+    status = get_error_status(error)
+    text = str(error).lower()
+    return (
+        status == 404
+        or "404" in text
+        or "not_found" in text
+        or "model not found" in text
+        or "is not found" in text
+        or "not supported for generatecontent" in text
+    )
+
+
+def create_gemini_completion_with_fallback(**kwargs):
+    """Gọi Gemini và tự thử model dự phòng nếu model hiện tại không tồn tại."""
+    preferred_model = kwargs.get("model", MODEL_NAME)
+    last_error = None
+
+    for model_name in gemini_model_candidates(preferred_model):
+        request_kwargs = dict(kwargs)
+        request_kwargs["model"] = model_name
+        try:
+            response = client.chat.completions.create(**request_kwargs)
+            if model_name != preferred_model:
+                print(
+                    f"⚠️ Model {preferred_model} không dùng được; "
+                    f"đã tự chuyển sang {model_name}."
+                )
+            return response
+        except Exception as error:
+            last_error = error
+            if not is_model_not_found_error(error):
+                raise
+            print(f"Model Gemini không khả dụng: {model_name}: {error}")
+
+    raise last_error or RuntimeError("Không tìm thấy model Gemini khả dụng.")
+
+
 AI_CONCURRENCY = max(1, int(os.getenv("AI_CONCURRENCY", "8")))
 AI_REQUEST_SEMAPHORE = __import__("threading").BoundedSemaphore(AI_CONCURRENCY)
 
@@ -1990,7 +2224,7 @@ def create_chat_completion_with_retry(**kwargs):
     try:
         for attempt in range(attempts):
             try:
-                return client.chat.completions.create(**kwargs)
+                return create_gemini_completion_with_fallback(**kwargs)
             except Exception as error:
                 last_error = error
                 status = get_error_status(error)
@@ -2107,7 +2341,7 @@ def chat():
         if client is None:
             return jsonify({
                 "error": (
-                    "Chưa cấu hình Groq API key. "
+                    "Chưa cấu hình Gemini API key. "
                     "Hãy kiểm tra file .env trong thư mục Workshop1."
                 )
             }), 503
@@ -2145,56 +2379,9 @@ def chat():
                     "medical_notes": profile["medical_notes"],
                 }
 
-        # Hồ sơ đang được chọn trên giao diện.
-        selected_profile_context = {}
-
-        if selected_profile:
-            selected_profile_context = {
-                "id": selected_profile.get("id"),
-                "name": selected_profile.get("name"),
-                "relationship": selected_profile.get("relationship"),
-                "age": selected_profile.get("age"),
-                "sex": selected_profile.get("gender"),
-                "height_cm": selected_profile.get("height"),
-                "latest_weight_kg": selected_profile.get("weight"),
-                "medical_notes": selected_profile.get("condition"),
-                "allergies": selected_profile.get("allergies"),
-            }
-
-        unknown_values = {
-            None,
-            "",
-            "--",
-            "Chưa cập nhật",
-        }
-
-        # Loại dữ liệu trống trước khi ghép để dữ liệu rỗng trên giao diện
-        # không ghi đè tuổi, chiều cao hoặc cân nặng đã lưu trong database.
-        account_profile_context = {
-            key: value
-            for key, value in account_profile_context.items()
-            if value not in unknown_values
-        }
-        selected_profile_context = {
-            key: value
-            for key, value in selected_profile_context.items()
-            if value not in unknown_values
-        }
-
-        # Chỉ gửi một hồ sơ duy nhất cho AI.
-        if selected_profile_context:
-            if selected_profile_context.get("relationship") == "Bản thân":
-                # Hồ sơ bản thân: kết hợp dữ liệu giao diện với dữ liệu database.
-                effective_profile = {
-                    **account_profile_context,
-                    **selected_profile_context,
-                }
-            else:
-                # Đang tư vấn cho người nhà:
-                # không gửi lẫn hồ sơ của chủ tài khoản.
-                effective_profile = selected_profile_context
-        else:
-            effective_profile = account_profile_context
+        # Xác minh hồ sơ đang chọn bằng dữ liệu trong database.
+        # Không tin hoàn toàn dữ liệu gửi từ trình duyệt và không trộn hồ sơ người khác.
+        effective_profile = resolve_effective_profile(selected_profile or {})
 
         if effective_profile:
             messages.append({
@@ -2203,6 +2390,10 @@ def chat():
                     "HỒ SƠ DUY NHẤT ĐANG ĐƯỢC DÙNG ĐỂ TƯ VẤN:\n"
                     + format_profile_for_prompt(effective_profile)
                     + "\n\nQUY TẮC BẮT BUỘC KHI DÙNG HỒ SƠ:\n"
+                    "- Đây là người đang được tư vấn trong lượt hiện tại. Không được dùng "
+                    "thông tin của hồ sơ hoặc cuộc trò chuyện thuộc người khác.\n"
+                    "- Nếu lịch sử có nội dung mâu thuẫn với hồ sơ hiện tại, ưu tiên hồ sơ "
+                    "hiện tại và bỏ qua phần lịch sử mâu thuẫn.\n"
                     "- Mọi trường xuất hiện trong hồ sơ trên đều được xem là "
                     "thông tin người dùng đã cung cấp.\n"
                     "- Không hỏi lại tuổi, giới tính, chiều cao, cân nặng, "
@@ -2383,7 +2574,7 @@ Yêu cầu bổ sung:
             else MODEL_NAME
         )
 
-        max_output_tokens = 1600 if has_image else 900
+        max_output_tokens = 3200 if has_image else 2400
 
         response = create_chat_completion_with_retry(
             model=selected_model,
@@ -2394,7 +2585,7 @@ Yêu cầu bổ sung:
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000)
         print(
-            f"Thời gian Groq phản hồi bằng {selected_model}: "
+            f"Thời gian Gemini phản hồi bằng {selected_model}: "
             f"{elapsed_ms / 1000:.2f} giây"
         )
         if not response.choices:
@@ -2404,12 +2595,21 @@ Yêu cầu bổ sung:
 
         reply = response.choices[0].message.content or ""
 
+        finish_reason = getattr(
+            response.choices[0],
+            "finish_reason",
+            None
+        )
+
+        print("LÝ DO GEMINI DỪNG:", finish_reason)
+
         reply = re.sub(
             r"<think>.*?</think>\s*",
             "",
             reply,
             flags=re.DOTALL | re.IGNORECASE
         ).strip()
+        
         # Xóa các tiêu đề phân tích không cần thiết
         reply = re.sub(
             r"(?im)^\s*[•\-*]?\s*(analysis|reasoning|thought process|text on the box)\s*:?\s*$",
@@ -2429,10 +2629,19 @@ Yêu cầu bổ sung:
                 "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
                 "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
             }
-        record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data)
+        record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data, profile=effective_profile)
+        response_profile = dict(effective_profile or {})
+        if response_profile:
+            # Trả lại đúng ID frontend đã gửi để xác nhận không nhầm hồ sơ.
+            # canonical_id vẫn giữ ID chuẩn trong database.
+            response_profile["id"] = response_profile.get(
+                "client_profile_id",
+                response_profile.get("id"),
+            )
+
         return jsonify({
             "reply": reply,
-            "profile_used": effective_profile or None,
+            "profile_used": response_profile or None,
         })
 
     except ValueError as error:
@@ -2442,7 +2651,7 @@ Yêu cầu bổ sung:
 
     except Exception as error:
         print(
-            f"Groq API error: "
+            f"Gemini API error: "
             f"{type(error).__name__}: {error}"
         )
         try:
@@ -2452,6 +2661,7 @@ Yêu cầu bổ sung:
                 locals().get("has_image", False),
                 round((time.perf_counter() - locals().get("start_time", time.perf_counter())) * 1000),
                 status="error", error_message=str(error),
+                profile=locals().get("effective_profile") or {},
             )
         except Exception:
             pass
@@ -3217,7 +3427,7 @@ def due_reminders():
 def health_recommendations():
     if client is None:
         return jsonify({
-            "error": "Chưa cấu hình Groq API key."
+            "error": "Chưa cấu hình Gemini API key."
         }), 503
 
     data = request.get_json(silent=True) or {}
@@ -3291,7 +3501,7 @@ Yêu cầu bắt buộc: 1
 """
 
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion_with_retry(
             model=MODEL_NAME,
             messages=[
                 SYSTEM_PROMPT,
@@ -3323,7 +3533,7 @@ Yêu cầu bắt buộc: 1
         })
 
     except Exception as error:
-        print(f"Groq API error: {type(error).__name__}: {error}")
+        print(f"Gemini API error: {type(error).__name__}: {error}")
         return build_error_response(error)
 
 
@@ -3571,7 +3781,7 @@ def admin_prompt_activate(version_id):
 @app.get("/admin/ai-settings")
 @admin_required
 def admin_ai_settings():
-    settings={"text_model":get_setting("text_model",MODEL_NAME),"vision_model":get_setting("vision_model",VISION_MODEL_NAME),"temperature":get_setting("temperature","0.3"),"max_tokens":get_setting("max_tokens","1000"),"provider":"Groq","api_configured":bool(API_KEY)}
+    settings={"text_model":get_setting("text_model",MODEL_NAME),"vision_model":get_setting("vision_model",VISION_MODEL_NAME),"temperature":get_setting("temperature","0.3"),"max_tokens":get_setting("max_tokens","1000"),"provider":"Gemini","api_configured":bool(API_KEY)}
     return render_template("admin/ai_settings.html",settings=settings)
 
 
