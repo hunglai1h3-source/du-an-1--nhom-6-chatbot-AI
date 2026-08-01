@@ -652,8 +652,37 @@ def initialize_database():
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'user',
                 is_active INTEGER NOT NULL DEFAULT 1,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_login_at TIMESTAMPTZ,
+                login_count INTEGER NOT NULL DEFAULT 0
             )
+        """)
+
+        # Tự nâng cấp database cũ mà không xóa tài khoản hiện có.
+        connection.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ"
+        )
+        connection.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0"
+        )
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS login_history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                login_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ip_address TEXT,
+                user_agent TEXT,
+                CONSTRAINT fk_login_history_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_login_history_user_date
+            ON login_history(user_id, login_at DESC)
         """)
 
         connection.execute("""
@@ -1546,22 +1575,47 @@ def login():
         """
         SELECT *
         FROM users
-        WHERE email = ? OR phone = ?
+        WHERE LOWER(email) = ? OR phone = ?
         """,
         (account, account)
     ).fetchone()
-    connection.close()
 
     if user is None:
         return jsonify({"error": "Tài khoản không tồn tại."}), 401
 
     if not check_password_hash(user["password_hash"], password):
+        connection.close()
         return jsonify({"error": "Mật khẩu không chính xác."}), 401
 
     if not bool(user["is_active"]):
+        connection.close()
         return jsonify({
             "error": "Tài khoản này đã bị quản trị viên tạm khóa."
         }), 403
+
+    # Ghi nhận mỗi lần đăng nhập thành công. Tài khoản không bị xóa sau 30 ngày.
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    ip_address = (forwarded_for.split(",")[0].strip() if forwarded_for else request.remote_addr)
+    user_agent = request.headers.get("User-Agent", "")[:1000]
+
+    connection.execute(
+        """
+        UPDATE users
+        SET last_login_at = CURRENT_TIMESTAMP,
+            login_count = COALESCE(login_count, 0) + 1
+        WHERE id = ?
+        """,
+        (user["id"],),
+    )
+    connection.execute(
+        """
+        INSERT INTO login_history (user_id, ip_address, user_agent)
+        VALUES (?, ?, ?)
+        """,
+        (user["id"], ip_address, user_agent),
+    )
+    connection.commit()
+    connection.close()
 
     session.clear()
 
@@ -3874,6 +3928,8 @@ def admin_api_users():
             u.role,
             u.is_active,
             u.created_at,
+            u.last_login_at,
+            COALESCE(u.login_count, 0) AS login_count,
             (
                 SELECT COUNT(*)
                 FROM chat_logs c
