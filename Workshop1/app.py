@@ -57,12 +57,12 @@ app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # Model dùng cho các câu hỏi chỉ có văn bản.
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash").strip().removeprefix("models/")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash").strip().removeprefix("models/")
 
 # Model đa phương thức bắt buộc dùng khi người dùng gửi ảnh.
 VISION_MODEL_NAME = os.getenv(
     "VISION_MODEL_NAME",
-    "gemini-2.5-flash"
+    "gemini-3.5-flash"
 ).strip().removeprefix("models/")
 
 IMAGE_ANALYSIS_PROMPT = """
@@ -132,7 +132,7 @@ QUY TẮC CHUNG:
 # Model nhận dạng giọng nói tiếng Việt.
 AUDIO_TRANSCRIPTION_MODEL = os.getenv(
     "AUDIO_TRANSCRIPTION_MODEL",
-    "gemini-2.5-flash"
+    "gemini-3.5-flash"
 ).strip().removeprefix("models/")
 
 ALLOWED_AUDIO_EXTENSIONS = {
@@ -1098,7 +1098,7 @@ def build_error_response(error):
                 "Không tìm thấy model Gemini phù hợp với API key hiện tại. "
                 f"Text model: {MODEL_NAME}; vision model: {VISION_MODEL_NAME}. "
                 "Hãy dùng API key tạo trực tiếp tại Google AI Studio, kiểm tra thanh toán/quyền truy cập, "
-                "hoặc đặt MODEL_NAME=gemini-2.5-flash trong file .env."
+                "hoặc đặt MODEL_NAME=gemini-3.5-flash trong file .env."
             )
         }), 404
 
@@ -2159,7 +2159,7 @@ GEMINI_FALLBACK_MODELS = [
     name.strip().removeprefix("models/")
     for name in os.getenv(
         "GEMINI_FALLBACK_MODELS",
-        "gemini-2.5-flash,gemini-flash-latest"
+        "gemini-3.5-flash,gemini-flash-latest"
     ).split(",")
     if name.strip()
 ]
