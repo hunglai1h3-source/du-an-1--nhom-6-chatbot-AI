@@ -472,6 +472,8 @@ Nguyên tắc:
 - Không hiển thị quá trình suy luận.
 - Không viết các từ như Refining, Thinking, Analysis hoặc Draft.
 - Trả lời đầy đủ bằng tiếng Việt.
+- Không sử dụng ký hiệu Markdown như **, *, # hoặc dấu gạch đầu dòng bằng dấu sao.
+- Khi cần liệt kê, dùng số thứ tự hoặc dấu • thông thường.
 """
 }
 

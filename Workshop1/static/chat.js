@@ -156,10 +156,18 @@ function renderProfiles() {
 }
 
 function formatText(value) {
-  const escaped = M.escapeHTML(value);
+  const escaped = M.escapeHTML(String(value || ""));
+
   return escaped
-    .replace(/^###\s+(.+)$/gm, "<strong>$1</strong>")
-    .replace(/^[-•]\s+(.+)$/gm, "<div>• $1</div>")
+    // Tiêu đề Markdown: #, ##, ### ...
+    .replace(/^#{1,6}\s+(.+)$/gm, "<strong>$1</strong>")
+    // Chữ in đậm Markdown: **nội dung** hoặc __nội dung__
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/__(.+?)__/g, "<strong>$1</strong>")
+    // Danh sách Markdown: *, -, + hoặc dấu •
+    .replace(/^\s*[\*+\-•]\s+(.+)$/gm, "<div>• $1</div>")
+    // Xóa dấu * đơn còn sót lại để không hiện ký tự thừa trên giao diện.
+    .replace(/\*/g, "")
     .replace(/\n/g, "<br>");
 }
 
