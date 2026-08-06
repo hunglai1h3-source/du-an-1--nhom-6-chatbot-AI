@@ -111,6 +111,8 @@ TABLES_WITH_AUTO_ID = {
     "family_members",
     "chat_logs",
     "prompt_versions",
+    "premium_orders",
+    "user_notifications",
 }
 
 

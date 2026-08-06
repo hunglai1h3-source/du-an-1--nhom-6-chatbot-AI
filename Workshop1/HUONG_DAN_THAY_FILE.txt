@@ -1,0 +1,19 @@
+# MediCare Premium Fixed
+
+Thay các file trong gói vào đúng vị trí của dự án.
+
+Điểm đã sửa:
+- Popup Premium tách rõ Free/Premium, không còn dính chữ.
+- Chỉ tạo một hóa đơn đang chờ cho mỗi người dùng.
+- Chưa cấu hình đủ ngân hàng + BANK_BIN thì nút xác nhận bị khóa.
+- Chỉ khi có thông tin chuyển khoản mới hiện QR và nút “Tôi đã chuyển khoản”.
+- Sau khi gửi xác nhận, nút chuyển thành “Đang chờ Admin xác nhận”.
+- Admin không thể duyệt hóa đơn chưa được người dùng báo chuyển khoản.
+- Trang Admin chỉ hiện nút duyệt với trạng thái awaiting_review.
+- Bổ sung premium_orders và user_notifications vào danh sách bảng tự lấy lastrowid.
+
+Sau khi thay file:
+1. Điền thông tin ngân hàng vào .env.
+2. Chạy: python -m py_compile app.py database.py
+3. Chạy: python app.py
+4. Nhấn Ctrl + F5 trên trình duyệt.

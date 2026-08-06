@@ -1768,7 +1768,7 @@ def subscription_status():
         "limits": {"chat": PREMIUM_CHAT_DAILY_LIMIT if entitlement["is_premium"] else FREE_CHAT_DAILY_LIMIT, "image": PREMIUM_IMAGE_DAILY_LIMIT if entitlement["is_premium"] else FREE_IMAGE_DAILY_LIMIT, "family": None if entitlement["is_premium"] else FREE_FAMILY_PROFILE_LIMIT},
         "usage": {"chat": usage["chats"], "image": usage["images"]},
         "pending_order": dict(pending) if pending else None,
-        "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME},
+        "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME and BANK_BIN), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME, "bin": BANK_BIN},
         "price": PREMIUM_PRICE, "duration_days": PREMIUM_DURATION_DAYS,
         "notifications": [dict(n) for n in notifications]
     })
@@ -1796,25 +1796,75 @@ def create_premium_order():
     connection.commit()
     order = connection.execute("SELECT * FROM premium_orders WHERE id=?", (cursor.lastrowid,)).fetchone()
     connection.close()
-    return jsonify({"order": dict(order), "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME}}), 201
+    return jsonify({"order": dict(order), "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME and BANK_BIN), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME, "bin": BANK_BIN}}), 201
 
 
 @app.post("/api/premium/orders/<int:order_id>/submitted")
 @login_required
 def submit_premium_payment(order_id):
+    """Người dùng chỉ được báo đã chuyển khoản khi hệ thống có đủ thông tin ngân hàng."""
+    if not (BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME and BANK_BIN):
+        return jsonify({
+            "error": (
+                "Admin chưa cập nhật đầy đủ thông tin ngân hàng. "
+                "Bạn chưa thể xác nhận chuyển khoản lúc này."
+            )
+        }), 409
+
     data = request.get_json(silent=True) or {}
     connection = get_database()
-    order = connection.execute("SELECT * FROM premium_orders WHERE id=? AND user_id=?", (order_id, session["user_id"])).fetchone()
+    order = connection.execute(
+        "SELECT * FROM premium_orders WHERE id=? AND user_id=?",
+        (order_id, session["user_id"]),
+    ).fetchone()
+
     if not order:
-        connection.close(); return jsonify({"error":"Không tìm thấy hóa đơn."}),404
-    if order["status"] not in {"pending_payment","awaiting_review"}:
-        connection.close(); return jsonify({"error":"Hóa đơn không còn ở trạng thái chờ thanh toán."}),400
-    connection.execute("UPDATE premium_orders SET status='awaiting_review', user_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (str(data.get("note", ""))[:500], order_id))
-    admins = connection.execute("SELECT id FROM users WHERE role='admin' AND is_active=1").fetchall()
+        connection.close()
+        return jsonify({"error": "Không tìm thấy hóa đơn."}), 404
+
+    if order["status"] == "awaiting_review":
+        connection.close()
+        return jsonify({
+            "ok": True,
+            "message": "Hóa đơn này đã được gửi và đang chờ Admin xác nhận."
+        })
+
+    if order["status"] != "pending_payment":
+        connection.close()
+        return jsonify({
+            "error": "Hóa đơn không còn ở trạng thái chờ thanh toán."
+        }), 400
+
+    connection.execute(
+        """
+        UPDATE premium_orders
+        SET status='awaiting_review',
+            user_note=?,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+        """,
+        (str(data.get("note", ""))[:500], order_id),
+    )
+
+    admins = connection.execute(
+        "SELECT id FROM users WHERE role='admin' AND is_active=1"
+    ).fetchall()
+
     for admin in admins:
-        create_notification(connection, admin["id"], "Yêu cầu Premium mới", f"Hóa đơn {order['invoice_code']} đang chờ xác nhận thanh toán.", "premium_order")
-    connection.commit(); connection.close()
-    return jsonify({"ok":True,"message":"Đã gửi yêu cầu. Admin sẽ kiểm tra và xác nhận."})
+        create_notification(
+            connection,
+            admin["id"],
+            "Yêu cầu Premium mới",
+            f"Hóa đơn {order['invoice_code']} đang chờ xác nhận thanh toán.",
+            "premium_order",
+        )
+
+    connection.commit()
+    connection.close()
+    return jsonify({
+        "ok": True,
+        "message": "Đã gửi yêu cầu. Admin sẽ kiểm tra giao dịch và xác nhận."
+    })
 
 
 @app.post("/transcribe")
@@ -3908,6 +3958,12 @@ def admin_review_premium(order_id, action):
     if action not in {"approve","reject"}: return jsonify({"error":"Thao tác không hợp lệ."}),400
     connection=get_database(); order=connection.execute("SELECT * FROM premium_orders WHERE id=?",(order_id,)).fetchone()
     if not order: connection.close(); return jsonify({"error":"Không tìm thấy hóa đơn."}),404
+    if action == "approve" and order["status"] != "awaiting_review":
+        connection.close()
+        return jsonify({
+            "error": "Chỉ được duyệt hóa đơn khi người dùng đã báo chuyển khoản."
+        }), 409
+
     if action=="approve":
         connection.execute("""
             INSERT INTO user_subscriptions (user_id,plan_code,status,starts_at,expires_at,granted_by,updated_at)

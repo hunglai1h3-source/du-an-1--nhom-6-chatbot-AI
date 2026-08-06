@@ -1,14 +1,81 @@
 {% extends "admin/base.html" %}
 {% block page_title %}Đăng ký Premium{% endblock %}
-{% block page_subtitle %}Duyệt thanh toán, cấp quyền và theo dõi doanh thu{% endblock %}
+{% block page_subtitle %}Đối chiếu giao dịch, duyệt thanh toán và quản lý gói Premium{% endblock %}
 {% block content %}
 <div class="stats-grid premium-stats">
- <article class="stat-card"><div class="stat-icon">⌛</div><div><span>Chờ xác nhận</span><strong>{{stats.awaiting}}</strong></div></article>
- <article class="stat-card"><div class="stat-icon">💎</div><div><span>Premium hoạt động</span><strong>{{stats.active}}</strong></div></article>
- <article class="stat-card"><div class="stat-icon">₫</div><div><span>Doanh thu tháng</span><strong>{{'{:,.0f}'.format(stats.revenue).replace(',', '.')}}đ</strong></div></article>
+  <article class="stat-card"><div class="stat-icon">⌛</div><div><span>Chờ xác nhận</span><strong>{{ stats.awaiting }}</strong></div></article>
+  <article class="stat-card"><div class="stat-icon">💎</div><div><span>Premium hoạt động</span><strong>{{ stats.active }}</strong></div></article>
+  <article class="stat-card"><div class="stat-icon">₫</div><div><span>Doanh thu tháng</span><strong>{{ '{:,.0f}'.format(stats.revenue).replace(',', '.') }}đ</strong></div></article>
 </div>
-<div class="panel"><div class="panel-head"><div><h2>Hóa đơn Premium</h2><p>Chỉ duyệt sau khi đã đối chiếu giao dịch ngân hàng</p></div><span class="badge success">Tự động cập nhật</span></div>
-<div class="table-wrap"><table><thead><tr><th>Mã hóa đơn</th><th>Người dùng</th><th>Số tiền</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody>
-{% for o in orders %}<tr><td><b>{{o.invoice_code}}</b><br><small>{{o.payment_note}}</small></td><td><b>{{o.full_name}}</b><br><small>{{o.email}} · {{o.phone or '-'}}</small></td><td><b>{{'{:,.0f}'.format(o.amount).replace(',', '.')}}đ</b><br><small>{{o.duration_days}} ngày</small></td><td><span class="badge {{'success' if o.status=='approved' else 'danger' if o.status in ['rejected','cancelled'] else ''}}">{{ {'pending_payment':'Chờ chuyển khoản','awaiting_review':'Chờ xác nhận','approved':'Đã duyệt','rejected':'Từ chối'}.get(o.status,o.status) }}</span></td><td>{{o.created_at}}</td><td><div class="actions">{% if o.status in ['pending_payment','awaiting_review'] %}<button class="btn primary" data-premium-action="approve" data-order-id="{{o.id}}">Xác nhận</button><button class="btn danger" data-premium-action="reject" data-order-id="{{o.id}}">Từ chối</button>{% else %}<span class="muted">Đã xử lý</span>{% endif %}</div></td></tr>{% else %}<tr><td colspan="6" class="empty">Chưa có hóa đơn Premium</td></tr>{% endfor %}
-</tbody></table></div></div>
-{% endblock %}{% block scripts %}<script>window.AdminPage="premium";</script>{% endblock %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Hóa đơn Premium</h2>
+      <p>Chỉ có thể duyệt hóa đơn khi người dùng đã báo chuyển khoản.</p>
+    </div>
+    <span class="badge success">Đối chiếu thủ công</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mã hóa đơn</th>
+          <th>Người dùng</th>
+          <th>Số tiền</th>
+          <th>Trạng thái</th>
+          <th>Ngày tạo</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for o in orders %}
+        <tr>
+          <td>
+            <b>{{ o.invoice_code }}</b>
+            <br><small>Nội dung CK: {{ o.payment_note }}</small>
+          </td>
+          <td>
+            <b>{{ o.full_name }}</b>
+            <br><small>{{ o.email }} · {{ o.phone or '-' }}</small>
+          </td>
+          <td>
+            <b>{{ '{:,.0f}'.format(o.amount).replace(',', '.') }}đ</b>
+            <br><small>{{ o.duration_days }} ngày</small>
+          </td>
+          <td>
+            {% set status_text = {
+              'pending_payment':'Chưa báo chuyển khoản',
+              'awaiting_review':'Chờ Admin xác nhận',
+              'approved':'Đã duyệt',
+              'rejected':'Đã từ chối',
+              'cancelled':'Đã hủy'
+            }.get(o.status, o.status) %}
+            <span class="badge {{ 'success' if o.status=='approved' else 'danger' if o.status in ['rejected','cancelled'] else 'warning' }}">
+              {{ status_text }}
+            </span>
+          </td>
+          <td>{{ o.created_at }}</td>
+          <td>
+            <div class="actions">
+              {% if o.status == 'awaiting_review' %}
+                <button class="btn primary" data-premium-action="approve" data-order-id="{{ o.id }}">Xác nhận đã nhận tiền</button>
+                <button class="btn danger" data-premium-action="reject" data-order-id="{{ o.id }}">Từ chối</button>
+              {% elif o.status == 'pending_payment' %}
+                <span class="muted">Chờ người dùng chuyển khoản</span>
+              {% else %}
+                <span class="muted">Đã xử lý</span>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">Chưa có hóa đơn Premium</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.AdminPage="premium";</script>{% endblock %}

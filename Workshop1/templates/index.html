@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="MediCare AI - Tổng quan sức khỏe gia đình" />
   <title>MediCare AI | Tổng quan sức khỏe</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260723-14') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260806-premium-fixed-1') }}" />
 </head>
 <body>
   <header class="topbar">
@@ -538,46 +538,62 @@
   </span>
 </a>
 
-<div class="premium-modal hidden" id="premiumModal">
-  <div class="premium-modal-card">
-    <button
-      type="button"
-      class="premium-modal-close"
-      id="closePremiumModal"
-      aria-label="Đóng"
-    >
-      ×
-    </button>
+<div class="premium-modal hidden" id="premiumModal" aria-hidden="true">
+  <section class="premium-modal-card" role="dialog" aria-modal="true" aria-labelledby="premiumModalTitle">
+    <button type="button" class="premium-modal-close" id="closePremiumModal" aria-label="Đóng">×</button>
 
-    <div class="premium-modal-header">
-      <div class="premium-modal-icon">💎</div>
-      <h3>MediCare Premium</h3>
-      <p>Nâng cấp tài khoản để mở khóa các tính năng hỗ trợ sức khỏe nâng cao.</p>
-    </div>
+    <header class="premium-modal-header">
+      <div class="premium-modal-icon" aria-hidden="true">💎</div>
+      <h3 id="premiumModalTitle">MediCare Premium</h3>
+      <p>Nâng cấp để mở rộng hạn mức và theo dõi sức khỏe chuyên sâu hơn.</p>
+    </header>
 
     <div class="premium-price-box">
-      <div class="premium-price-main">20.000đ</div>
-      <div class="premium-price-sub">/ tháng</div>
+      <div class="premium-price-main" id="premiumPriceText">20.000đ</div>
+      <div class="premium-price-sub">/ 30 ngày</div>
     </div>
 
-    <div class="premium-plan-comparison">
-      <div class="premium-tier"><strong>Free</strong><span>20 lượt chat/ngày</span><span>10 ảnh/ngày</span><span>3 hồ sơ sức khỏe</span><span>Theo dõi 1 vấn đề sức khỏe</span></div>
-      <div class="premium-tier featured"><strong>Premium</strong><span>200 lượt chat/ngày</span><span>100 ảnh/ngày</span><span>Không giới hạn hồ sơ hợp lý</span><span>Nhật ký diễn biến & báo cáo sức khỏe</span></div>
-    </div>
-    <div id="premiumOrderArea" class="premium-order-area"><p>Hệ thống sẽ tạo hóa đơn chuyển khoản riêng. Premium chỉ được kích hoạt sau khi Admin xác nhận thanh toán.</p></div>
+    <div class="premium-plan-comparison" aria-label="So sánh gói Free và Premium">
+      <article class="premium-tier">
+        <div class="premium-tier-heading">
+          <span class="premium-tier-name">FREE</span>
+          <span class="premium-tier-tag">Mặc định</span>
+        </div>
+        <ul>
+          <li>20 lượt chat mỗi ngày</li>
+          <li>10 lần phân tích ảnh mỗi ngày</li>
+          <li>Tối đa 3 hồ sơ sức khỏe</li>
+          <li>Theo dõi 1 vấn đề sức khỏe</li>
+        </ul>
+      </article>
 
-    <button
-      type="button"
-      class="premium-confirm-button"
-      id="subscribePremiumButton"
-    >
-      Đăng ký gói 20.000đ
+      <article class="premium-tier featured">
+        <div class="premium-tier-heading">
+          <span class="premium-tier-name">PREMIUM</span>
+          <span class="premium-tier-tag">Nâng cao</span>
+        </div>
+        <ul>
+          <li>200 lượt chat mỗi ngày</li>
+          <li>100 lần phân tích ảnh mỗi ngày</li>
+          <li>Không giới hạn hồ sơ ở mức hợp lý</li>
+          <li>Nhật ký diễn biến và báo cáo sức khỏe</li>
+        </ul>
+      </article>
+    </div>
+
+    <div id="premiumUsageArea" class="premium-usage-area"></div>
+    <div id="premiumOrderArea" class="premium-order-area">
+      <p class="premium-loading">Đang tải thông tin gói...</p>
+    </div>
+
+    <button type="button" class="premium-confirm-button" id="subscribePremiumButton">
+      Tạo hóa đơn 20.000đ
     </button>
-  </div>
+  </section>
 </div>
 
   <script src="{{ url_for('static', filename='common.js', v='20260806-premium-v3') }}"></script>
   <script src="{{ url_for('static', filename='dashboard.js', v='20260725-auth-fix-1') }}"></script>
-  <script src="{{ url_for('static', filename='premium.js', v='20260806-v3') }}"></script>
+  <script src="{{ url_for('static', filename='premium.js', v='20260806-premium-fixed-1') }}"></script>
 </body>
 </html>
