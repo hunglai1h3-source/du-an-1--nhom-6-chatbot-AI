@@ -1,26 +1,32 @@
 {% extends "admin/base.html" %}
 {% block title %}Tổng quan | MediCare Admin{% endblock %}
 {% block page_title %}Tổng quan AI{% endblock %}
-{% block page_subtitle %}Theo dõi hoạt động hệ thống theo thời gian thực{% endblock %}
+{% block page_subtitle %}Theo dõi Gemini, người dùng và chất lượng phản hồi theo thời gian thực{% endblock %}
 {% block content %}
 <div class="toolbar"><div><b>Xin chào, {{ session.get('full_name','Admin') }}</b><span class="muted">Dữ liệu tự làm mới mỗi 5 giây</span></div><button class="btn primary" id="refreshDashboard">↻ Làm mới ngay</button></div>
 <div class="stats-grid" id="statsGrid">
- {% for key,label,icon in [('users','Người dùng','♟'),('chats','Lượt chat','◌'),('images','Ảnh phân tích','▧'),('tokens','Token','⚡'),('avg_latency','Độ trễ TB','◷'),('errors','Lỗi AI','△'),('new_today','Đăng ký hôm nay','＋'),('chats_today','Chat hôm nay','↗')] %}
+ {% for key,label,icon in [('users','Người dùng','♟'),('chats','Lượt chat','◌'),('success_rate','Tỷ lệ thành công','✓'),('tokens','Tổng token','⚡'),('avg_latency','Độ trễ TB','◷'),('errors','Lỗi AI','△'),('new_today','Đăng ký hôm nay','＋'),('chats_today','Chat hôm nay','↗')] %}
  <article class="stat-card"><div class="stat-icon">{{ icon }}</div><div><span>{{ label }}</span><strong data-stat="{{key}}">{{ stats.get(key,0) }}</strong></div></article>
  {% endfor %}
 </div>
 <div class="grid-2">
  <section class="panel"><div class="panel-head"><div><h2>Hoạt động 7 ngày</h2><p>Chat và tài khoản mới</p></div><span class="badge success">Live</span></div><div class="chart-wrap"><canvas id="activityChart"></canvas></div></section>
- <section class="panel"><div class="panel-head"><div><h2>Trạng thái hệ thống</h2><p>Tóm tắt nhanh</p></div></div>
-   <div class="health-list"><div><span>API Groq</span><b class="ok">Đã cấu hình</b></div><div><span>Người dùng hoạt động</span><b data-stat="active_users">{{stats.active_users}}</b></div><div><span>Quản trị viên</span><b data-stat="admins">{{stats.admins}}</b></div><div><span>Đồng bộ gần nhất</span><b id="lastSync">--:--:--</b></div></div>
+ <section class="panel"><div class="panel-head"><div><h2>Trạng thái Gemini</h2><p>Cấu hình AI hiện tại</p></div><span id="apiBadge" class="badge {{ 'success' if api_configured else 'danger' }}">{{ 'Sẵn sàng' if api_configured else 'Chưa cấu hình' }}</span></div>
+   <div class="health-list">
+    <div><span>Nhà cung cấp</span><b>Google Gemini</b></div>
+    <div><span>Model văn bản</span><b id="activeTextModel">{{ text_model }}</b></div>
+    <div><span>Model hình ảnh</span><b id="activeVisionModel">{{ vision_model }}</b></div>
+    <div><span>API key</span><b id="apiConfigured" class="{{ 'ok' if api_configured else 'danger-text' }}">{{ 'Đã cấu hình' if api_configured else 'Chưa có' }}</b></div>
+    <div><span>Người dùng hoạt động</span><b data-stat="active_users">{{stats.active_users}}</b></div>
+    <div><span>Đồng bộ gần nhất</span><b id="lastSync">--:--:--</b></div>
+   </div>
+   <a class="btn primary full-btn" href="{{ url_for('admin_ai_settings') }}">Mở cấu hình AI</a>
  </section>
 </div>
 <div class="grid-2">
  <section class="panel"><div class="panel-head"><div><h2>Người dùng mới</h2><p>Cập nhật tự động</p></div><a href="{{url_for('admin_users')}}">Xem tất cả →</a></div><div id="recentUsers" class="list"></div></section>
  <section class="panel"><div class="panel-head"><div><h2>Hội thoại gần đây</h2><p>Log mới nhất</p></div><a href="{{url_for('admin_chats')}}">Xem tất cả →</a></div><div id="recentChats" class="list"></div></section>
 </div>
-<script id="initialChart" type="application/json">[
-{% for r in chart_rows %}{"day":{{ r["day"]|tojson }},"chats":{{ r["chats"] }},"users":{{ r["users"] }}}{{ "," if not loop.last }}{% endfor %}
-]</script>
+<script id="initialChart" type="application/json">[{% for r in chart_rows %}{"day":{{ r["day"]|tojson }},"chats":{{ r["chats"] }},"users":{{ r["users"] }}}{{ "," if not loop.last }}{% endfor %}]</script>
 {% endblock %}
 {% block scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script><script>window.AdminPage="dashboard";</script>{% endblock %}

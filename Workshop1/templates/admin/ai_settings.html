@@ -1,1 +1,29 @@
-{% extends "admin/base.html" %}{% block page_title %}AI & API{% endblock %}{% block content %}<form class="panel form-grid" method="post"><div class="panel-head full"><div><h2>Cấu hình mô hình</h2><p>API key được giữ trong .env và không hiển thị tại đây</p></div><span class="badge {{'success' if settings.api_configured else 'danger'}}">{{'API sẵn sàng' if settings.api_configured else 'Chưa có API'}}</span></div><label>Text model<input name="text_model" value="{{settings.text_model}}"></label><label>Vision model<input name="vision_model" value="{{settings.vision_model}}"></label><label>Temperature<input type="number" step="0.1" min="0" max="2" name="temperature" value="{{settings.temperature}}"></label><label>Max tokens<input type="number" min="100" max="8000" name="max_tokens" value="{{settings.max_tokens}}"></label><button class="btn primary">Lưu cấu hình</button></form>{% endblock %}
+{% extends "admin/base.html" %}
+{% block page_title %}Gemini AI & API{% endblock %}
+{% block page_subtitle %}Kiểm tra kết nối và quản lý cấu hình mô hình an toàn{% endblock %}
+{% block content %}
+<div class="grid-2 wide-left">
+<form class="panel form-grid" method="post">
+ <div class="panel-head full"><div><h2>Cấu hình Gemini</h2><p>API key chỉ đọc từ biến môi trường và không hiển thị trong trang quản trị</p></div><span class="badge {{'success' if settings.api_configured else 'danger'}}">{{'API sẵn sàng' if settings.api_configured else 'Chưa có API'}}</span></div>
+ <label>Text model<input name="text_model" value="{{settings.text_model}}" required></label>
+ <label>Vision model<input name="vision_model" value="{{settings.vision_model}}" required></label>
+ <label>Temperature<input type="number" step="0.1" min="0" max="2" name="temperature" value="{{settings.temperature}}"></label>
+ <label>Max output tokens<input type="number" min="100" max="8000" name="max_tokens" value="{{settings.max_tokens}}"></label>
+ <label>AI concurrency<input type="number" min="1" max="32" name="ai_concurrency" value="{{settings.ai_concurrency}}"></label>
+ <label>Số lần thử lại<input type="number" min="0" max="10" name="retry_attempts" value="{{settings.retry_attempts}}"></label>
+ <label class="full">Fallback models<input name="fallback_models" value="{{settings.fallback_models}}" placeholder="model-a,model-b"></label>
+ <div class="full actions"><button class="btn primary">Lưu cấu hình</button><button class="btn" type="button" id="testGeminiButton">Kiểm tra kết nối Gemini</button></div>
+</form>
+<section class="panel">
+ <div class="panel-head"><div><h2>Trạng thái kết nối</h2><p>Không tiết lộ khóa bí mật</p></div></div>
+ <div class="health-list">
+  <div><span>Nhà cung cấp</span><b>Google Gemini</b></div>
+  <div><span>API key</span><b>{{ settings.api_masked }}</b></div>
+  <div><span>Model đang lưu</span><b>{{ settings.text_model }}</b></div>
+  <div><span>Lưu ý</span><b>Cấu hình mới áp dụng cho các request đọc setting</b></div>
+ </div>
+ <div id="geminiTestResult" class="test-result muted">Chưa kiểm tra kết nối.</div>
+</section>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.AdminPage="ai-settings";</script>{% endblock %}

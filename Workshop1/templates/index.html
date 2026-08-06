@@ -56,7 +56,7 @@
           <span class="profile-avatar" id="sidebarAvatar">NA</span>
           <div><strong id="sidebarName">Chưa có hồ sơ</strong><small id="sidebarMeta">Đăng nhập để quản lý</small></div>
         </div>
-        <span class="premium-badge">★ Tài khoản Premium</span>
+        <span class="premium-badge" id="accountPlanBadge">Free</span>
         <nav>
           <a href="#family-health">♙ Hồ sơ cá nhân</a>
           <a href="#family-health">♧ Gia đình của tôi <span id="familyCountMini">0 thành viên</span></a>
@@ -560,12 +560,11 @@
       <div class="premium-price-sub">/ tháng</div>
     </div>
 
-    <div class="premium-benefits">
-      <div class="premium-benefit-item">✓ Lưu nhiều lịch sử tư vấn hơn</div>
-      <div class="premium-benefit-item">✓ Quản lý hồ sơ sức khỏe gia đình</div>
-      <div class="premium-benefit-item">✓ Tạo và theo dõi lịch nhắc sức khỏe</div>
-      <div class="premium-benefit-item">✓ Trải nghiệm đầy đủ các tiện ích nâng cao</div>
+    <div class="premium-plan-comparison">
+      <div class="premium-tier"><strong>Free</strong><span>20 lượt chat/ngày</span><span>10 ảnh/ngày</span><span>3 hồ sơ sức khỏe</span><span>Theo dõi 1 vấn đề sức khỏe</span></div>
+      <div class="premium-tier featured"><strong>Premium</strong><span>200 lượt chat/ngày</span><span>100 ảnh/ngày</span><span>Không giới hạn hồ sơ hợp lý</span><span>Nhật ký diễn biến & báo cáo sức khỏe</span></div>
     </div>
+    <div id="premiumOrderArea" class="premium-order-area"><p>Hệ thống sẽ tạo hóa đơn chuyển khoản riêng. Premium chỉ được kích hoạt sau khi Admin xác nhận thanh toán.</p></div>
 
     <button
       type="button"
@@ -577,7 +576,8 @@
   </div>
 </div>
 
-  <script src="{{ url_for('static', filename='common.js', v='20260725-auth-fix-1') }}"></script>
+  <script src="{{ url_for('static', filename='common.js', v='20260806-premium-v3') }}"></script>
   <script src="{{ url_for('static', filename='dashboard.js', v='20260725-auth-fix-1') }}"></script>
+  <script src="{{ url_for('static', filename='premium.js', v='20260806-v3') }}"></script>
 </body>
 </html>

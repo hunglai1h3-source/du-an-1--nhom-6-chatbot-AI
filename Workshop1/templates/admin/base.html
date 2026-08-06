@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}MediCare Admin{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css') }}?v=20260723">
-  <script defer src="{{ url_for('static', filename='admin/admin.js') }}?v=20260723"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css') }}?v=20260806-premium-v3">
+  <script defer src="{{ url_for('static', filename='admin/admin.js') }}?v=20260806-premium-v3"></script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -20,6 +20,7 @@
       <a class="{{ 'active' if request.endpoint=='admin_dashboard' }}" href="{{ url_for('admin_dashboard') }}">⌂ <span>Tổng quan</span></a>
       <a class="{{ 'active' if request.endpoint in ['admin_users','admin_user_detail'] }}" href="{{ url_for('admin_users') }}">♟ <span>Người dùng</span></a>
       <a class="{{ 'active' if request.endpoint=='admin_chats' }}" href="{{ url_for('admin_chats') }}">◌ <span>Lịch sử chat</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_premium_orders' }}" href="{{ url_for('admin_premium_orders') }}">💎 <span>Đăng ký Premium</span></a>
       <a class="{{ 'active' if request.endpoint=='admin_datasets' }}" href="{{ url_for('admin_datasets') }}">▦ <span>Dataset</span></a>
       <a class="{{ 'active' if request.endpoint=='admin_prompt' }}" href="{{ url_for('admin_prompt') }}">✦ <span>Prompt</span></a>
       <a class="{{ 'active' if request.endpoint=='admin_ai_settings' }}" href="{{ url_for('admin_ai_settings') }}">⚙ <span>AI & API</span></a>

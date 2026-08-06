@@ -57,6 +57,18 @@ app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
+PREMIUM_PRICE = max(1000, int(os.getenv("PREMIUM_PRICE", "20000")))
+PREMIUM_DURATION_DAYS = max(1, int(os.getenv("PREMIUM_DURATION_DAYS", "30")))
+BANK_NAME = os.getenv("BANK_NAME", "").strip()
+BANK_ACCOUNT_NUMBER = os.getenv("BANK_ACCOUNT_NUMBER", "").strip()
+BANK_ACCOUNT_NAME = os.getenv("BANK_ACCOUNT_NAME", "").strip()
+BANK_BIN = os.getenv("BANK_BIN", "").strip()
+FREE_CHAT_DAILY_LIMIT = 20
+FREE_IMAGE_DAILY_LIMIT = 10
+FREE_FAMILY_PROFILE_LIMIT = 3
+PREMIUM_CHAT_DAILY_LIMIT = 200
+PREMIUM_IMAGE_DAILY_LIMIT = 100
+
 # Model dùng cho các câu hỏi chỉ có văn bản.
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.5-flash").strip().removeprefix("models/")
 
@@ -495,7 +507,20 @@ APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "").strip()
 def get_database():
     """Tạo kết nối PostgreSQL cho dữ liệu tài khoản và ứng dụng."""
     return get_connection()
+def login_required(view_function):
+    @wraps(view_function)
+    def wrapped_view(*args, **kwargs):
+        if not session.get("user_id"):
+            if request.path.startswith("/api/"):
+                return jsonify({
+                    "error": "Bạn cần đăng nhập để sử dụng chức năng này."
+                }), 401
 
+            return redirect(url_for("index"))
+
+        return view_function(*args, **kwargs)
+
+    return wrapped_view
 
 MEDICAL_SEARCH_STOPWORDS = {
     "tôi", "mình", "em", "anh", "chị", "bạn", "bác", "sĩ",
@@ -781,6 +806,63 @@ def initialize_database():
         )
 
         connection.execute("""
+            CREATE TABLE IF NOT EXISTS user_subscriptions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE,
+                plan_code TEXT NOT NULL DEFAULT 'free',
+                status TEXT NOT NULL DEFAULT 'active',
+                starts_at TIMESTAMPTZ,
+                expires_at TIMESTAMPTZ,
+                granted_by INTEGER,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_subscription_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS premium_orders (
+                id SERIAL PRIMARY KEY,
+                invoice_code TEXT NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
+                duration_days INTEGER NOT NULL DEFAULT 30,
+                status TEXT NOT NULL DEFAULT 'pending_payment',
+                payment_note TEXT,
+                user_note TEXT,
+                reviewed_by INTEGER,
+                reviewed_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_order_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS user_notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                notification_type TEXT NOT NULL DEFAULT 'info',
+                is_read INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            INSERT INTO user_subscriptions (user_id, plan_code, status)
+            SELECT id, CASE WHEN role='admin' THEN 'premium' ELSE 'free' END, 'active'
+            FROM users
+            ON CONFLICT (user_id) DO NOTHING
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_premium_orders_status_created
+            ON premium_orders(status, created_at DESC)
+        """)
+
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS admin_audit_logs (
                 id SERIAL PRIMARY KEY,
                 admin_user_id INTEGER NOT NULL,
@@ -875,6 +957,53 @@ def get_setting(key, default=""):
     ).fetchone()
     connection.close()
     return row["setting_value"] if row else default
+
+
+def get_user_entitlement(connection, user_id):
+    user = connection.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        return {"plan": "free", "is_premium": False, "is_admin": False, "expires_at": None}
+    is_admin = user["role"] == "admin"
+    row = connection.execute(
+        "SELECT * FROM user_subscriptions WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if not row:
+        connection.execute(
+            "INSERT INTO user_subscriptions (user_id, plan_code, status) VALUES (?, ?, 'active')",
+            (user_id, "premium" if is_admin else "free"),
+        )
+        row = connection.execute(
+            "SELECT * FROM user_subscriptions WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    expires_at = row["expires_at"] if row else None
+    active_paid = bool(row and row["plan_code"] == "premium" and row["status"] == "active" and (expires_at is None or expires_at > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))))
+    return {"plan": "premium" if (is_admin or active_paid) else "free", "is_premium": bool(is_admin or active_paid), "is_admin": is_admin, "expires_at": expires_at}
+
+
+def enforce_daily_ai_limit(connection, user_id, has_image=False):
+    entitlement = get_user_entitlement(connection, user_id)
+    if entitlement["is_admin"]:
+        return entitlement
+    chat_limit = PREMIUM_CHAT_DAILY_LIMIT if entitlement["is_premium"] else FREE_CHAT_DAILY_LIMIT
+    image_limit = PREMIUM_IMAGE_DAILY_LIMIT if entitlement["is_premium"] else FREE_IMAGE_DAILY_LIMIT
+    chats_today = connection.execute(
+        "SELECT COUNT(*) FROM chat_logs WHERE user_id=? AND created_at::date=CURRENT_DATE", (user_id,)
+    ).fetchone()[0]
+    images_today = connection.execute(
+        "SELECT COUNT(*) FROM chat_logs WHERE user_id=? AND has_image=1 AND created_at::date=CURRENT_DATE", (user_id,)
+    ).fetchone()[0]
+    if chats_today >= chat_limit:
+        raise PermissionError(f"Bạn đã dùng hết {chat_limit} lượt chat hôm nay. Hạn mức sẽ được làm mới vào ngày mai.")
+    if has_image and images_today >= image_limit:
+        raise PermissionError(f"Bạn đã dùng hết {image_limit} lượt phân tích ảnh hôm nay.")
+    return entitlement
+
+
+def create_notification(connection, user_id, title, message, kind="info"):
+    connection.execute(
+        "INSERT INTO user_notifications (user_id,title,message,notification_type) VALUES (?,?,?,?)",
+        (user_id, str(title)[:150], str(message)[:1000], str(kind)[:30]),
+    )
 
 
 PROFILE_PRIORITY_RULES = """
@@ -1586,9 +1715,19 @@ def current_user():
     session["phone"] = user["phone"]
     session["role"] = user["role"]
     session.permanent = True
+    subscription_connection = get_database()
+    entitlement = get_user_entitlement(subscription_connection, user_id)
+    subscription_connection.commit()
+    subscription_connection.close()
 
     return jsonify({
         "logged_in": True,
+        "subscription": {
+            "plan": entitlement["plan"],
+            "is_premium": entitlement["is_premium"],
+            "is_admin": entitlement["is_admin"],
+            "expires_at": entitlement["expires_at"].isoformat() if entitlement["expires_at"] else None
+        },
         "user": {
             "id": user["id"],
             "full_name": user["full_name"],
@@ -1604,6 +1743,78 @@ def logout():
     session.clear()
     return jsonify({"message": "Đăng xuất thành công."})
 
+
+
+@app.get("/api/subscription")
+@login_required
+def subscription_status():
+    connection = get_database()
+    entitlement = get_user_entitlement(connection, session["user_id"])
+    pending = connection.execute(
+        "SELECT * FROM premium_orders WHERE user_id=? AND status IN ('pending_payment','awaiting_review') ORDER BY id DESC LIMIT 1",
+        (session["user_id"],),
+    ).fetchone()
+    usage = connection.execute(
+        "SELECT COUNT(*) chats, COALESCE(SUM(CASE WHEN has_image=1 THEN 1 ELSE 0 END),0) images FROM chat_logs WHERE user_id=? AND created_at::date=CURRENT_DATE",
+        (session["user_id"],),
+    ).fetchone()
+    notifications = connection.execute(
+        "SELECT * FROM user_notifications WHERE user_id=? ORDER BY id DESC LIMIT 10", (session["user_id"],)
+    ).fetchall()
+    connection.close()
+    return jsonify({
+        "plan": entitlement["plan"], "is_premium": entitlement["is_premium"], "is_admin": entitlement["is_admin"],
+        "expires_at": entitlement["expires_at"].isoformat() if entitlement["expires_at"] else None,
+        "limits": {"chat": PREMIUM_CHAT_DAILY_LIMIT if entitlement["is_premium"] else FREE_CHAT_DAILY_LIMIT, "image": PREMIUM_IMAGE_DAILY_LIMIT if entitlement["is_premium"] else FREE_IMAGE_DAILY_LIMIT, "family": None if entitlement["is_premium"] else FREE_FAMILY_PROFILE_LIMIT},
+        "usage": {"chat": usage["chats"], "image": usage["images"]},
+        "pending_order": dict(pending) if pending else None,
+        "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME},
+        "price": PREMIUM_PRICE, "duration_days": PREMIUM_DURATION_DAYS,
+        "notifications": [dict(n) for n in notifications]
+    })
+
+
+@app.post("/api/premium/orders")
+@login_required
+def create_premium_order():
+    connection = get_database()
+    entitlement = get_user_entitlement(connection, session["user_id"])
+    if entitlement["is_premium"]:
+        connection.close(); return jsonify({"error": "Tài khoản đã có quyền Premium."}), 400
+    existing = connection.execute(
+        "SELECT * FROM premium_orders WHERE user_id=? AND status IN ('pending_payment','awaiting_review') ORDER BY id DESC LIMIT 1",
+        (session["user_id"],),
+    ).fetchone()
+    if existing:
+        connection.close(); return jsonify({"order": dict(existing), "reused": True})
+    invoice = f"MCP-{datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')):%Y%m%d}-{uuid4().hex[:6].upper()}"
+    payment_note = invoice
+    cursor = connection.execute(
+        "INSERT INTO premium_orders (invoice_code,user_id,amount,duration_days,status,payment_note) VALUES (?,?,?,?,?,?)",
+        (invoice, session["user_id"], PREMIUM_PRICE, PREMIUM_DURATION_DAYS, "pending_payment", payment_note),
+    )
+    connection.commit()
+    order = connection.execute("SELECT * FROM premium_orders WHERE id=?", (cursor.lastrowid,)).fetchone()
+    connection.close()
+    return jsonify({"order": dict(order), "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME}}), 201
+
+
+@app.post("/api/premium/orders/<int:order_id>/submitted")
+@login_required
+def submit_premium_payment(order_id):
+    data = request.get_json(silent=True) or {}
+    connection = get_database()
+    order = connection.execute("SELECT * FROM premium_orders WHERE id=? AND user_id=?", (order_id, session["user_id"])).fetchone()
+    if not order:
+        connection.close(); return jsonify({"error":"Không tìm thấy hóa đơn."}),404
+    if order["status"] not in {"pending_payment","awaiting_review"}:
+        connection.close(); return jsonify({"error":"Hóa đơn không còn ở trạng thái chờ thanh toán."}),400
+    connection.execute("UPDATE premium_orders SET status='awaiting_review', user_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (str(data.get("note", ""))[:500], order_id))
+    admins = connection.execute("SELECT id FROM users WHERE role='admin' AND is_active=1").fetchall()
+    for admin in admins:
+        create_notification(connection, admin["id"], "Yêu cầu Premium mới", f"Hóa đơn {order['invoice_code']} đang chờ xác nhận thanh toán.", "premium_order")
+    connection.commit(); connection.close()
+    return jsonify({"ok":True,"message":"Đã gửi yêu cầu. Admin sẽ kiểm tra và xác nhận."})
 
 
 @app.post("/transcribe")
@@ -2317,6 +2528,17 @@ def chat():
 
         has_image = bool(image_file and image_file.filename)
 
+        if "user_id" in session:
+            limit_connection = get_database()
+            try:
+                enforce_daily_ai_limit(limit_connection, session["user_id"], has_image)
+                limit_connection.commit()
+            except PermissionError as error:
+                limit_connection.rollback()
+                limit_connection.close()
+                return jsonify({"error": str(error), "code": "DAILY_LIMIT_REACHED"}), 429
+            limit_connection.close()
+
         if not user_message and not has_image:
             return jsonify({
                 "error": "Bạn chưa nhập câu hỏi hoặc chọn ảnh."
@@ -2765,6 +2987,17 @@ def family_collection():
         return jsonify({"members": [dict(row) for row in rows]})
 
     try:
+        entitlement = get_user_entitlement(connection, user_id)
+        if not entitlement["is_premium"] and not entitlement["is_admin"]:
+            current_count = connection.execute(
+                "SELECT COUNT(*) FROM family_members WHERE user_id=?", (user_id,)
+            ).fetchone()[0]
+            if current_count >= FREE_FAMILY_PROFILE_LIMIT:
+                connection.close()
+                return jsonify({
+                    "error": f"Gói Free được tạo tối đa {FREE_FAMILY_PROFILE_LIMIT} hồ sơ sức khỏe.",
+                    "code": "PLAN_LIMIT_REACHED"
+                }), 403
         payload = normalize_family_member_payload(request.get_json(silent=True) or {})
         cursor = connection.execute(
             """
@@ -3620,6 +3853,7 @@ def admin_dashboard():
         "errors": connection.execute("SELECT COUNT(*) FROM chat_logs WHERE status != 'success'").fetchone()[0],
         "avg_latency": connection.execute("SELECT COALESCE(ROUND(AVG(latency_ms)),0) FROM chat_logs WHERE latency_ms > 0").fetchone()[0],
         "tokens": connection.execute("SELECT COALESCE(SUM(prompt_tokens + completion_tokens),0) FROM chat_logs").fetchone()[0],
+        "success_rate": connection.execute("SELECT COALESCE(ROUND(100.0 * SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0),1),0) FROM chat_logs").fetchone()[0],
     }
     chart_rows = connection.execute("""
         SELECT
@@ -3646,7 +3880,68 @@ def admin_dashboard():
         ORDER BY c.id DESC LIMIT 8
     """).fetchall()
     connection.close()
-    return render_template("admin/dashboard.html", stats=stats, chart_rows=chart_rows, recent_chats=recent_chats)
+    return render_template("admin/dashboard.html", stats=stats, chart_rows=chart_rows, recent_chats=recent_chats, api_configured=bool(API_KEY), text_model=get_setting("text_model", MODEL_NAME), vision_model=get_setting("vision_model", VISION_MODEL_NAME))
+
+
+@app.get("/admin/premium")
+@admin_required
+def admin_premium_orders():
+    connection = get_database()
+    rows = connection.execute("""
+        SELECT o.*,u.full_name,u.email,u.phone
+        FROM premium_orders o JOIN users u ON u.id=o.user_id
+        ORDER BY CASE o.status WHEN 'awaiting_review' THEN 0 WHEN 'pending_payment' THEN 1 ELSE 2 END, o.id DESC
+        LIMIT 300
+    """).fetchall()
+    stats = {
+        "awaiting": connection.execute("SELECT COUNT(*) FROM premium_orders WHERE status='awaiting_review'").fetchone()[0],
+        "active": connection.execute("SELECT COUNT(*) FROM user_subscriptions WHERE plan_code='premium' AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").fetchone()[0],
+        "revenue": connection.execute("SELECT COALESCE(SUM(amount),0) FROM premium_orders WHERE status='approved' AND reviewed_at::date >= date_trunc('month',CURRENT_DATE)::date").fetchone()[0],
+    }
+    connection.close()
+    return render_template("admin/premium_orders.html", orders=rows, stats=stats)
+
+
+@app.post("/admin/premium/<int:order_id>/<action>")
+@admin_required
+def admin_review_premium(order_id, action):
+    if action not in {"approve","reject"}: return jsonify({"error":"Thao tác không hợp lệ."}),400
+    connection=get_database(); order=connection.execute("SELECT * FROM premium_orders WHERE id=?",(order_id,)).fetchone()
+    if not order: connection.close(); return jsonify({"error":"Không tìm thấy hóa đơn."}),404
+    if action=="approve":
+        connection.execute("""
+            INSERT INTO user_subscriptions (user_id,plan_code,status,starts_at,expires_at,granted_by,updated_at)
+            VALUES (?,'premium','active',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + (? * INTERVAL '1 day'),?,CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE SET plan_code='premium',status='active',starts_at=CURRENT_TIMESTAMP,
+            expires_at=GREATEST(COALESCE(user_subscriptions.expires_at,CURRENT_TIMESTAMP),CURRENT_TIMESTAMP) + (? * INTERVAL '1 day'),
+            granted_by=EXCLUDED.granted_by,updated_at=CURRENT_TIMESTAMP
+        """,(order["user_id"],order["duration_days"],session["user_id"],order["duration_days"]))
+        connection.execute("UPDATE premium_orders SET status='approved',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?",(session["user_id"],order_id))
+        create_notification(connection,order["user_id"],"Premium đã được kích hoạt",f"Hóa đơn {order['invoice_code']} đã được duyệt. Gói Premium có hiệu lực {order['duration_days']} ngày.","success")
+        write_admin_log(connection,"approve_premium",order["user_id"],f"order={order_id}; invoice={order['invoice_code']}")
+    else:
+        connection.execute("UPDATE premium_orders SET status='rejected',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?",(session["user_id"],order_id))
+        create_notification(connection,order["user_id"],"Yêu cầu Premium chưa được duyệt",f"Hóa đơn {order['invoice_code']} đã bị từ chối. Vui lòng kiểm tra lại thông tin chuyển khoản.","warning")
+        write_admin_log(connection,"reject_premium",order["user_id"],f"order={order_id}")
+    connection.commit(); connection.close(); return jsonify({"ok":True})
+
+
+@app.post("/admin/users/<int:user_id>/premium")
+@admin_required
+def admin_grant_premium(user_id):
+    data=request.get_json(silent=True) or {}; days=max(1,min(int(data.get("days",30)),3650)); connection=get_database()
+    connection.execute("""
+        INSERT INTO user_subscriptions (user_id,plan_code,status,starts_at,expires_at,granted_by,updated_at)
+        VALUES (?,'premium','active',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + (? * INTERVAL '1 day'),?,CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id) DO UPDATE SET plan_code='premium',status='active',starts_at=CURRENT_TIMESTAMP,
+        expires_at=GREATEST(COALESCE(user_subscriptions.expires_at,CURRENT_TIMESTAMP),CURRENT_TIMESTAMP) + (? * INTERVAL '1 day'),granted_by=EXCLUDED.granted_by,updated_at=CURRENT_TIMESTAMP
+    """,(user_id,days,session["user_id"],days)); create_notification(connection,user_id,"Bạn đã được cấp Premium",f"Quản trị viên đã cấp Premium trong {days} ngày.","success"); write_admin_log(connection,"grant_premium",user_id,f"days={days}"); connection.commit(); connection.close(); return jsonify({"ok":True})
+
+
+@app.delete("/admin/users/<int:user_id>/premium")
+@admin_required
+def admin_revoke_premium(user_id):
+    connection=get_database(); connection.execute("UPDATE user_subscriptions SET plan_code='free',status='inactive',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE user_id=?",(user_id,)); create_notification(connection,user_id,"Premium đã kết thúc","Quyền Premium của bạn đã được quản trị viên thu hồi.","warning"); write_admin_log(connection,"revoke_premium",user_id); connection.commit(); connection.close(); return jsonify({"ok":True})
 
 
 @app.get("/admin/users")
@@ -3664,8 +3959,9 @@ def admin_users():
     total=connection.execute(f"SELECT COUNT(*) FROM users u {clause}",params).fetchone()[0]
     users=connection.execute(f"""
         SELECT u.*, (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id=u.id) chat_count,
-        (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) last_activity
-        FROM users u {clause} ORDER BY u.id DESC LIMIT ? OFFSET ?
+        (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) last_activity,
+        COALESCE(s.plan_code,'free') plan_code, s.expires_at premium_expires_at
+        FROM users u LEFT JOIN user_subscriptions s ON s.user_id=u.id {clause} ORDER BY u.id DESC LIMIT ? OFFSET ?
     """,params+[per_page,offset]).fetchall()
     connection.close()
     return render_template("admin/users.html",users=users,keyword=keyword,role=role,status=status,page=page,total=total,pages=max(1,(total+per_page-1)//per_page))
@@ -3785,18 +4081,47 @@ def admin_prompt_activate(version_id):
 @app.get("/admin/ai-settings")
 @admin_required
 def admin_ai_settings():
-    settings={"text_model":get_setting("text_model",MODEL_NAME),"vision_model":get_setting("vision_model",VISION_MODEL_NAME),"temperature":get_setting("temperature","0.3"),"max_tokens":get_setting("max_tokens","1000"),"provider":"Gemini","api_configured":bool(API_KEY)}
+    settings={"text_model":get_setting("text_model",MODEL_NAME),"vision_model":get_setting("vision_model",VISION_MODEL_NAME),"temperature":get_setting("temperature","0.3"),"max_tokens":get_setting("max_tokens","1000"),"ai_concurrency":get_setting("ai_concurrency",os.getenv("AI_CONCURRENCY","8")),"retry_attempts":get_setting("retry_attempts",os.getenv("AI_RETRY_ATTEMPTS","3")),"fallback_models":get_setting("fallback_models",os.getenv("GEMINI_FALLBACK_MODELS",MODEL_NAME)),"provider":"Gemini","api_configured":bool(API_KEY),"api_masked":("••••" + API_KEY[-4:]) if API_KEY else "Chưa cấu hình"}
     return render_template("admin/ai_settings.html",settings=settings)
 
 
 @app.post("/admin/ai-settings")
 @admin_required
 def admin_ai_settings_save():
-    allowed={"text_model","vision_model","temperature","max_tokens"}; connection=get_database()
+    allowed={"text_model","vision_model","temperature","max_tokens","ai_concurrency","retry_attempts","fallback_models"}; connection=get_database()
     for key in allowed:
         value=request.form.get(key,"").strip()
         connection.execute("INSERT INTO system_settings(setting_key,setting_value,updated_by,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP",(key,value,session["user_id"]))
     write_admin_log(connection,"update_ai_settings",details="Cần khởi động lại để áp dụng model"); connection.commit(); connection.close(); return redirect(url_for("admin_ai_settings"))
+
+
+@app.post("/admin/api/ai/test")
+@admin_required
+def admin_test_gemini():
+    if not client or not API_KEY:
+        return jsonify({"error": "Chưa cấu hình GEMINI_API_KEY."}), 400
+
+    model_name = get_setting("text_model", MODEL_NAME).strip() or MODEL_NAME
+    started = time.perf_counter()
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": "Trả lời đúng một từ: OK"},
+                {"role": "user", "content": "Kiểm tra kết nối"},
+            ],
+            max_completion_tokens=20,
+            temperature=0,
+        )
+        reply = (response.choices[0].message.content or "OK").strip()
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        connection = get_database()
+        write_admin_log(connection, "test_gemini", details=f"model={model_name}; latency={latency_ms}ms")
+        connection.commit()
+        connection.close()
+        return jsonify({"ok": True, "model": model_name, "reply": reply[:100], "latency_ms": latency_ms})
+    except Exception as error:
+        return jsonify({"error": f"{type(error).__name__}: {str(error)[:300]}"}), 502
 
 
 @app.get("/admin/audit-logs")
@@ -3869,6 +4194,16 @@ def admin_dashboard_payload():
                     COALESCE(prompt_tokens, 0)
                     + COALESCE(completion_tokens, 0)
                 ),
+                0
+            )
+            FROM chat_logs
+            """
+        ).fetchone()[0],
+
+        "success_rate": connection.execute(
+            """
+            SELECT COALESCE(
+                ROUND(100.0 * SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1),
                 0
             )
             FROM chat_logs
@@ -3955,6 +4290,12 @@ def admin_dashboard_payload():
         "recent_users": [dict(row) for row in recent_users],
         "recent_chats": [dict(row) for row in recent_chats],
         "server_time": datetime.now().strftime("%H:%M:%S"),
+        "ai": {
+            "provider": "Google Gemini",
+            "api_configured": bool(API_KEY),
+            "text_model": get_setting("text_model", MODEL_NAME),
+            "vision_model": get_setting("vision_model", VISION_MODEL_NAME),
+        },
     }
 
 
@@ -4095,6 +4436,7 @@ def admin_api_users():
 def admin_api_chats():
     q = request.args.get("q", "").strip()
     model = request.args.get("model", "").strip()
+    status = request.args.get("status", "").strip()
     page = max(request.args.get("page", 1, type=int), 1)
     per_page = 25
 
@@ -4116,6 +4458,12 @@ def admin_api_chats():
     if model:
         where.append("c.model = ?")
         params.append(model)
+
+    if status in {"success", "error"}:
+        if status == "success":
+            where.append("c.status = 'success'")
+        else:
+            where.append("c.status != 'success'")
 
     clause = (
         "WHERE " + " AND ".join(where)
@@ -4147,6 +4495,7 @@ def admin_api_chats():
             c.prompt_tokens,
             c.completion_tokens,
             c.status,
+            c.error_message,
             c.created_at,
             COALESCE(u.full_name, 'Khách') AS full_name,
             u.email
