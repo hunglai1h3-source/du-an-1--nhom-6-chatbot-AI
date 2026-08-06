@@ -71,9 +71,9 @@
   }
 
   function renderBankInvoice(order, bank) {
-    const qrUrl = bank.configured
-      ? `https://img.vietqr.io/image/${encodeURIComponent(bank.bin)}-${encodeURIComponent(bank.account_number)}-compact2.png?amount=${encodeURIComponent(order.amount)}&addInfo=${encodeURIComponent(order.payment_note)}&accountName=${encodeURIComponent(bank.account_name)}`
-      : "";
+    // Dùng ảnh QR cố định của tài khoản ngân hàng đã đặt trong static/images.
+    // Người dùng vẫn cần chuyển đúng số tiền và đúng nội dung hóa đơn hiển thị bên cạnh.
+    const qrUrl = "/static/images/payment_qr.png";
 
     if (!bank.configured) {
       orderArea.innerHTML = `
@@ -117,17 +117,21 @@
         </dl>
 
         <div class="premium-payment-grid">
-          <img class="premium-qr" src="${escapeHTML(qrUrl)}" alt="Mã QR chuyển khoản Premium">
+          <figure class="premium-qr-box">
+            <img class="premium-qr" src="${escapeHTML(qrUrl)}" alt="Mã QR chuyển khoản Premium">
+            <figcaption>Quét mã QR để mở thông tin tài khoản</figcaption>
+          </figure>
           <dl class="premium-bank-details">
             <div><dt>Ngân hàng</dt><dd>${escapeHTML(bank.name)}</dd></div>
             <div><dt>Số tài khoản</dt><dd>${escapeHTML(bank.account_number)}</dd></div>
             <div><dt>Chủ tài khoản</dt><dd>${escapeHTML(bank.account_name)}</dd></div>
-            <div><dt>Nội dung</dt><dd class="payment-note">${escapeHTML(order.payment_note)}</dd></div>
+            <div><dt>Số tiền</dt><dd>${money(order.amount)}</dd></div>
+            <div><dt>Nội dung chuyển khoản</dt><dd class="payment-note">${escapeHTML(order.payment_note)}</dd></div>
           </dl>
         </div>
 
         <p class="premium-payment-note">
-          Chỉ bấm “Tôi đã chuyển khoản” sau khi giao dịch ngân hàng đã hoàn tất.
+          Mã QR là QR cố định của tài khoản. Hãy kiểm tra đúng số tiền và nhập đúng nội dung hóa đơn trước khi chuyển khoản.
         </p>
       </section>
     `;

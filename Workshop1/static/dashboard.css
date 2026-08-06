@@ -1326,18 +1326,35 @@ body.modal-open { overflow: hidden; }
 
 .premium-payment-grid {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.premium-qr-box {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #dbe7df;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .08);
 }
 
 .premium-qr {
-  width: 190px;
-  height: 190px;
+  display: block;
+  width: 100%;
+  max-height: 285px;
   object-fit: contain;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 11px;
   background: #fff;
+}
+
+.premium-qr-box figcaption {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .premium-bank-details {
