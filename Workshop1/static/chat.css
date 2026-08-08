@@ -5153,3 +5153,52 @@ html[data-theme="dark"] .chat-emergency-heading strong, html[data-theme="dark"] 
   }
 
 }
+/* =========================================================
+   FIX NÚT ĐỔI GỢI Ý
+========================================================= */
+
+#refreshQuickButton {
+  width: auto !important;
+  min-width: 78px !important;
+  height: 32px !important;
+
+  padding: 0 10px !important;
+
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+
+  flex-shrink: 0 !important;
+
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+
+  font-size: 11px !important;
+  line-height: 1 !important;
+  font-weight: 600 !important;
+
+  color: #526458 !important;
+
+  border: 1px solid var(--border) !important;
+  border-radius: 9px !important;
+  background: var(--card) !important;
+
+  cursor: pointer !important;
+}
+
+#refreshQuickButton:hover {
+  color: var(--green) !important;
+  border-color: #b9ddc6 !important;
+  background: var(--green-pale) !important;
+}
+
+@media (max-width: 720px) {
+  #refreshQuickButton {
+    min-width: 72px !important;
+    height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 10px !important;
+  }
+}
