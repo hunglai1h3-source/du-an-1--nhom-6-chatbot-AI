@@ -1,4 +1,4 @@
- "use strict";
+"use strict";
 
  
 
@@ -1895,3 +1895,296 @@
  
 
  document.addEventListener("DOMContentLoaded", initialize);
+
+/* =========================================================
+   MEDICARE AI - BONG BÓNG TƯ VẤN NHANH 20260808
+   Dùng lại POST /chat và hồ sơ đang chọn; không thay backend.
+   ========================================================= */
+(() => {
+  "use strict";
+
+  const STORAGE_KEY = "medicareDashboardWidgetMessagesV1";
+  const CONVERSATION_KEY = "medicareDashboardWidgetConversationIdV1";
+  const MAX_STORED_MESSAGES = 20;
+  let sending = false;
+
+  const byId = (id) => document.getElementById(id);
+  const nowTime = () => new Date().toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  function readMessages() {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.slice(-MAX_STORED_MESSAGES) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveMessages(messages) {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-MAX_STORED_MESSAGES)));
+    } catch (_) {}
+  }
+
+  function conversationId() {
+    let id = sessionStorage.getItem(CONVERSATION_KEY);
+    if (!id) {
+      id = `dashboard-widget-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      sessionStorage.setItem(CONVERSATION_KEY, id);
+    }
+    return id;
+  }
+
+  function profileSnapshot() {
+    const M = window.MediCare;
+    const profile = M?.getSelectedProfile?.() || {
+      id: "guest",
+      name: "Khách",
+      relationship: "Khách",
+      age: "--",
+      gender: "Chưa cập nhật",
+      height: "",
+      weight: "",
+      condition: "Chưa cập nhật",
+      allergies: "Chưa cập nhật"
+    };
+
+    return {
+      id: profile.id,
+      name: profile.name,
+      relationship: profile.relationship,
+      age: profile.age,
+      gender: profile.gender,
+      height: profile.height,
+      weight: profile.weight,
+      condition: profile.condition,
+      allergies: profile.allergies,
+      profile_type: profile.relationship === "Bản thân" ? "self" : "family"
+    };
+  }
+
+  function updateProfileBar() {
+    const M = window.MediCare;
+    const profile = profileSnapshot();
+    const avatar = byId("mcaiProfileAvatar");
+    const name = byId("mcaiProfileName");
+    if (avatar) avatar.textContent = M?.initials?.(profile.name) || "K";
+    if (name) name.textContent = profile.name || "Khách";
+  }
+
+  function messageNode(message) {
+    const item = document.createElement("div");
+    item.className = `mcai-message ${message.role === "user" ? "user" : "assistant"}`;
+    if (message.error) item.classList.add("error");
+    if (message.emergency) item.classList.add("emergency");
+
+    const content = document.createElement("div");
+    content.textContent = message.content || "";
+    item.appendChild(content);
+
+    if (message.time) {
+      const time = document.createElement("small");
+      time.className = "mcai-message-time";
+      time.textContent = message.time;
+      item.appendChild(time);
+    }
+    return item;
+  }
+
+  function renderMessages(messages) {
+    const box = byId("mcaiMessages");
+    if (!box) return;
+    box.replaceChildren();
+
+    if (!messages.length) {
+      const profile = profileSnapshot();
+      messages.push({
+        role: "assistant",
+        content: `Xin chào! Tôi đang hỗ trợ theo hồ sơ của ${profile.name || "bạn"}. Bạn cần tư vấn vấn đề sức khỏe nào?`,
+        time: nowTime()
+      });
+      saveMessages(messages);
+    }
+
+    messages.forEach((message) => box.appendChild(messageNode(message)));
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function showTyping() {
+    const box = byId("mcaiMessages");
+    if (!box || byId("mcaiTyping")) return;
+    const item = document.createElement("div");
+    item.id = "mcaiTyping";
+    item.className = "mcai-message assistant";
+    item.innerHTML = '<span class="mcai-typing" aria-label="MediCare AI đang trả lời"><i></i><i></i><i></i></span>';
+    box.appendChild(item);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function hideTyping() {
+    byId("mcaiTyping")?.remove();
+  }
+
+  function setOpen(open) {
+    const widget = byId("mcaiWidget");
+    const launcher = byId("mcaiLauncher");
+    const panel = byId("mcaiPanel");
+    if (!widget || !launcher || !panel) return;
+
+    widget.classList.toggle("is-open", open);
+    widget.classList.remove("is-tip-visible");
+    launcher.setAttribute("aria-expanded", String(open));
+    panel.setAttribute("aria-hidden", String(!open));
+
+    if (open) {
+      updateProfileBar();
+      window.setTimeout(() => byId("mcaiInput")?.focus(), 120);
+    }
+  }
+
+  function resizeInput() {
+    const input = byId("mcaiInput");
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 96)}px`;
+  }
+
+  async function sendMessage(text, messages) {
+    const cleanText = String(text || "").trim();
+    if (!cleanText || sending) return;
+
+    const M = window.MediCare;
+    const input = byId("mcaiInput");
+    const sendButton = byId("mcaiSend");
+    const history = messages
+      .slice(-10)
+      .map(({ role, content }) => ({ role, content }))
+      .filter((item) => item.content);
+
+    const activeProfile = profileSnapshot();
+
+    messages.push({ role: "user", content: cleanText, time: nowTime() });
+    saveMessages(messages);
+    renderMessages(messages);
+
+    if (input) {
+      input.value = "";
+      resizeInput();
+    }
+
+    sending = true;
+    if (sendButton) sendButton.disabled = true;
+    showTyping();
+
+    try {
+      const formData = new FormData();
+      formData.append("message", cleanText);
+      formData.append("history", JSON.stringify(history));
+      formData.append("selected_profile", JSON.stringify(activeProfile));
+      formData.append("profile_context_version", "3");
+      formData.append("conversation_id", conversationId());
+
+      const environment = M?.readJSON?.(M.KEYS?.locationContext, null);
+      if (environment) formData.append("environment", JSON.stringify(environment));
+
+      const specialtyKey = M?.KEYS?.specialty;
+      const specialty = specialtyKey ? (localStorage.getItem(specialtyKey) || "") : "";
+      if (specialty) formData.append("specialty", specialty);
+
+      const response = await fetch("/chat", {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin"
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "AI chưa thể phản hồi.");
+
+      const returnedProfileId = data.profile_used?.id;
+      if (returnedProfileId != null && String(returnedProfileId) !== String(activeProfile.id)) {
+        throw new Error("Hồ sơ tư vấn đã thay đổi. Vui lòng thử lại.");
+      }
+
+      messages.push({
+        role: "assistant",
+        content: data.reply || "Tôi chưa nhận được nội dung phản hồi. Vui lòng thử lại.",
+        time: nowTime(),
+        emergency: Boolean(data.emergency?.active)
+      });
+    } catch (error) {
+      messages.push({
+        role: "assistant",
+        content: `Xin lỗi, hệ thống gặp lỗi: ${error.message || "Không thể kết nối."}`,
+        time: nowTime(),
+        error: true
+      });
+    } finally {
+      sending = false;
+      if (sendButton) sendButton.disabled = false;
+      hideTyping();
+      saveMessages(messages);
+      renderMessages(messages);
+      input?.focus();
+    }
+  }
+
+  function initializeDashboardChatWidget() {
+    const widget = byId("mcaiWidget");
+    if (!widget) return;
+
+    const messages = readMessages();
+    updateProfileBar();
+    renderMessages(messages);
+
+    byId("mcaiLauncher")?.addEventListener("click", () => {
+      setOpen(!widget.classList.contains("is-open"));
+    });
+
+    byId("mcaiClose")?.addEventListener("click", () => setOpen(false));
+
+    byId("mcaiForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      sendMessage(byId("mcaiInput")?.value, messages);
+    });
+
+    byId("mcaiInput")?.addEventListener("input", resizeInput);
+    byId("mcaiInput")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        byId("mcaiForm")?.requestSubmit();
+      }
+    });
+
+    document.querySelectorAll("[data-mcai-prompt]").forEach((button) => {
+      button.addEventListener("click", () => sendMessage(button.dataset.mcaiPrompt, messages));
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && widget.classList.contains("is-open")) setOpen(false);
+    });
+
+    window.addEventListener("medicare:profile-changed", () => {
+      updateProfileBar();
+      const profile = profileSnapshot();
+      messages.push({
+        role: "assistant",
+        content: `Đã chuyển sang hồ sơ ${profile.name}. Câu hỏi tiếp theo sẽ dùng hồ sơ này.`,
+        time: nowTime()
+      });
+      saveMessages(messages);
+      renderMessages(messages);
+    });
+
+    widget.classList.add("is-tip-visible");
+    window.setTimeout(() => widget.classList.remove("is-tip-visible"), 5500);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeDashboardChatWidget);
+  } else {
+    initializeDashboardChatWidget();
+  }
+})();
+/* ===== /MEDICARE AI - BONG BÓNG TƯ VẤN NHANH ===== */

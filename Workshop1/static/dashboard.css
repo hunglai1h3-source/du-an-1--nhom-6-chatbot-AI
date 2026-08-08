@@ -1457,3 +1457,502 @@ body.modal-open { overflow: hidden; }
     margin-inline: auto;
   }
 }
+
+/* =========================================================
+   MEDICARE AI - BONG BÓNG TƯ VẤN NHANH 20260808
+   Chỉ bổ sung widget nổi, không thay đổi layout hiện có.
+   ========================================================= */
+.mcai-widget {
+  position: fixed;
+  left: 24px;
+  bottom: 86px;
+  z-index: 4000;
+  font-family: inherit;
+}
+
+.mcai-launcher {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #12b565, var(--green));
+  box-shadow: 0 14px 32px rgba(7, 150, 83, .30);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+
+.mcai-launcher:hover,
+.mcai-launcher:focus-visible {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 18px 38px rgba(7, 150, 83, .36);
+  outline: none;
+}
+
+.mcai-launcher svg {
+  width: 29px;
+  height: 29px;
+  fill: currentColor;
+}
+
+.mcai-ai-badge {
+  position: absolute;
+  right: -4px;
+  top: -7px;
+  min-width: 25px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  color: #075c33;
+  background: #e8fff1;
+  box-shadow: 0 5px 13px rgba(15, 23, 42, .15);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.mcai-tip {
+  position: absolute;
+  left: 72px;
+  bottom: 7px;
+  width: max-content;
+  max-width: 230px;
+  padding: 10px 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .12);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-7px);
+  pointer-events: none;
+  transition: .2s ease;
+}
+
+.mcai-tip::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  bottom: 17px;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.mcai-tip strong,
+.mcai-tip span {
+  display: block;
+}
+
+.mcai-tip strong {
+  margin-bottom: 2px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.mcai-tip span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.mcai-widget.is-tip-visible .mcai-tip,
+.mcai-widget:not(.is-open):hover .mcai-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+.mcai-panel {
+  position: absolute;
+  left: 0;
+  bottom: 72px;
+  width: min(390px, calc(100vw - 32px));
+  height: min(540px, calc(100vh - 190px));
+  min-height: 430px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  overflow: hidden;
+  border: 1px solid rgba(7, 150, 83, .20);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 26px 70px rgba(15, 23, 42, .22);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px) scale(.98);
+  transform-origin: left bottom;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease, visibility .2s ease;
+}
+
+.mcai-widget.is-open .mcai-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+}
+
+.mcai-widget.is-open .mcai-tip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.mcai-panel-header {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 34px 34px;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid #e8eee9;
+  background: linear-gradient(180deg, #f7fff9, #fff);
+}
+
+.mcai-brand-dot {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--green);
+  border-radius: 50%;
+  color: var(--green);
+  font-size: 25px;
+  font-weight: 900;
+}
+
+.mcai-panel-header strong,
+.mcai-panel-header small {
+  display: block;
+}
+
+.mcai-panel-header strong {
+  font-size: 14px;
+}
+
+.mcai-panel-header small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.mcai-online-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: #12b565;
+  box-shadow: 0 0 0 3px rgba(18, 181, 101, .12);
+}
+
+.mcai-full-link,
+.mcai-close {
+  width: 33px;
+  height: 33px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e4ebe6;
+  border-radius: 10px;
+  color: #566276;
+  background: #fff;
+  font-size: 17px;
+}
+
+.mcai-close {
+  font-size: 21px;
+  line-height: 1;
+}
+
+.mcai-full-link:hover,
+.mcai-close:hover {
+  color: var(--green);
+  border-color: #bfe3cd;
+  background: var(--green-soft);
+}
+
+.mcai-profile-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border-bottom: 1px solid #edf1ee;
+  background: #fbfdfc;
+}
+
+.mcai-profile-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #2d9362, #075e34);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.mcai-profile-bar small,
+.mcai-profile-bar strong {
+  display: block;
+}
+
+.mcai-profile-bar small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: .04em;
+}
+
+.mcai-profile-bar strong {
+  margin-top: 1px;
+  font-size: 11px;
+}
+
+.mcai-messages {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 15px 14px 10px;
+  scroll-behavior: smooth;
+  background: linear-gradient(180deg, #fff, #fbfdfc);
+}
+
+.mcai-message {
+  max-width: 84%;
+  padding: 9px 11px;
+  border-radius: 14px;
+  font-size: 11px;
+  line-height: 1.52;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mcai-message.assistant {
+  align-self: flex-start;
+  color: #26352d;
+  border: 1px solid #e2ebe5;
+  border-bottom-left-radius: 5px;
+  background: #f5faf7;
+}
+
+.mcai-message.user {
+  align-self: flex-end;
+  color: #fff;
+  border-bottom-right-radius: 5px;
+  background: linear-gradient(145deg, #0aa65a, var(--green));
+}
+
+.mcai-message.error,
+.mcai-message.emergency {
+  align-self: flex-start;
+  color: #9f2424;
+  border: 1px solid #ffd2d2;
+  background: #fff4f4;
+}
+
+.mcai-message-time {
+  display: block;
+  margin-top: 4px;
+  opacity: .62;
+  font-size: 8px;
+}
+
+.mcai-typing {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 52px;
+}
+
+.mcai-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6f8177;
+  animation: mcaiTyping 1s infinite ease-in-out;
+}
+
+.mcai-typing i:nth-child(2) { animation-delay: .14s; }
+.mcai-typing i:nth-child(3) { animation-delay: .28s; }
+
+@keyframes mcaiTyping {
+  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
+.mcai-quick {
+  display: flex;
+  gap: 6px;
+  padding: 5px 12px 9px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mcai-quick::-webkit-scrollbar { display: none; }
+
+.mcai-quick button {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid #d8e9df;
+  border-radius: 999px;
+  color: #35604a;
+  background: #f8fcfa;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.mcai-quick button:hover {
+  color: var(--green);
+  border-color: #a9d9bb;
+  background: var(--green-soft);
+}
+
+.mcai-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: end;
+  gap: 8px;
+  margin: 0 12px;
+  padding: 8px;
+  border: 1px solid #dce7e0;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+}
+
+.mcai-form:focus-within {
+  border-color: #8fd0a8;
+  box-shadow: 0 0 0 3px rgba(7, 150, 83, .09);
+}
+
+.mcai-form textarea {
+  width: 100%;
+  max-height: 96px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mcai-form textarea::placeholder { color: #98a3ae; }
+
+.mcai-form button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  background: var(--green);
+}
+
+.mcai-form button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.mcai-form button svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+
+.mcai-disclaimer {
+  padding: 7px 12px 10px;
+  color: var(--muted);
+  font-size: 8px;
+  text-align: center;
+}
+
+html[data-theme="dark"] .mcai-panel,
+html[data-theme="dark"] .mcai-tip,
+html[data-theme="dark"] .mcai-full-link,
+html[data-theme="dark"] .mcai-close,
+body.dark .mcai-panel,
+body.dark .mcai-tip,
+body.dark .mcai-full-link,
+body.dark .mcai-close {
+  color: #eef5f1;
+  background: #17201b;
+  border-color: #2b3931;
+}
+
+html[data-theme="dark"] .mcai-tip::before,
+body.dark .mcai-tip::before {
+  background: #17201b;
+  border-color: #2b3931;
+}
+
+html[data-theme="dark"] .mcai-panel-header,
+html[data-theme="dark"] .mcai-profile-bar,
+html[data-theme="dark"] .mcai-messages,
+html[data-theme="dark"] .mcai-form,
+body.dark .mcai-panel-header,
+body.dark .mcai-profile-bar,
+body.dark .mcai-messages,
+body.dark .mcai-form {
+  color: #eef5f1;
+  background: #111913;
+  border-color: #2b3931;
+}
+
+html[data-theme="dark"] .mcai-message.assistant,
+body.dark .mcai-message.assistant {
+  color: #e9f1ec;
+  border-color: #314138;
+  background: #1b2821;
+}
+
+html[data-theme="dark"] .mcai-form textarea,
+body.dark .mcai-form textarea { color: #eef5f1; }
+
+@media (max-width: 760px) {
+  .mcai-widget {
+    left: 14px;
+    bottom: 22px;
+  }
+
+  .mcai-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 92px;
+    width: auto;
+    height: min(570px, calc(100vh - 115px));
+    min-height: 390px;
+    transform-origin: center bottom;
+  }
+
+  .mcai-tip {
+    left: 68px;
+    max-width: 200px;
+  }
+}
+
+@media (max-height: 650px) and (min-width: 761px) {
+  .mcai-widget { bottom: 24px; }
+  .mcai-panel { height: calc(100vh - 120px); min-height: 360px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mcai-launcher,
+  .mcai-tip,
+  .mcai-panel,
+  .mcai-typing i {
+    transition: none;
+    animation: none;
+  }
+}
+/* ===== /MEDICARE AI - BONG BÓNG TƯ VẤN NHANH ===== */

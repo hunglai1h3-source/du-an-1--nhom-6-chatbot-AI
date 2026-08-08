@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="MediCare AI - Tổng quan sức khỏe gia đình" />
   <title>MediCare AI | Tổng quan sức khỏe</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260806-premium-qr-2') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260808-chat-widget-1') }}" />
 </head>
 <body>
   <header class="topbar">
@@ -538,6 +538,82 @@
   </span>
 </a>
 
+  <!-- ===== MediCare AI: bong bóng tư vấn nhanh ===== -->
+  <div class="mcai-widget" id="mcaiWidget">
+    <div class="mcai-tip" id="mcaiTip" role="status">
+      <strong>Tư vấn AI</strong>
+      <span>Tôi có thể giúp gì cho bạn?</span>
+    </div>
+
+    <button
+      class="mcai-launcher"
+      id="mcaiLauncher"
+      type="button"
+      aria-label="Mở Tư vấn AI"
+      aria-controls="mcaiPanel"
+      aria-expanded="false"
+    >
+      <span class="mcai-ai-badge" aria-hidden="true">AI</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6.4 5.1h11.2A3.4 3.4 0 0 1 21 8.5v6.2a3.4 3.4 0 0 1-3.4 3.4h-6.1l-4.2 2.6.8-2.6H6.4A3.4 3.4 0 0 1 3 14.7V8.5a3.4 3.4 0 0 1 3.4-3.4Z"/>
+        <circle cx="8" cy="11.6" r="1.15"/>
+        <circle cx="12" cy="11.6" r="1.15"/>
+        <circle cx="16" cy="11.6" r="1.15"/>
+      </svg>
+    </button>
+
+    <section
+      class="mcai-panel"
+      id="mcaiPanel"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="mcaiPanelTitle"
+      aria-hidden="true"
+    >
+      <header class="mcai-panel-header">
+        <div class="mcai-brand-dot" aria-hidden="true">+</div>
+        <div>
+          <strong id="mcaiPanelTitle">MediCare AI</strong>
+          <small><span class="mcai-online-dot"></span> Tư vấn nhanh</small>
+        </div>
+        <a class="mcai-full-link" href="/tu-van" title="Mở trang Tư vấn AI đầy đủ">↗</a>
+        <button class="mcai-close" id="mcaiClose" type="button" aria-label="Đóng Tư vấn AI">×</button>
+      </header>
+
+      <div class="mcai-profile-bar" id="mcaiProfileBar">
+        <span class="mcai-profile-avatar" id="mcaiProfileAvatar">K</span>
+        <span>
+          <small>ĐANG TƯ VẤN THEO HỒ SƠ</small>
+          <strong id="mcaiProfileName">Khách</strong>
+        </span>
+      </div>
+
+      <div class="mcai-messages" id="mcaiMessages" aria-live="polite"></div>
+
+      <div class="mcai-quick" id="mcaiQuick">
+        <button type="button" data-mcai-prompt="Tôi đang có triệu chứng và muốn được hướng dẫn ban đầu.">🩺 Triệu chứng</button>
+        <button type="button" data-mcai-prompt="Tôi muốn hỏi về thuốc và cách sử dụng an toàn.">💊 Thuốc</button>
+        <button type="button" data-mcai-prompt="Tôi muốn được tư vấn dinh dưỡng phù hợp.">🥗 Dinh dưỡng</button>
+      </div>
+
+      <form class="mcai-form" id="mcaiForm">
+        <textarea
+          id="mcaiInput"
+          rows="1"
+          maxlength="4000"
+          placeholder="Nhập câu hỏi sức khỏe..."
+          aria-label="Câu hỏi cho MediCare AI"
+        ></textarea>
+        <button id="mcaiSend" type="submit" aria-label="Gửi câu hỏi">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 17 8-17 8 3-7 8-1-8-1-3-7Z"/></svg>
+        </button>
+      </form>
+
+      <p class="mcai-disclaimer">AI hỗ trợ thông tin ban đầu, không thay thế bác sĩ.</p>
+    </section>
+  </div>
+  <!-- ===== /MediCare AI: bong bóng tư vấn nhanh ===== -->
+
 <div class="premium-modal hidden" id="premiumModal" aria-hidden="true">
   <section class="premium-modal-card" role="dialog" aria-modal="true" aria-labelledby="premiumModalTitle">
     <button type="button" class="premium-modal-close" id="closePremiumModal" aria-label="Đóng">×</button>
@@ -593,7 +669,7 @@
 </div>
 
   <script src="{{ url_for('static', filename='common.js', v='20260806-premium-v3') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard.js', v='20260725-auth-fix-1') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard.js', v='20260808-chat-widget-1') }}"></script>
   <script src="{{ url_for('static', filename='premium.js', v='20260806-premium-qr-2') }}"></script>
 </body>
 </html>
