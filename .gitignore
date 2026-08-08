@@ -1,5 +1,134 @@
-Workshop1/.env
-Workshop1/data/raw/MedQuAD-master/
-Workshop1/data/raw/train-00000-of-00001.parquet
-# Không đưa database người dùng lên GitHub
+# ==========================================
+# PYTHON VIRTUAL ENVIRONMENT
+# ==========================================
+venv/
+.venv/
+env/
+ENV/
+Workshop1/venv/
+
+
+# ==========================================
+# PYTHON CACHE
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+
+
+# ==========================================
+# ENVIRONMENT / SECRET KEYS
+# ==========================================
+.env
+.env.*
+!.env.example
+*.env
+
+# API keys / secrets
+secrets.json
+credentials.json
+
+
+# ==========================================
+# DATASET / RAW DATA
+# Không đẩy dataset dung lượng lớn lên GitHub
+# ==========================================
+Workshop1/data/raw/
+data/raw/
+
+*.parquet
+
+
+# ==========================================
+# DATABASE
+# Nếu muốn giữ database local, không push Git
+# ==========================================
 *.db
+*.sqlite
+*.sqlite3
+
+# Database của project
+Workshop1/users.db
+
+
+# ==========================================
+# LOG FILES
+# ==========================================
+*.log
+logs/
+
+
+# ==========================================
+# FLASK
+# ==========================================
+instance/
+.webassets-cache/
+
+
+# ==========================================
+# TEST / CACHE
+# ==========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+
+# ==========================================
+# BUILD / PACKAGE
+# ==========================================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+
+# ==========================================
+# VS CODE
+# ==========================================
+.vscode/
+
+
+# ==========================================
+# PYCHARM / IDE
+# ==========================================
+.idea/
+*.iml
+
+
+# ==========================================
+# WINDOWS
+# ==========================================
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+
+
+# ==========================================
+# MACOS
+# ==========================================
+.DS_Store
+
+
+# ==========================================
+# TEMPORARY FILES
+# ==========================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+
+# ==========================================
+# UPLOAD / GENERATED FILES
+# Chỉ bật nếu project tạo file tạm trong đây
+# ==========================================
+uploads/
+temp/
+tmp/
