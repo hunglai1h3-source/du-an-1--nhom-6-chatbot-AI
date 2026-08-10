@@ -2029,6 +2029,13 @@
     const name = byId("mcaiProfileName");
     if (avatar) avatar.textContent = M?.initials?.(profile.name) || "K";
     if (name) name.textContent = profile.name || "Khách";
+
+    const profileBar = byId("mcaiProfileBar");
+    if (profileBar) {
+      const label = `Xem hồ sơ sức khỏe của ${profile.name || "người đang được tư vấn"}`;
+      profileBar.title = label;
+      profileBar.setAttribute("aria-label", label);
+    }
   }
  
   function messageNode(message) {
@@ -2236,6 +2243,32 @@
     });
  
     byId("mcaiClose")?.addEventListener("click", () => setOpen(false));
+
+    byId("mcaiProfileBar")?.addEventListener("click", async () => {
+      const M = window.MediCare;
+      const profile = await ensureProfileReady();
+
+      if (!hasUsableProfile(profile)) {
+        M?.showToast?.("Chưa tải được hồ sơ sức khỏe đang chọn.", "error");
+        return;
+      }
+
+      // Hồ sơ bản thân: mở modal cập nhật hồ sơ ngay trên Trang chủ.
+      if (
+        profile.relationship === "Bản thân" &&
+        typeof window.openSelfHealthModal === "function"
+      ) {
+        setOpen(false);
+        await window.openSelfHealthModal();
+        return;
+      }
+
+      // Hồ sơ thành viên gia đình: đưa người dùng tới Sổ sức khỏe gia đình.
+      setOpen(false);
+      const familySection = document.getElementById("family-health");
+      familySection?.scrollIntoView({ behavior: "smooth", block: "center" });
+      M?.showToast?.(`Đang hiển thị hồ sơ ${profile.name}.`, "success");
+    });
  
     byId("mcaiForm")?.addEventListener("submit", (event) => {
       event.preventDefault();

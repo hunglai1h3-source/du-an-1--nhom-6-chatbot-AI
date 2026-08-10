@@ -1676,12 +1676,40 @@ body.modal-open { overflow: hidden; }
 }
 
 .mcai-profile-bar {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 9px 14px;
+  border: 0;
   border-bottom: 1px solid #edf1ee;
+  color: inherit;
   background: #fbfdfc;
+  text-align: left;
+  cursor: pointer;
+  transition: background .16s ease;
+}
+
+.mcai-profile-bar:hover {
+  background: #f1faf5;
+}
+
+.mcai-profile-bar:focus-visible {
+  outline: 2px solid #52b981;
+  outline-offset: -2px;
+}
+
+.mcai-profile-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.mcai-profile-open {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .mcai-profile-avatar {
@@ -1956,3 +1984,9 @@ body.dark .mcai-form textarea { color: #eef5f1; }
   }
 }
 /* ===== /MEDICARE AI - BONG BÓNG TƯ VẤN NHANH ===== */
+
+
+html[data-theme="dark"] .mcai-profile-open,
+body.dark .mcai-profile-open {
+  color: #75d7a1;
+}

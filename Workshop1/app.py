@@ -2411,6 +2411,58 @@ def format_profile_for_prompt(profile):
     return "\n".join(lines) if lines else "Chưa có thông tin hồ sơ."
 
 
+def is_profile_lookup_request(text):
+    """Nhận diện các câu ngắn yêu cầu xem hồ sơ sức khỏe đang chọn."""
+    normalized = normalize_vietnamese_for_matching(text)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    exact_phrases = {
+        "ho so cua toi",
+        "ho so cua minh",
+        "ho so suc khoe cua toi",
+        "ho so suc khoe cua minh",
+        "xem ho so cua toi",
+        "xem ho so cua minh",
+        "xem ho so suc khoe",
+        "xem ho so suc khoe cua toi",
+        "thong tin ho so cua toi",
+        "thong tin suc khoe cua toi",
+        "ho so dang chon",
+        "xem ho so dang chon",
+    }
+
+    if normalized in exact_phrases:
+        return True
+
+    words = normalized.split()
+    return (
+        len(words) <= 9
+        and "ho so" in normalized
+        and any(
+            phrase in normalized
+            for phrase in ("cua toi", "cua minh", "suc khoe", "dang chon")
+        )
+    )
+
+
+def build_profile_lookup_reply(profile):
+    """Tạo câu trả lời trực tiếp từ dữ liệu hồ sơ đã được server xác minh."""
+    if not profile:
+        return (
+            "Tôi chưa tìm thấy dữ liệu cho hồ sơ sức khỏe đang chọn. "
+            "Bạn hãy đăng nhập hoặc cập nhật hồ sơ trước."
+        )
+
+    name = first_present(profile, "name") or "hồ sơ đang chọn"
+    details = format_profile_for_prompt(profile)
+    return (
+        f"Đây là thông tin hiện có trong hồ sơ đang được dùng để tư vấn cho {name}:\n"
+        f"{details}\n\n"
+        "Tôi sẽ dùng các thông tin này để cá nhân hóa câu trả lời tiếp theo. "
+        "Bạn không cần nhập lại những mục đã có."
+    )
+
+
 def is_weight_plan_request(text):
     normalized = normalize_search_text(text)
     return any(phrase in normalized for phrase in (
@@ -2612,6 +2664,38 @@ def chat():
                     status="emergency",
                 )
                 return emergency_json_response(emergency)
+
+        # Yêu cầu xem hồ sơ được xử lý trực tiếp từ hồ sơ đã được server xác minh.
+        # Nhờ vậy câu "hồ sơ của tôi" luôn trả dữ liệu thật thay vì để AI suy diễn.
+        if user_message and not has_image and is_profile_lookup_request(user_message):
+            effective_profile = resolve_effective_profile(selected_profile or {})
+            reply = build_profile_lookup_reply(effective_profile)
+
+            response_profile = dict(effective_profile or {})
+            if response_profile:
+                response_profile["id"] = response_profile.get(
+                    "client_profile_id",
+                    response_profile.get("id"),
+                )
+
+            try:
+                record_chat_log(
+                    user_message,
+                    reply,
+                    "local-profile-reader",
+                    False,
+                    0,
+                    status="success",
+                    profile=effective_profile,
+                )
+            except Exception:
+                pass
+
+            return jsonify({
+                "reply": reply,
+                "profile_used": response_profile or None,
+                "profile_lookup": True,
+            })
 
         if client is None:
             return jsonify({

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="MediCare AI - Tổng quan sức khỏe gia đình" />
   <title>MediCare AI | Tổng quan sức khỏe</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260808-chat-widget-1') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260810-profile-access-1') }}" />
 </head>
 <body>
   <header class="topbar">
@@ -580,17 +580,25 @@
         <button class="mcai-close" id="mcaiClose" type="button" aria-label="Đóng Tư vấn AI">×</button>
       </header>
 
-      <div class="mcai-profile-bar" id="mcaiProfileBar">
+      <button
+        class="mcai-profile-bar"
+        id="mcaiProfileBar"
+        type="button"
+        title="Xem hồ sơ sức khỏe đang được dùng để tư vấn"
+        aria-label="Xem hồ sơ sức khỏe đang được dùng để tư vấn"
+      >
         <span class="mcai-profile-avatar" id="mcaiProfileAvatar">K</span>
-        <span>
+        <span class="mcai-profile-copy">
           <small>ĐANG TƯ VẤN THEO HỒ SƠ</small>
           <strong id="mcaiProfileName">Khách</strong>
         </span>
-      </div>
+        <span class="mcai-profile-open" aria-hidden="true">Xem hồ sơ ›</span>
+      </button>
 
       <div class="mcai-messages" id="mcaiMessages" aria-live="polite"></div>
 
       <div class="mcai-quick" id="mcaiQuick">
+        <button type="button" data-mcai-prompt="Hồ sơ sức khỏe của tôi">📋 Hồ sơ</button>
         <button type="button" data-mcai-prompt="Tôi đang có triệu chứng và muốn được hướng dẫn ban đầu.">🩺 Triệu chứng</button>
         <button type="button" data-mcai-prompt="Tôi muốn hỏi về thuốc và cách sử dụng an toàn.">💊 Thuốc</button>
         <button type="button" data-mcai-prompt="Tôi muốn được tư vấn dinh dưỡng phù hợp.">🥗 Dinh dưỡng</button>
@@ -669,7 +677,7 @@
 </div>
 
   <script src="{{ url_for('static', filename='common.js', v='20260806-premium-v3') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard.js', v='20260808-chat-profile-reset-1') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard.js', v='20260810-profile-access-1') }}"></script>
   <script src="{{ url_for('static', filename='premium.js', v='20260806-premium-qr-2') }}"></script>
 </body>
 </html>
