@@ -3,20 +3,131 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <meta name="description" content="MediCare AI - Tổng quan sức khỏe và bản tin sức khỏe">
-  <title>MediCare AI | Tổng quan sức khỏe</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260810-news-admin-v1') }}">
+  <meta name="description" content="MediCare AI - Hồ sơ sức khỏe, tiện ích và báo cáo sức khỏe">
+  <title>MediCare AI | Sức khỏe &amp; Tiện ích</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260810-dashboard-v2') }}">
+
+<style>
+  /* Chỉ áp dụng cho trang Sức khỏe & Tiện ích */
+  .profile-only-panel {
+    width: 100%;
+  }
+
+  .profile-only-panel .profile-zone {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .profile-only-family-grid {
+    grid-template-columns: repeat(4, minmax(190px, 1fr)) !important;
+    align-items: stretch;
+  }
+
+  .profile-only-family-grid .family-card,
+  .profile-only-family-grid .add-family-card {
+    width: 100%;
+  }
+
+  .wide-health-report {
+    width: 100%;
+    padding: 16px;
+  }
+
+  .report-horizontal-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, .8fr) minmax(0, 3fr);
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .wide-health-report .report-profile-line {
+    margin: 0;
+    min-height: 96px;
+    padding: 14px;
+  }
+
+  .wide-health-report .report-metric-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+  }
+
+  .wide-health-report .report-metric-list article {
+    min-width: 0;
+    min-height: 96px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-content: center;
+    gap: 9px;
+    padding: 12px;
+  }
+
+  .wide-health-report .report-metric-list article > em {
+    grid-column: 1 / -1;
+    text-align: right;
+  }
+
+  .report-footer-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 12px;
+    align-items: stretch;
+    margin-top: 10px;
+  }
+
+  .wide-health-report .report-notes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .wide-health-report .report-detail-button {
+    width: 100%;
+    height: 100%;
+    min-height: 42px;
+    margin-top: 0;
+  }
+
+  @media (max-width: 1400px) {
+    .profile-only-family-grid {
+      grid-template-columns: repeat(3, minmax(190px, 1fr)) !important;
+    }
+
+    .wide-health-report .report-metric-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 980px) {
+    .profile-only-family-grid {
+      grid-template-columns: repeat(2, minmax(180px, 1fr)) !important;
+    }
+
+    .report-horizontal-layout,
+    .report-footer-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .profile-only-family-grid,
+    .wide-health-report .report-metric-list,
+    .wide-health-report .report-notes {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
+
 </head>
-<body class="page-home-v2">
+<body class="page-health-v2">
   <header class="topbar">
     <a class="brand" href="/" aria-label="MediCare AI">
       <span class="brand-mark">+</span>
       <span><strong>MediCare <em>AI</em></strong><small>AI đồng hành cùng sức khỏe</small></span>
     </a>
     <nav class="main-nav" aria-label="Điều hướng chính">
-      <a class="active" href="/">Trang chủ</a>
+      <a  href="/">Trang chủ</a>
       <a href="/tu-van">Tư vấn AI</a>
-      <a  href="/suc-khoe-tien-ich">Sức khỏe &amp; Tiện ích</a>
+      <a class="active" href="/suc-khoe-tien-ich">Sức khỏe &amp; Tiện ích</a>
       <a href="/kien-thuc">Kiến thức</a>
     </nav>
     <div class="top-actions">
@@ -36,84 +147,75 @@
         <span class="premium-badge" id="accountPlanBadge">Free</span>
       </section>
       <nav class="side-main-nav" aria-label="Điều hướng tài khoản">
-        <a class="active" href="/"><span>⌂</span>Tổng quan</a>
+        <a class="" href="/"><span>⌂</span>Tổng quan</a>
         <a href="/tu-van"><span>▣</span>Tư vấn gần đây</a>
         <a class="" href="/suc-khoe-tien-ich#family-health"><span>♙</span>Hồ sơ cá nhân</a>
         <a class="" href="/suc-khoe-tien-ich#family-health"><span>♧</span>Gia đình của tôi <small id="familyCountMini">0 hồ sơ</small></a>
-        <a class="" href="/suc-khoe-tien-ich"><span>♡</span>Sức khỏe &amp; Tiện ích</a>
+        <a class="active" href="/suc-khoe-tien-ich"><span>♡</span>Sức khỏe &amp; Tiện ích</a>
         <button type="button" id="openSettings"><span>⚙</span>Cài đặt</button>
         <button type="button" id="sidebarAuthButton"><span>⇥</span>Đăng nhập / Đăng xuất</button>
       </nav>
       <section class="premium-card"><div><h3>Nâng cấp Premium</h3><p>Mở khóa toàn bộ tính năng nâng cao.</p><button type="button" id="upgradeButton">Nâng cấp ngay</button></div><span aria-hidden="true">💎</span></section>
       <div id="recentList" class="hidden" aria-hidden="true"></div>
     </aside>
-    <main class="dashboard-main home-dashboard">
-      <section class="home-greeting">
-        <div><p class="eyebrow">TỔNG QUAN HÔM NAY</p><h1>Chào <span id="welcomeName">Khách</span>! 👋</h1><p id="dashboardTodayText">Theo dõi sức khỏe và những thông tin cần chú ý trong ngày.</p></div>
-        <div class="home-status-grid">
-          <article><span>♡</span><div><small>Hồ sơ</small><strong id="healthStatusText">Đang tải...</strong></div></article>
-          <article><span>▣</span><div><small>Lịch nhắc</small><strong id="medicineSummaryText">Đang tải...</strong></div></article>
-          <article><span>◉</span><div><small>AQI không khí</small><strong id="homeAqiText">--</strong></div></article>
-        </div>
-      </section>
+    <main class="dashboard-main health-tools-main">
+      <span id="welcomeName" class="hidden">Khách</span>
+      <section class="health-page-heading"><div><p class="eyebrow">TRUNG TÂM SỨC KHỎE</p><h1>Sức khỏe &amp; Tiện ích</h1><p>Quản lý hồ sơ sức khỏe gia đình và xem báo cáo được tổng hợp tự động.</p></div></section>
+      <nav class="health-section-tabs" aria-label="Các phần sức khỏe và tiện ích">
+        <button class="active" type="button" data-section-target="family-health">▣ Hồ sơ sức khỏe</button>
+        <button type="button" data-section-target="health-report">▤ Báo cáo sức khỏe</button>
+      </nav>
 
-      <section class="panel health-news-panel" id="health-news">
-        <div class="news-heading-row">
-          <div>
-            <p>▤</p>
-            <span>
-              <h2>Bản tin sức khỏe</h2>
-              <small>Bài viết từ các trang báo, chỉ hiển thị sau khi Admin duyệt</small>
-            </span>
+      <section class="panel combined-health-panel profile-only-panel">
+        <div class="profile-zone" id="family-health">
+          <div class="subsection-heading">
+            <div>
+              <h2>Hồ sơ đang tư vấn</h2>
+              <p>Chọn đúng thành viên để AI sử dụng thông tin phù hợp.</p>
+            </div>
+            <button type="button" id="showAllProfiles">Quản lý tất cả hồ sơ →</button>
           </div>
-          <a href="/ban-tin-suc-khoe">Xem tất cả →</a>
-        </div>
-
-        <div class="news-filter-row" role="tablist" aria-label="Lọc bản tin sức khỏe">
-          <button class="active" type="button" data-news-filter="all">Tất cả</button>
-          <button type="button" data-news-filter="disease">Dịch bệnh</button>
-          <button type="button" data-news-filter="community">Y tế cộng đồng</button>
-          <button type="button" data-news-filter="nutrition">Dinh dưỡng</button>
-          <button type="button" data-news-filter="mental">Sức khỏe tinh thần</button>
-        </div>
-
-        <div class="news-loading-state" id="healthNewsLoading">
-          Đang tải bản tin đã được duyệt...
-        </div>
-
-        <div class="news-layout hidden" id="healthNewsContent">
-          <div id="healthNewsFeatured"></div>
-          <div class="news-list" id="healthNewsList"></div>
-        </div>
-
-        <div class="news-empty-state hidden" id="healthNewsEmpty">
-          <strong>Chưa có bài báo đã duyệt.</strong>
-          <span>Admin có thể thêm bài tại trang Quản trị → Bản tin sức khỏe.</span>
+          <div class="family-grid health-page-family-grid profile-only-family-grid" id="familyGrid"></div>
         </div>
       </section>
 
+      <section class="panel auto-health-report wide-health-report" id="health-report">
+        <div class="report-heading">
+          <div><p>▤</p><span><h2>Báo cáo sức khỏe</h2><small>Tự động tổng hợp từ dữ liệu bạn đã cập nhật</small></span></div>
+          <button type="button" id="refreshHealthReport">Làm mới</button>
+        </div>
 
-      <div class="dashboard-grid preserved-tools-grid">
-        <section class="panel environment-panel" id="utilities">
-          <div class="panel-heading compact"><div><p>☀</p><span><h2>Thời tiết &amp; chất lượng không khí</h2><small id="weatherLocation">Chưa xác định vị trí</small></span></div><button type="button" id="refreshEnvironment">Làm mới</button></div>
-          <div class="environment-main"><div class="temperature-block"><span id="weatherIcon">⛅</span><div><strong id="temperatureValue">--°C</strong><small id="weatherDescription">Cho phép vị trí để xem thời tiết</small></div></div><div class="aqi-block"><span>AQI</span><strong id="aqiValue">--</strong><em id="aqiLevel">Chưa có dữ liệu</em><small>PM2.5: <b id="pm25Value">--</b> µg/m³</small></div></div>
-          <div class="weather-metrics"><span>💧 Độ ẩm <b id="humidityValue">--%</b></span><span>💨 Gió <b id="windValue">-- km/h</b></span><span>🌡 Cảm giác <b id="feelsLikeValue">--°C</b></span></div>
-          <div class="health-recommendations"><div class="recommendation-heading"><strong>Khuyến nghị sức khỏe hôm nay</strong><span id="environmentUpdatedAt"></span></div><ul id="recommendationList"><li>Cho phép website truy cập vị trí để nhận khuyến nghị phù hợp.</li></ul></div>
-        </section>
-        <section class="panel pharmacy-panel">
-          <div class="panel-heading compact"><div><p>⌖</p><span><h2>Nhà thuốc trên Google Maps</h2><small id="pharmacyLocation">Google Maps sử dụng vị trí thiết bị</small></span></div><button type="button" id="openMapTop">Mở Google Maps</button></div>
-          <div class="google-map-layout"><iframe id="googlePharmacyMap" class="google-pharmacy-map" title="Google Maps tìm nhà thuốc gần đây" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=nh%C3%A0+thu%E1%BB%91c+g%E1%BA%A7n+t%C3%B4i&output=embed"></iframe><div class="pharmacy-list"><article class="google-map-card"><span>G</span><div><strong>Tìm nhà thuốc trên Google Maps</strong><small>Xem khoảng cách, giờ mở cửa và chỉ đường trực tiếp.</small></div><button type="button" id="openGooglePharmacy">Mở Maps</button></article></div></div>
-          <button class="map-wide-button" id="openMapBottom" type="button">Mở danh sách nhà thuốc trên Google Maps →</button>
-        </section>
-      </div>
+        <div class="report-horizontal-layout">
+          <div class="report-profile-line">
+            <span id="reportProfileAvatar">K</span>
+            <div>
+              <strong id="reportProfileName">Chưa có hồ sơ</strong>
+              <small id="reportProfileMeta">Chọn hồ sơ để xem báo cáo</small>
+            </div>
+          </div>
+
+          <div class="report-metric-list">
+            <article><span>⚖</span><div><small>Cân nặng hiện tại</small><strong id="reportWeight">--</strong></div><em id="reportWeightTrend">Theo hồ sơ</em></article>
+            <article><span>BMI</span><div><small>BMI ước tính</small><strong id="reportBmi">--</strong></div><em id="reportBmiStatus">Chưa đủ dữ liệu</em></article>
+            <article><span>🗓</span><div><small>Lịch nhắc đang bật</small><strong id="reportReminder">--</strong></div><em>Tài khoản</em></article>
+            <article><span>☀</span><div><small>Chất lượng không khí</small><strong id="reportAqi">--</strong></div><em id="reportAqiStatus">Chưa có dữ liệu</em></article>
+          </div>
+        </div>
+
+        <div class="report-footer-row">
+          <div class="report-notes">
+            <p><b>Bệnh nền:</b> <span id="reportCondition">--</span></p>
+            <p><b>Dị ứng:</b> <span id="reportAllergy">--</span></p>
+          </div>
+          <button class="report-detail-button" id="openHealthReport" type="button">Xem báo cáo chi tiết</button>
+        </div>
+      </section>
+      <div class="health-hidden-environment" aria-hidden="true"><span id="weatherIcon"></span><span id="weatherDescription"></span><span id="temperatureValue"></span><span id="aqiValue"></span><span id="aqiLevel"></span><span id="pm25Value"></span><span id="humidityValue"></span><span id="windValue"></span><span id="feelsLikeValue"></span><span id="weatherLocation"></span><span id="pharmacyLocation"></span><span id="environmentUpdatedAt"></span><ul id="recommendationList"></ul></div>
     </main>
     <aside class="right-sidebar">
       <section class="side-panel">
         <div class="side-panel-heading"><h2>Lịch nhắc &amp; quản lý</h2><button type="button" id="showRemindersButton">Xem tất cả</button></div>
         <div class="reminder-list"><article class="reminder-empty"><span>⌛</span><div><strong>Đang tải lịch nhắc</strong><small>Dữ liệu theo tài khoản đăng nhập.</small></div></article></div>
-        <button class="add-reminder-inline-button" id="addReminderQuickButton" type="button">
-          <span aria-hidden="true">＋</span> Thêm lịch nhắc
-        </button>
       </section>
       <section class="side-panel alert-panel">
         <div class="side-panel-heading"><h2>Cảnh báo &amp; khuyến nghị</h2></div>
@@ -128,18 +230,13 @@
     </aside>
   </div>
 
-  <div class="shared-modal hidden" id="homeNewsModal" role="dialog" aria-modal="true" aria-labelledby="homeNewsTitle">
-    <section class="shared-modal-card news-reader-modal-card">
-      <button class="shared-modal-close" id="closeHomeNewsModal" type="button" aria-label="Đóng">×</button>
-      <span class="news-reader-category" id="homeNewsCategory">Bản tin sức khỏe</span>
-      <h2 id="homeNewsTitle"></h2>
-      <p class="news-reader-lead" id="homeNewsLead"></p>
-      <div class="news-reader-body" id="homeNewsBody"></div>
-      <div class="news-reader-source" id="homeNewsSource"></div>
-      <div class="news-reader-actions">
-        <a id="homeNewsAskAI" class="primary-button" href="/tu-van">Hỏi AI về chủ đề này</a>
-        <a id="homeNewsSourceLink" class="secondary-button" href="#" target="_blank" rel="noopener noreferrer">Đọc bài gốc ↗</a>
-      </div>
+  <div class="shared-modal hidden" id="healthReportModal" role="dialog" aria-modal="true" aria-labelledby="healthReportModalTitle">
+    <section class="shared-modal-card health-report-modal-card">
+      <button class="shared-modal-close" id="closeHealthReportModal" type="button" aria-label="Đóng">×</button>
+      <p class="modal-eyebrow">BÁO CÁO TỰ ĐỘNG</p><h2 id="healthReportModalTitle">Báo cáo sức khỏe</h2>
+      <p class="health-report-disclaimer">Báo cáo tổng hợp từ dữ liệu người dùng đã khai báo và dữ liệu theo dõi trong hệ thống; không phải chẩn đoán y khoa.</p>
+      <div id="healthReportPrintable" class="health-report-printable"></div>
+      <div class="health-report-modal-actions"><button class="secondary-button" id="copyHealthReport" type="button">Sao chép</button><button class="primary-button" id="printHealthReport" type="button">Tải file PDF</button></div>
     </section>
   </div>
 
@@ -565,7 +662,7 @@
 
   <script src="{{ url_for('static', filename='common.js', v='20260806-premium-v3') }}"></script>
   <script src="{{ url_for('static', filename='dashboard.js', v='20260810-dashboard-v2') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard-extra.js', v='20260810-news-admin-v1') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard-extra.js', v='20260810-dashboard-v2') }}"></script>
   <script src="{{ url_for('static', filename='premium.js', v='20260806-premium-qr-2') }}"></script>
 </body>
 </html>

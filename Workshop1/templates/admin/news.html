@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Quản lý bản tin sức khỏe | MediCare Admin</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css', v='20260810-local-image-v2') }}">
+</head>
+<body data-admin-current-user="{{ session.get('user_id', 0) }}">
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="/admin">
+      <span class="brand-mark">+</span>
+      <span><strong>MediCare AI</strong><small>Admin Console</small></span>
+    </a>
+
+    <nav>
+      <a href="/admin">⌂ Tổng quan</a>
+      <a href="/admin/users">♙ Người dùng</a>
+      <a href="/admin/chats">☵ Hội thoại</a>
+      <a href="/admin/premium">◆ Premium</a>
+      <a class="active" data-admin-news-link href="/admin/news">▤ Bản tin sức khỏe</a>
+      <a href="/admin/datasets">▣ Dữ liệu</a>
+      <a href="/admin/prompt">✎ Prompt</a>
+      <a href="/admin/ai-settings">⚙ AI Settings</a>
+      <a href="/admin/audit-logs">☷ Nhật ký Admin</a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <a href="/">← Về website</a>
+      <form method="post" action="/logout">
+        <button type="submit">Đăng xuất</button>
+      </form>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <button class="icon-btn mobile-menu" id="menuToggle" type="button">☰</button>
+        <h1>Quản lý bản tin sức khỏe</h1>
+        <p>Bài chỉ xuất hiện ở Trang chủ sau khi có trạng thái “Đã duyệt”.</p>
+      </div>
+      <div class="top-actions">
+        <span class="live-dot"></span>
+        <span id="syncLabel">Sẵn sàng</span>
+        <button class="icon-btn" id="themeToggle" type="button">◐</button>
+        <span class="avatar">{{ (admin_user.full_name[:1] if admin_user else 'A')|upper }}</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <section class="news-admin-stats stats-grid">
+        <article class="stat-card"><span class="stat-icon">▤</span><div><span>Tất cả</span><strong id="newsCountAll">0</strong></div></article>
+        <article class="stat-card"><span class="stat-icon">⌛</span><div><span>Chờ duyệt</span><strong id="newsCountPending">0</strong></div></article>
+        <article class="stat-card"><span class="stat-icon">✓</span><div><span>Đã duyệt</span><strong id="newsCountApproved">0</strong></div></article>
+        <article class="stat-card"><span class="stat-icon">×</span><div><span>Từ chối</span><strong id="newsCountRejected">0</strong></div></article>
+      </section>
+
+      <div class="grid-2 wide-left news-admin-layout">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 id="newsFormTitle">Thêm bài báo</h2>
+              <p>Dùng tiêu đề, mô tả ngắn và link bài gốc. Không sao chép toàn bộ nội dung báo.</p>
+            </div>
+          </div>
+
+          <form id="newsForm" class="form-grid">
+            <input type="hidden" id="newsId" name="id">
+
+            <label class="full">
+              Tiêu đề bài báo
+              <input id="newsTitle" name="title" maxlength="220" required placeholder="Ví dụ: Cách phòng bệnh trong mùa mưa...">
+            </label>
+
+            <label>
+              Nguồn báo
+              <input id="newsSourceName" name="source_name" maxlength="120" required placeholder="VnExpress / Tuổi Trẻ / Dân trí...">
+            </label>
+
+            <label>
+              Danh mục
+              <select id="newsCategory" name="category">
+                {% for value, label in categories.items() %}
+                  <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+
+            <label class="full">
+              Link bài báo gốc
+              <input id="newsSourceUrl" name="source_url" type="url" required placeholder="https://...">
+            </label>
+
+            <div class="full news-image-upload-field">
+              <label for="newsImageFile">Ảnh đại diện</label>
+
+              <input id="newsImageUrl" name="image_url" type="hidden">
+
+              <div class="news-image-picker">
+                <label class="news-image-pick-button" for="newsImageFile">
+                  <span aria-hidden="true">▣</span>
+                  Chọn ảnh từ máy tính
+                </label>
+
+                <input
+                  id="newsImageFile"
+                  name="image_file"
+                  class="news-image-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                >
+
+                <small>Hỗ trợ JPG, PNG, WEBP · tối đa 5 MB</small>
+              </div>
+
+              <div class="news-image-preview hidden" id="newsImagePreviewBox">
+                <img id="newsImagePreview" src="" alt="Xem trước ảnh đại diện">
+                <div>
+                  <strong>Ảnh đã chọn</strong>
+                  <small id="newsImageFileName">Ảnh đại diện</small>
+                  <button class="btn" id="removeNewsImage" type="button">Bỏ ảnh</button>
+                </div>
+              </div>
+            </div>
+
+            <label class="full">
+              Mô tả ngắn
+              <textarea id="newsSummary" name="summary" rows="5" maxlength="900" required placeholder="Tóm tắt 1–3 câu, không chép nguyên bài báo."></textarea>
+            </label>
+
+            <div class="full actions">
+              <button class="btn primary" type="submit" id="saveNewsButton">Tạo bài chờ duyệt</button>
+              <button class="btn hidden" type="button" id="cancelNewsEdit">Hủy sửa</button>
+            </div>
+          </form>
+
+          <div class="news-source-note">
+            <strong>Gợi ý nguồn:</strong>
+            VnExpress, Tuổi Trẻ, Dân trí, Thanh Niên, Sức khỏe &amp; Đời sống...
+            Bài phải có link nguồn rõ ràng.
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>Quy trình xuất bản</h2><p>Kiểm soát nội dung trước khi hiện cho người dùng.</p></div>
+          </div>
+          <div class="news-workflow">
+            <div><span>1</span><b>Thêm link bài báo</b><small>Nhập metadata và mô tả ngắn.</small></div>
+            <div><span>2</span><b>Chờ duyệt</b><small>Bài chưa xuất hiện ở Trang chủ.</small></div>
+            <div><span>3</span><b>Admin duyệt</b><small>Kiểm tra nguồn, tiêu đề, ảnh.</small></div>
+            <div><span>4</span><b>Xuất bản</b><small>Trang chủ chỉ lấy bài approved.</small></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="toolbar">
+          <div>
+            <h2>Danh sách bài báo</h2>
+            <span class="muted">Quản lý trạng thái và bài nổi bật.</span>
+          </div>
+          <button class="btn" id="refreshNews" type="button">Làm mới</button>
+        </div>
+
+        <form class="filter-bar" id="newsFilters">
+          <select id="newsStatusFilter" name="status">
+            <option value="all">Tất cả trạng thái</option>
+            <option value="pending">Chờ duyệt</option>
+            <option value="approved">Đã duyệt</option>
+            <option value="draft">Đã ẩn / Bản nháp</option>
+            <option value="rejected">Từ chối</option>
+          </select>
+
+          <select id="newsCategoryFilter" name="category">
+            <option value="all">Tất cả danh mục</option>
+            {% for value, label in categories.items() %}
+              <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </form>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Bài báo</th>
+                <th>Nguồn</th>
+                <th>Danh mục</th>
+                <th>Trạng thái</th>
+                <th>Nổi bật</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="newsTableBody">
+              <tr><td colspan="6" class="empty">Đang tải...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+  window.AdminPage = "news";
+  window.AdminCurrentUser = Number(
+    document.body.dataset.adminCurrentUser || 0
+  );
+</script>
+<script src="{{ url_for('static', filename='admin/admin.js', v='20260810-local-image-v2') }}"></script>
+</body>
+</html>

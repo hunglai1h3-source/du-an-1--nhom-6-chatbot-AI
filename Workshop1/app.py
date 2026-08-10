@@ -24,7 +24,7 @@ import subprocess
 import tempfile
 import unicodedata
 from uuid import uuid4
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from threading import Lock
@@ -862,6 +862,46 @@ def initialize_database():
             ON premium_orders(status, created_at DESC)
         """)
 
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS health_news (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'general',
+                source_name TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                image_url TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                is_featured INTEGER NOT NULL DEFAULT 0,
+                created_by INTEGER,
+                reviewed_by INTEGER,
+                rejection_reason TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                reviewed_at TIMESTAMPTZ,
+                published_at TIMESTAMPTZ,
+                CONSTRAINT fk_health_news_creator
+                    FOREIGN KEY (created_by)
+                    REFERENCES users(id)
+                    ON DELETE SET NULL,
+                CONSTRAINT fk_health_news_reviewer
+                    FOREIGN KEY (reviewed_by)
+                    REFERENCES users(id)
+                    ON DELETE SET NULL
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_health_news_public
+            ON health_news(status, is_featured, published_at DESC, id DESC)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_health_news_category
+            ON health_news(category, status, published_at DESC)
+        """)
+
         connection.execute("""
             CREATE TABLE IF NOT EXISTS admin_audit_logs (
                 id SERIAL PRIMARY KEY,
@@ -997,6 +1037,159 @@ def enforce_daily_ai_limit(connection, user_id, has_image=False):
     if has_image and images_today >= image_limit:
         raise PermissionError(f"Bạn đã dùng hết {image_limit} lượt phân tích ảnh hôm nay.")
     return entitlement
+
+
+
+HEALTH_NEWS_CATEGORIES = {
+    "general": "Sức khỏe",
+    "disease": "Dịch bệnh",
+    "community": "Y tế cộng đồng",
+    "nutrition": "Dinh dưỡng",
+    "mental": "Sức khỏe tinh thần",
+}
+
+
+def normalize_health_news_url(value, field_name="Đường dẫn", allow_empty=False):
+    raw = str(value or "").strip()
+    if not raw and allow_empty:
+        return ""
+    if not raw:
+        raise ValueError(f"{field_name} không được để trống.")
+
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(
+            f"{field_name} phải là URL http/https hợp lệ."
+        )
+    return raw[:1500]
+
+
+def normalize_health_news_image_url(value):
+    """Cho phép ảnh ngoài http/https hoặc ảnh đã upload vào static của MediCare."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    # Ảnh upload từ máy tính chỉ được dùng trong thư mục riêng của bản tin.
+    if raw.startswith("/static/uploads/health_news/"):
+        return raw[:1500]
+
+    return normalize_health_news_url(
+        raw,
+        "Ảnh đại diện",
+        allow_empty=True,
+    )
+
+
+def detect_health_news_image_extension(content):
+    """Xác định loại ảnh bằng chữ ký file thay vì chỉ tin phần mở rộng."""
+    if content.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if (
+        len(content) >= 12
+        and content[:4] == b"RIFF"
+        and content[8:12] == b"WEBP"
+    ):
+        return "webp"
+    return None
+
+
+def save_health_news_image_upload(file_storage):
+    if file_storage is None or not getattr(file_storage, "filename", ""):
+        raise ValueError("Bạn chưa chọn ảnh từ máy tính.")
+
+    content = file_storage.read()
+    if not content:
+        raise ValueError("File ảnh đang trống.")
+
+    max_size = 5 * 1024 * 1024
+    if len(content) > max_size:
+        raise ValueError("Ảnh đại diện không được vượt quá 5 MB.")
+
+    extension = detect_health_news_image_extension(content)
+    if extension is None:
+        raise ValueError("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.")
+
+    upload_dir = BASE_DIR / "static" / "uploads" / "health_news"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{uuid4().hex}.{extension}"
+    target = upload_dir / filename
+    target.write_bytes(content)
+
+    return f"/static/uploads/health_news/{filename}"
+
+
+def health_news_row_to_dict(row):
+    if not row:
+        return None
+
+    def dt_text(value):
+        if value is None:
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return str(value)
+
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "summary": row["summary"],
+        "category": row["category"],
+        "category_label": HEALTH_NEWS_CATEGORIES.get(
+            row["category"],
+            "Sức khỏe",
+        ),
+        "source_name": row["source_name"],
+        "source_url": row["source_url"],
+        "image_url": row["image_url"] or "",
+        "status": row["status"],
+        "is_featured": bool(row["is_featured"]),
+        "created_by": row["created_by"],
+        "reviewed_by": row["reviewed_by"],
+        "rejection_reason": row["rejection_reason"] or "",
+        "created_at": dt_text(row["created_at"]),
+        "updated_at": dt_text(row["updated_at"]),
+        "reviewed_at": dt_text(row["reviewed_at"]),
+        "published_at": dt_text(row["published_at"]),
+    }
+
+
+def parse_health_news_payload(data):
+    if not isinstance(data, dict):
+        raise ValueError("Dữ liệu bài báo không hợp lệ.")
+
+    title = str(data.get("title", "")).strip()
+    summary = str(data.get("summary", "")).strip()
+    source_name = str(data.get("source_name", "")).strip()
+    category = str(data.get("category", "general")).strip().lower()
+    source_url = normalize_health_news_url(
+        data.get("source_url"),
+        "Link bài báo gốc",
+    )
+    image_url = normalize_health_news_image_url(
+        data.get("image_url")
+    )
+
+    if len(title) < 8:
+        raise ValueError("Tiêu đề bài báo phải có ít nhất 8 ký tự.")
+    if len(summary) < 20:
+        raise ValueError("Mô tả ngắn phải có ít nhất 20 ký tự.")
+    if not source_name:
+        raise ValueError("Bạn chưa nhập tên nguồn báo.")
+    if category not in HEALTH_NEWS_CATEGORIES:
+        raise ValueError("Danh mục bài báo không hợp lệ.")
+
+    return {
+        "title": title[:220],
+        "summary": summary[:900],
+        "category": category,
+        "source_name": source_name[:120],
+        "source_url": source_url,
+        "image_url": image_url,
+    }
 
 
 def create_notification(connection, user_id, title, message, kind="info"):
@@ -1537,6 +1730,83 @@ def index():
 @app.get("/tu-van")
 def consultation_page():
     return render_template("chat.html")
+
+
+@app.get("/suc-khoe-tien-ich")
+def health_utilities_page():
+    return render_template("health_utilities.html")
+
+
+
+
+@app.get("/api/health-news")
+def public_health_news():
+    try:
+        limit = max(1, min(int(request.args.get("limit", 8)), 30))
+    except (TypeError, ValueError):
+        limit = 8
+
+    category = str(request.args.get("category", "")).strip().lower()
+    parameters = []
+    conditions = ["status = 'approved'"]
+
+    if category and category != "all":
+        if category not in HEALTH_NEWS_CATEGORIES:
+            return jsonify({"error": "Danh mục không hợp lệ."}), 400
+        conditions.append("category = ?")
+        parameters.append(category)
+
+    parameters.append(limit)
+
+    connection = get_database()
+    try:
+        rows = connection.execute(
+            f"""
+            SELECT *
+            FROM health_news
+            WHERE {' AND '.join(conditions)}
+            ORDER BY
+                is_featured DESC,
+                COALESCE(published_at, reviewed_at, created_at) DESC,
+                id DESC
+            LIMIT ?
+            """,
+            tuple(parameters),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return jsonify({
+        "items": [health_news_row_to_dict(row) for row in rows],
+        "categories": HEALTH_NEWS_CATEGORIES,
+    })
+
+
+@app.get("/ban-tin-suc-khoe")
+def health_news_page():
+    connection = get_database()
+    try:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM health_news
+            WHERE status = 'approved'
+            ORDER BY
+                is_featured DESC,
+                COALESCE(published_at, reviewed_at, created_at) DESC,
+                id DESC
+            LIMIT 100
+            """
+        ).fetchall()
+        items = [health_news_row_to_dict(row) for row in rows]
+    finally:
+        connection.close()
+
+    return render_template(
+        "health_news.html",
+        items=items,
+        categories=HEALTH_NEWS_CATEGORIES,
+    )
 
 
 @app.get("/kien-thuc")
@@ -3625,7 +3895,7 @@ def reminders():
     data = request.get_json(silent=True) or {}
 
     reminder_type = str(data.get("reminder_type", "")).strip().lower()
-    if reminder_type not in {"water", "medicine", "weight", "exercise", "meal"}:
+    if reminder_type not in {"water", "medicine", "weight", "exercise", "meal", "appointment"}:
         connection.close()
         return jsonify({"error": "Loại lời nhắc không hợp lệ."}), 400
 
@@ -4024,6 +4294,369 @@ def admin_dashboard():
     """).fetchall()
     connection.close()
     return render_template("admin/dashboard.html", stats=stats, chart_rows=chart_rows, recent_chats=recent_chats, api_configured=bool(API_KEY), text_model=get_setting("text_model", MODEL_NAME), vision_model=get_setting("vision_model", VISION_MODEL_NAME))
+
+
+
+
+@app.get("/admin/news")
+@admin_required
+def admin_health_news_page():
+    connection = get_database()
+    try:
+        admin_user = connection.execute(
+            "SELECT id, full_name, email FROM users WHERE id = ?",
+            (session["user_id"],),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    return render_template(
+        "admin/news.html",
+        admin_user=admin_user,
+        categories=HEALTH_NEWS_CATEGORIES,
+    )
+
+
+@app.get("/admin/api/news")
+@admin_required
+def admin_health_news_api():
+    status = str(request.args.get("status", "all")).strip().lower()
+    category = str(request.args.get("category", "all")).strip().lower()
+
+    conditions = ["1 = 1"]
+    parameters = []
+
+    if status != "all":
+        if status not in {"draft", "pending", "approved", "rejected"}:
+            return jsonify({"error": "Trạng thái không hợp lệ."}), 400
+        conditions.append("status = ?")
+        parameters.append(status)
+
+    if category != "all":
+        if category not in HEALTH_NEWS_CATEGORIES:
+            return jsonify({"error": "Danh mục không hợp lệ."}), 400
+        conditions.append("category = ?")
+        parameters.append(category)
+
+    connection = get_database()
+    try:
+        rows = connection.execute(
+            f"""
+            SELECT *
+            FROM health_news
+            WHERE {' AND '.join(conditions)}
+            ORDER BY
+                CASE status
+                    WHEN 'pending' THEN 0
+                    WHEN 'approved' THEN 1
+                    WHEN 'draft' THEN 2
+                    ELSE 3
+                END,
+                id DESC
+            """,
+            tuple(parameters),
+        ).fetchall()
+
+        counts = {
+            "all": connection.execute(
+                "SELECT COUNT(*) FROM health_news"
+            ).fetchone()[0],
+            "pending": connection.execute(
+                "SELECT COUNT(*) FROM health_news WHERE status='pending'"
+            ).fetchone()[0],
+            "approved": connection.execute(
+                "SELECT COUNT(*) FROM health_news WHERE status='approved'"
+            ).fetchone()[0],
+            "draft": connection.execute(
+                "SELECT COUNT(*) FROM health_news WHERE status='draft'"
+            ).fetchone()[0],
+            "rejected": connection.execute(
+                "SELECT COUNT(*) FROM health_news WHERE status='rejected'"
+            ).fetchone()[0],
+        }
+    finally:
+        connection.close()
+
+    return jsonify({
+        "items": [health_news_row_to_dict(row) for row in rows],
+        "counts": counts,
+        "categories": HEALTH_NEWS_CATEGORIES,
+    })
+
+
+
+
+@app.post("/admin/api/news/upload-image")
+@admin_required
+def admin_upload_health_news_image():
+    image = request.files.get("image")
+
+    try:
+        image_url = save_health_news_image_upload(image)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    return jsonify({
+        "message": "Tải ảnh lên thành công.",
+        "image_url": image_url,
+    }), 201
+
+
+@app.post("/admin/api/news")
+@admin_required
+def admin_create_health_news():
+    try:
+        payload = parse_health_news_payload(
+            request.get_json(silent=True) or {}
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    connection = get_database()
+    try:
+        cursor = connection.execute(
+            """
+            INSERT INTO health_news (
+                title, summary, category, source_name,
+                source_url, image_url, status, created_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (
+                payload["title"],
+                payload["summary"],
+                payload["category"],
+                payload["source_name"],
+                payload["source_url"],
+                payload["image_url"] or None,
+                session["user_id"],
+            ),
+        )
+        news_id = cursor.lastrowid
+
+        write_admin_log(
+            connection,
+            "health_news_create",
+            details=f"Tạo bài bản tin #{news_id}: {payload['title']}",
+        )
+        connection.commit()
+
+        row = connection.execute(
+            "SELECT * FROM health_news WHERE id = ?",
+            (news_id,),
+        ).fetchone()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+    return jsonify({
+        "message": "Đã tạo bài và chuyển sang trạng thái chờ duyệt.",
+        "item": health_news_row_to_dict(row),
+    }), 201
+
+
+@app.put("/admin/api/news/<int:news_id>")
+@admin_required
+def admin_update_health_news(news_id):
+    try:
+        payload = parse_health_news_payload(
+            request.get_json(silent=True) or {}
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    connection = get_database()
+    try:
+        existing = connection.execute(
+            "SELECT * FROM health_news WHERE id = ?",
+            (news_id,),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Không tìm thấy bài báo."}), 404
+
+        connection.execute(
+            """
+            UPDATE health_news
+            SET title = ?,
+                summary = ?,
+                category = ?,
+                source_name = ?,
+                source_url = ?,
+                image_url = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                payload["title"],
+                payload["summary"],
+                payload["category"],
+                payload["source_name"],
+                payload["source_url"],
+                payload["image_url"] or None,
+                news_id,
+            ),
+        )
+
+        write_admin_log(
+            connection,
+            "health_news_update",
+            details=f"Cập nhật bài bản tin #{news_id}: {payload['title']}",
+        )
+        connection.commit()
+
+        row = connection.execute(
+            "SELECT * FROM health_news WHERE id = ?",
+            (news_id,),
+        ).fetchone()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+    return jsonify({
+        "message": "Đã cập nhật bài báo.",
+        "item": health_news_row_to_dict(row),
+    })
+
+
+@app.post("/admin/api/news/<int:news_id>/<action>")
+@admin_required
+def admin_health_news_action(news_id, action):
+    allowed_actions = {
+        "approve",
+        "reject",
+        "hide",
+        "feature",
+        "delete",
+        "pending",
+    }
+    if action not in allowed_actions:
+        return jsonify({"error": "Thao tác không hợp lệ."}), 400
+
+    data = request.get_json(silent=True) or {}
+    reason = str(data.get("reason", "")).strip()[:500]
+
+    connection = get_database()
+    try:
+        row = connection.execute(
+            "SELECT * FROM health_news WHERE id = ?",
+            (news_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Không tìm thấy bài báo."}), 404
+
+        if action == "approve":
+            if bool(row["is_featured"]):
+                connection.execute(
+                    "UPDATE health_news SET is_featured = 0 WHERE id <> ?",
+                    (news_id,),
+                )
+            connection.execute(
+                """
+                UPDATE health_news
+                SET status = 'approved',
+                    reviewed_by = ?,
+                    reviewed_at = CURRENT_TIMESTAMP,
+                    published_at = COALESCE(published_at, CURRENT_TIMESTAMP),
+                    rejection_reason = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (session["user_id"], news_id),
+            )
+
+        elif action == "reject":
+            connection.execute(
+                """
+                UPDATE health_news
+                SET status = 'rejected',
+                    reviewed_by = ?,
+                    reviewed_at = CURRENT_TIMESTAMP,
+                    rejection_reason = ?,
+                    is_featured = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (session["user_id"], reason or "Không được duyệt", news_id),
+            )
+
+        elif action == "hide":
+            connection.execute(
+                """
+                UPDATE health_news
+                SET status = 'draft',
+                    is_featured = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (news_id,),
+            )
+
+        elif action == "pending":
+            connection.execute(
+                """
+                UPDATE health_news
+                SET status = 'pending',
+                    is_featured = 0,
+                    rejection_reason = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (news_id,),
+            )
+
+        elif action == "feature":
+            if row["status"] != "approved":
+                return jsonify({
+                    "error": "Chỉ bài đã duyệt mới được đặt làm nổi bật."
+                }), 409
+            connection.execute(
+                "UPDATE health_news SET is_featured = 0 WHERE is_featured = 1"
+            )
+            connection.execute(
+                """
+                UPDATE health_news
+                SET is_featured = 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (news_id,),
+            )
+
+        elif action == "delete":
+            connection.execute(
+                "DELETE FROM health_news WHERE id = ?",
+                (news_id,),
+            )
+
+        write_admin_log(
+            connection,
+            f"health_news_{action}",
+            details=f"Thao tác {action} với bài bản tin #{news_id}",
+        )
+        connection.commit()
+
+        if action == "delete":
+            result = None
+        else:
+            result = connection.execute(
+                "SELECT * FROM health_news WHERE id = ?",
+                (news_id,),
+            ).fetchone()
+
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+    return jsonify({
+        "message": "Đã cập nhật bản tin.",
+        "item": health_news_row_to_dict(result) if result else None,
+    })
 
 
 @app.get("/admin/premium")

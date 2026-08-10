@@ -113,6 +113,7 @@ TABLES_WITH_AUTO_ID = {
     "prompt_versions",
     "premium_orders",
     "user_notifications",
+    "health_news",
 }
 
 

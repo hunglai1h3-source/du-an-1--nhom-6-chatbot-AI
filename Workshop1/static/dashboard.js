@@ -136,13 +136,23 @@
  
    const grid = $("#familyGrid");
  
-   if (!grid) return;
- 
- 
- 
    const profiles = M.getProfiles();
  
    const selected = profiles.length ? M.getSelectedProfile() : null;
+
+   const familyCountMini = $("#familyCountMini");
+   const sidebarName = $("#sidebarName");
+   const sidebarMeta = $("#sidebarMeta");
+   const sidebarAvatar = $("#sidebarAvatar");
+
+   if (familyCountMini) familyCountMini.textContent = `${profiles.length} hồ sơ`;
+   if (sidebarName) sidebarName.textContent = selected?.name || "Chưa có hồ sơ";
+   if (sidebarMeta) sidebarMeta.textContent = selected
+     ? `${selected.age} tuổi · ${selected.gender}`
+     : "Đăng nhập để quản lý";
+   if (sidebarAvatar) sidebarAvatar.textContent = selected ? M.initials(selected.name) : "--";
+
+   if (!grid) return;
  
    window.familyMembersCache = profiles
  
@@ -178,17 +188,6 @@
  
  
  
-   $("#familyCountMini").textContent = `${profiles.length} thành viên`;
- 
-   $("#sidebarName").textContent = selected?.name || "Chưa có hồ sơ";
- 
-   $("#sidebarMeta").textContent = selected
- 
-     ? `${selected.age} tuổi · ${selected.gender}`
- 
-     : "Đăng nhập để quản lý";
- 
-   $("#sidebarAvatar").textContent = selected ? M.initials(selected.name) : "--";
  
  
  
@@ -844,6 +843,9 @@
  
  function renderRecentChats() {
  
+   const recentList = $("#recentList");
+   if (!recentList) return;
+
    const sessions = M.readJSON(M.KEYS.chats, []);
  
    const items = Array.isArray(sessions)
@@ -854,7 +856,7 @@
  
  
  
-   $("#recentList").innerHTML = items.length
+   recentList.innerHTML = items.length
  
      ? items.map((session, index) => {
  
@@ -1346,7 +1348,7 @@
  
  function reminderIcon(type) {
  
-   return ({ medicine: "💊", water: "💧", weight: "⚖", exercise: "🏃", meal: "🥗" })[type] || "🗓";
+   return ({ medicine: "💊", water: "💧", weight: "⚖", exercise: "🏃", meal: "🥗", appointment: "🗓️" })[type] || "🗓";
  
  }
  
@@ -1614,7 +1616,9 @@
  
        renderProfiles();
  
-       $("#family-health")?.scrollIntoView({ behavior: "smooth" });
+       const familyPanel = $("#family-health");
+       if (familyPanel) familyPanel.scrollIntoView({ behavior: "smooth" });
+       else window.location.assign("/suc-khoe-tien-ich#family-health");
  
        return;
  
@@ -1630,7 +1634,9 @@
  
      if (term.includes("thời tiết") || term.includes("bụi") || term.includes("aqi")) {
  
-       $("#utilities")?.scrollIntoView({ behavior: "smooth" });
+       const utilitiesPanel = $("#utilities");
+       if (utilitiesPanel) utilitiesPanel.scrollIntoView({ behavior: "smooth" });
+       else window.location.assign("/#utilities");
  
        return;
  
@@ -1662,17 +1668,17 @@
  
      await M.syncProfiles(user.user);
  
-     $("#welcomeName").textContent = user.user.full_name;
+     if ($("#welcomeName")) $("#welcomeName").textContent = user.user.full_name;
  
-     $("#accountAvatar").textContent = M.initials(user.user.full_name);
+     if ($("#accountAvatar")) $("#accountAvatar").textContent = M.initials(user.user.full_name);
  
    } else {
  
      M.clearPrivateState();
  
-     $("#welcomeName").textContent = "Khách";
+     if ($("#welcomeName")) $("#welcomeName").textContent = "Khách";
  
-     $("#accountAvatar").textContent = "K";
+     if ($("#accountAvatar")) $("#accountAvatar").textContent = "K";
  
    }
  
@@ -1686,7 +1692,11 @@
  
    const panel = $(selector);
  
-   if (!panel) return;
+   if (!panel) {
+     if (selector === "#family-health") window.location.assign("/suc-khoe-tien-ich#family-health");
+     else if (selector === "#utilities") window.location.assign("/#utilities");
+     return;
+   }
  
    panel.scrollIntoView({ behavior: "smooth", block: "center" });
  
@@ -1789,6 +1799,25 @@
    $("#viewAirQualityButton")?.addEventListener("click", () => focusPanel("#utilities"));
  
    $("#showRemindersButton")?.addEventListener("click", () => loadReminders({ openModal: true }));
+
+   $("#addReminderQuickButton")?.addEventListener("click", async () => {
+     await loadReminders({ openModal: true });
+
+     const modal = $("#reminderModal");
+     const form = $("#reminderForm");
+
+     // Nếu chưa đăng nhập thì loadReminders sẽ mở phần tài khoản.
+     if (!modal || modal.classList.contains("hidden") || !form) return;
+
+     if (form.classList.contains("hidden")) {
+       $("#addReminderButton")?.click();
+     }
+
+     const firstField = form.querySelector(
+       'input[name="title"], select[name="reminder_type"], input:not([type="hidden"])'
+     );
+     window.setTimeout(() => firstField?.focus(), 80);
+   });
  
    $("#openSettings")?.addEventListener("click", () => M.showToast("Bạn có thể đổi giao diện bằng nút trăng ở góc phải."));
  
@@ -1866,17 +1895,17 @@
  
        await M.syncProfiles(event.detail);
  
-       $("#welcomeName").textContent = event.detail.full_name || "Tài khoản";
+       if ($("#welcomeName")) $("#welcomeName").textContent = event.detail.full_name || "Tài khoản";
  
-       $("#accountAvatar").textContent = M.initials(event.detail.full_name);
+       if ($("#accountAvatar")) $("#accountAvatar").textContent = M.initials(event.detail.full_name);
  
      } else {
  
        M.clearPrivateState();
  
-       $("#welcomeName").textContent = "Khách";
+       if ($("#welcomeName")) $("#welcomeName").textContent = "Khách";
  
-       $("#accountAvatar").textContent = "K";
+       if ($("#accountAvatar")) $("#accountAvatar").textContent = "K";
  
      }
  

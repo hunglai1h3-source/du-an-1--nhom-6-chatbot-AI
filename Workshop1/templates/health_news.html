@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bản tin sức khỏe | MediCare AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260810-news-admin-v1') }}">
+  <style>
+    body{background:#f7faf8;color:#17202d}
+    .news-public-shell{max-width:1180px;margin:0 auto;padding:28px 20px 60px}
+    .news-public-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+    .news-public-top a{color:#079455;font-weight:800}
+    .news-public-title h1{margin:0;font-size:30px}.news-public-title p{margin:6px 0 0;color:#667085}
+    .news-public-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    .news-public-card{display:flex;flex-direction:column;overflow:hidden;border:1px solid #e1e9e4;border-radius:16px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.05)}
+    .news-public-card img{width:100%;height:185px;object-fit:cover;background:#edf8f2}
+    .news-public-body{display:flex;flex-direction:column;gap:9px;padding:15px;height:100%}
+    .news-public-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#079455}
+    .news-public-card h2{font-size:17px;line-height:1.4;margin:0}
+    .news-public-card p{margin:0;color:#667085;font-size:12px;line-height:1.65}
+    .news-public-card a{margin-top:auto;padding-top:8px;color:#079455;font-weight:800}
+    .news-public-empty{padding:42px;border:1px dashed #cfe2d7;border-radius:15px;background:#fff;text-align:center;color:#667085}
+    @media(max-width:900px){.news-public-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:620px){.news-public-grid{grid-template-columns:1fr}.news-public-top{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <main class="news-public-shell">
+    <div class="news-public-top">
+      <div class="news-public-title">
+        <h1>Bản tin sức khỏe</h1>
+        <p>Các bài từ trang báo bên ngoài đã được Admin MediCare AI duyệt trước khi hiển thị.</p>
+      </div>
+      <a href="/">← Về Trang chủ</a>
+    </div>
+
+    {% if items %}
+      <section class="news-public-grid">
+        {% for item in items %}
+          <article class="news-public-card">
+            <img
+              src="{{ item.image_url or '/static/images/news-doctor.svg' }}"
+              alt=""
+              loading="lazy"
+              referrerpolicy="no-referrer"
+              onerror="this.onerror=null;this.src='/static/images/news-doctor.svg';"
+            >
+            <div class="news-public-body">
+              <div class="news-public-meta">
+                <span>{{ item.category_label }}</span>
+                {% if item.is_featured %}<b>Nổi bật</b>{% endif %}
+              </div>
+              <h2>{{ item.title }}</h2>
+              <p>{{ item.summary }}</p>
+              <small>Nguồn: {{ item.source_name }}</small>
+              <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer">Đọc bài gốc ↗</a>
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% else %}
+      <div class="news-public-empty">Chưa có bài báo nào được Admin duyệt.</div>
+    {% endif %}
+  </main>
+</body>
+</html>
