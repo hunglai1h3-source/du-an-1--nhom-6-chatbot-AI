@@ -1,5 +1,5 @@
 from flask import (Flask, jsonify, render_template, request, session,
-                   redirect, url_for, send_file)
+                redirect, url_for, send_file)
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
@@ -33,6 +33,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
+
+VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
@@ -2263,8 +2265,8 @@ def export_account_data():
     ).fetchone()
     chats = connection.execute(
         """SELECT id, question, answer, model, created_at, feedback_rating,
-                  feedback_reason, feedback_text
-           FROM chat_logs WHERE user_id = ? ORDER BY created_at DESC""", (user_id,)
+                feedback_reason, feedback_text
+        FROM chat_logs WHERE user_id = ? ORDER BY created_at DESC""", (user_id,)
     ).fetchall()
     connection.close()
     payload = {
@@ -2340,11 +2342,11 @@ def save_chat_feedback():
 
     connection.execute(
         """UPDATE chat_logs
-           SET feedback_rating = ?, feedback_reason = ?, feedback_text = ?,
-               feedback_updated_at = CURRENT_TIMESTAMP,
-               feedback_status = CASE WHEN ? = '' THEN 'pending' ELSE 'pending' END,
-               feedback_admin_note = NULL, feedback_handled_at = NULL, feedback_handled_by = NULL
-           WHERE id = ?""",
+        SET feedback_rating = ?, feedback_reason = ?, feedback_text = ?,
+            feedback_updated_at = CURRENT_TIMESTAMP,
+            feedback_status = CASE WHEN ? = '' THEN 'pending' ELSE 'pending' END,
+            feedback_admin_note = NULL, feedback_handled_at = NULL, feedback_handled_by = NULL
+        WHERE id = ?""",
         (rating or None, reason or None, feedback_text or None, rating, chat_log_id),
     )
     connection.commit()

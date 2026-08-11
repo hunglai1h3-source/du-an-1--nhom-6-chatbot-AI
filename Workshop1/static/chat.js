@@ -1437,99 +1437,136 @@ function setVoiceStatus(message = "", error = false) {
 
  
 
-async function toggleVoice() {
+let speechRecognition = null;
+let isSpeechRecognizing = false;
+let speechBaseText = "";
+
+function toggleVoice() {
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
   const button = $("#voiceButton");
+  const input = $("#chatInput");
 
-  if (mediaRecorder?.state === "recording") { mediaRecorder.stop(); return; }
+  if (!SpeechRecognition) {
+    setVoiceStatus(
+      "Trình duyệt này chưa hỗ trợ nhập giọng nói trực tiếp. Hãy dùng Chrome hoặc Edge.",
+      true
+    );
+    return;
+  }
 
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { setVoiceStatus("Trình duyệt chưa hỗ trợ ghi âm.", true); return; }
+  // Nếu đang nghe thì bấm lần nữa để dừng
+  if (isSpeechRecognizing && speechRecognition) {
+    speechRecognition.stop();
+    return;
+  }
 
-  try {
+  speechRecognition = new SpeechRecognition();
 
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+speechRecognition.lang = "vi-VN";
+speechRecognition.continuous = true;
+speechRecognition.interimResults = true;
+speechRecognition.maxAlternatives = 3;
 
-    audioChunks = [];
+  // Giữ lại nội dung người dùng đã gõ trước đó
+  speechBaseText = input.value.trim();
 
-    const mimeCandidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
-
-    const mimeType = mimeCandidates.find((item) => MediaRecorder.isTypeSupported(item));
-
-    mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
-
-    mediaRecorder.addEventListener("dataavailable", (event) => { if (event.data.size) audioChunks.push(event.data); });
-
-    mediaRecorder.addEventListener("stop", transcribeVoice, { once: true });
-
-    mediaRecorder.start(250);
+  speechRecognition.onstart = () => {
+    isSpeechRecognizing = true;
 
     button.classList.add("recording");
-
     button.textContent = "■";
 
-    setVoiceStatus("Đang ghi âm — bấm lại để dừng.");
+    setVoiceStatus("Đang nghe... bạn có thể nói ngay.");
+  };
 
-  } catch (error) {
+speechRecognition.onresult = (event) => {
+  let finalText = "";
+  let interimText = "";
 
-    setVoiceStatus("Không thể dùng micro. Hãy kiểm tra quyền truy cập.", true);
+  for (let i = 0; i < event.results.length; i++) {
+    const result = event.results[i];
 
+    // Mặc định lấy kết quả đầu tiên
+    let bestAlternative = result[0];
+
+    // So sánh tối đa 3 kết quả nhận dạng
+    // và chọn kết quả có confidence cao nhất
+    for (let j = 1; j < result.length; j++) {
+      const currentConfidence =
+        typeof result[j].confidence === "number"
+          ? result[j].confidence
+          : 0;
+
+      const bestConfidence =
+        typeof bestAlternative.confidence === "number"
+          ? bestAlternative.confidence
+          : 0;
+
+      if (currentConfidence > bestConfidence) {
+        bestAlternative = result[j];
+      }
+    }
+
+    const transcript = bestAlternative.transcript;
+
+    if (result.isFinal) {
+      finalText += transcript + " ";
+    } else {
+      interimText += transcript;
+    }
   }
 
-}
+  const spokenText = `${finalText}${interimText}`.trim();
 
- 
+  input.value = `${speechBaseText} ${spokenText}`.trim();
 
-async function transcribeVoice() {
+  autoResizeInput();
+  input.focus();
+};
 
-  const button = $("#voiceButton");
+  speechRecognition.onerror = (event) => {
+    isSpeechRecognizing = false;
 
-  button.classList.remove("recording");
+    button.classList.remove("recording");
+    button.textContent = "🎙";
 
-  button.textContent = "🎙";
+    if (event.error === "not-allowed") {
+      setVoiceStatus(
+        "Bạn chưa cho phép sử dụng micro. Hãy bật quyền micro cho website.",
+        true
+      );
+    } else if (event.error === "no-speech") {
+      setVoiceStatus("Không nghe thấy giọng nói. Hãy thử lại.", true);
+    } else {
+      setVoiceStatus(
+        `Không nhận dạng được giọng nói: ${event.error}`,
+        true
+      );
+    }
+  };
 
-  mediaStream?.getTracks().forEach((track) => track.stop());
+  speechRecognition.onend = () => {
+    isSpeechRecognizing = false;
 
-  const blob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
+    button.classList.remove("recording");
+    button.textContent = "🎙";
 
-  if (!blob.size) { setVoiceStatus("Không thu được âm thanh.", true); return; }
+    setVoiceStatus("Đã dừng nhận giọng nói.");
 
-  setVoiceStatus("Đang chuyển giọng nói thành chữ...");
-
-  const extension = blob.type.includes("ogg") ? "ogg" : "webm";
-
-  const formData = new FormData();
-
-  formData.append("audio", new File([blob], `voice.${extension}`, { type: blob.type }));
+    setTimeout(() => {
+      setVoiceStatus("");
+    }, 2000);
+  };
 
   try {
-
-    const response = await fetch("/transcribe", { method: "POST", body: formData, credentials: "same-origin" });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) throw new Error(data.error || "Không nhận dạng được giọng nói.");
-
-    const input = $("#chatInput");
-
-    input.value = `${input.value.trim()} ${data.text}`.trim();
-
-    autoResizeInput();
-
-    input.focus();
-
-    setVoiceStatus("Đã chuyển thành chữ. Hãy kiểm tra trước khi gửi.");
-
-    setTimeout(() => setVoiceStatus(""), 3500);
-
+    speechRecognition.start();
   } catch (error) {
-
-    setVoiceStatus(error.message, true);
-
+    setVoiceStatus("Không thể khởi động micro. Hãy thử lại.", true);
   }
-
 }
 
- 
 
 function closeMenus() {
 
@@ -1541,7 +1578,7 @@ function closeMenus() {
 
 }
 
- 
+
 
 function exportCurrentChat() {
 
@@ -1601,9 +1638,8 @@ function bindChatActions() {
 
 }
 
- 
 
- 
+
 
 async function openHealthProfileModal() {
 
@@ -1617,7 +1653,7 @@ async function openHealthProfileModal() {
 
   }
 
- 
+
 
   const modal = $("#healthProfileModal");
 
@@ -1627,7 +1663,7 @@ async function openHealthProfileModal() {
 
   modal.classList.remove("hidden");
 
- 
+
 
   try {
 
@@ -1665,7 +1701,7 @@ async function openHealthProfileModal() {
 
 }
 
- 
+
 
 function bindHealthProfileModal() {
 
@@ -1675,7 +1711,7 @@ function bindHealthProfileModal() {
 
   if (!modal || !form) return;
 
- 
+
 
   const close = () => modal.classList.add("hidden");
 
@@ -1685,7 +1721,7 @@ function bindHealthProfileModal() {
 
   $("#editSelfHealthButton")?.addEventListener("click", openHealthProfileModal);
 
- 
+
 
   form.addEventListener("submit", async (event) => {
 
@@ -1737,7 +1773,7 @@ function bindHealthProfileModal() {
 
       if (!profileResponse.ok) throw new Error(profileData.error || "Không thể cập nhật hồ sơ.");
 
- 
+
 
       const weightResponse = await fetch("/api/health/weight", {
 
@@ -1761,7 +1797,7 @@ function bindHealthProfileModal() {
 
       if (!weightResponse.ok) throw new Error(weightData.error || "Không thể cập nhật cân nặng.");
 
- 
+
 
       const current = await M.currentUser();
 
@@ -1791,7 +1827,7 @@ function bindHealthProfileModal() {
 
 }
 
- 
+
 
 async function initializeAccount() {
 
@@ -1819,7 +1855,7 @@ async function initializeAccount() {
 
 }
 
- 
+
 
 async function initialize() {
 
