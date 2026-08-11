@@ -12,7 +12,7 @@
   let healthNewsHasMore = false;
   let healthNewsLoadingMore = false;
   let healthNewsRequestId = 0;
-  const HEALTH_NEWS_PAGE_SIZE = 12;
+  const HEALTH_NEWS_PAGE_SIZE = 5;
 
   function setText(selector, value) {
     const node = $(selector);
@@ -214,7 +214,9 @@
 
       (data.items || []).forEach((article) => NEWS.set(String(article.id), article));
       healthNewsOffset += (data.items || []).length;
-      healthNewsHasMore = Boolean(data.has_more);
+      // Trang chủ chỉ hiển thị tối đa 5 bài cho mỗi mục.
+      // Các bài còn lại vẫn giữ trong database và xem tại trang "Xem tất cả".
+      healthNewsHasMore = false;
       renderHealthNews([...NEWS.values()]);
     } catch (error) {
       if (requestId !== healthNewsRequestId) return;
