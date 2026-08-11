@@ -1855,37 +1855,52 @@ def health_news_image(image_id):
 
 @app.get("/api/health-news")
 def public_health_news():
+    """Trả bản tin đã duyệt theo danh mục, có phân trang để không bỏ mất bài cũ."""
     try:
-        limit = max(1, min(int(request.args.get("limit", 8)), 30))
+        limit = max(1, min(int(request.args.get("limit", 12)), 100))
     except (TypeError, ValueError):
-        limit = 8
+        limit = 12
+
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except (TypeError, ValueError):
+        offset = 0
 
     category = str(request.args.get("category", "")).strip().lower()
-    parameters = []
     conditions = ["status = 'approved'"]
+    filter_parameters = []
 
     if category and category != "all":
         if category not in HEALTH_NEWS_CATEGORIES:
             return jsonify({"error": "Danh mục không hợp lệ."}), 400
         conditions.append("category = ?")
-        parameters.append(category)
+        filter_parameters.append(category)
 
-    parameters.append(limit)
+    where_sql = " AND ".join(conditions)
 
     connection = get_database()
     try:
+        total = connection.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM health_news
+            WHERE {where_sql}
+            """,
+            tuple(filter_parameters),
+        ).fetchone()[0]
+
         rows = connection.execute(
             f"""
             SELECT *
             FROM health_news
-            WHERE {' AND '.join(conditions)}
+            WHERE {where_sql}
             ORDER BY
                 is_featured DESC,
                 COALESCE(published_at, reviewed_at, created_at) DESC,
                 id DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            tuple(parameters),
+            tuple(filter_parameters + [limit, offset]),
         ).fetchall()
     finally:
         connection.close()
@@ -1893,6 +1908,10 @@ def public_health_news():
     return jsonify({
         "items": [health_news_row_to_dict(row) for row in rows],
         "categories": HEALTH_NEWS_CATEGORIES,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(rows) < total,
     })
 
 
@@ -1909,7 +1928,6 @@ def health_news_page():
                 is_featured DESC,
                 COALESCE(published_at, reviewed_at, created_at) DESC,
                 id DESC
-            LIMIT 100
             """
         ).fetchall()
         items = [health_news_row_to_dict(row) for row in rows]

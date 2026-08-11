@@ -2147,3 +2147,11 @@ html[data-theme="dark"] .settings-tabs button.active,html[data-theme="dark"] .se
 .password-change-card{width:min(520px,calc(100vw - 30px));padding:28px}.password-change-card h2{margin:0 0 20px}.password-actions{display:flex;justify-content:flex-end;gap:9px}.password-rules span{color:#7c8791}.password-rules span.valid{color:var(--green);font-weight:800}
 [data-theme="dark"] .settings-box,[data-theme="dark"] .settings-account-summary,[data-theme="dark"] .settings-danger-outline{background:var(--panel)}
 @media(max-width:640px){.settings-page-card{padding:20px 14px}.settings-profile-table label{grid-template-columns:1fr}.settings-profile-table label span{padding-top:10px}.settings-profile-table label em{display:none}.security-summary-row{grid-template-columns:1fr}.personal-data-actions>*{width:100%}}
+
+
+/* ===== BẢN TIN: PHÂN TRANG KHÔNG MẤT BÀI ===== */
+.health-news-load-more{grid-column:1/-1;width:100%;margin-top:10px;padding:10px 14px;border:1px dashed #9fd1b6;border-radius:10px;color:var(--green);background:#f7fcf9;font-size:10px;font-weight:800;text-align:center;cursor:pointer;transition:.16s ease}
+.health-news-load-more:hover{border-color:var(--green);background:var(--green-soft)}
+.health-news-load-more:disabled{opacity:.65;cursor:wait}
+html[data-theme="dark"] .health-news-load-more,body.dark .health-news-load-more{color:#75d7a1;background:#142019;border-color:#355d45}
+/* ===== /BẢN TIN: PHÂN TRANG KHÔNG MẤT BÀI ===== */

@@ -8,6 +8,11 @@
 
   const NEWS = new Map();
   let activeNewsFilter = "all";
+  let healthNewsOffset = 0;
+  let healthNewsHasMore = false;
+  let healthNewsLoadingMore = false;
+  let healthNewsRequestId = 0;
+  const HEALTH_NEWS_PAGE_SIZE = 12;
 
   function setText(selector, value) {
     const node = $(selector);
@@ -94,6 +99,8 @@
     if (!filtered.length) {
       content.classList.add("hidden");
       empty.classList.remove("hidden");
+      const moreButton = $("#healthNewsLoadMore");
+      if (moreButton) moreButton.classList.add("hidden");
       return;
     }
 
@@ -101,7 +108,7 @@
     content.classList.remove("hidden");
 
     const featured = filtered.find((article) => article.is_featured) || filtered[0];
-    const remaining = filtered.filter((article) => article.id !== featured.id).slice(0, 5);
+    const remaining = filtered.filter((article) => article.id !== featured.id);
 
     const fallback = newsFallbackImage(featured.category);
     featuredRoot.innerHTML = `
@@ -140,6 +147,19 @@
       `;
     }).join("");
 
+    let moreButton = $("#healthNewsLoadMore");
+    if (!moreButton) {
+      moreButton = document.createElement("button");
+      moreButton.id = "healthNewsLoadMore";
+      moreButton.type = "button";
+      moreButton.className = "health-news-load-more";
+      content.appendChild(moreButton);
+    }
+
+    moreButton.classList.toggle("hidden", !healthNewsHasMore);
+    moreButton.disabled = healthNewsLoadingMore;
+    moreButton.textContent = healthNewsLoadingMore ? "Đang tải thêm..." : "Xem thêm bài";
+
     $$("[data-news-fallback]", content).forEach((img) => {
       img.addEventListener("error", () => {
         const fallbackSrc = img.dataset.newsFallback;
@@ -148,35 +168,78 @@
     });
   }
 
-  async function loadHealthNews() {
+  async function loadHealthNews(category = activeNewsFilter, { append = false } = {}) {
     const loading = $("#healthNewsLoading");
     const content = $("#healthNewsContent");
     const empty = $("#healthNewsEmpty");
 
     if (!loading || !content || !empty) return;
+    if (healthNewsLoadingMore && append) return;
 
-    loading.classList.remove("hidden");
-    content.classList.add("hidden");
-    empty.classList.add("hidden");
+    const normalizedCategory = category && category !== "all" ? category : "all";
+    const requestId = ++healthNewsRequestId;
+
+    if (!append) {
+      healthNewsOffset = 0;
+      healthNewsHasMore = false;
+      NEWS.clear();
+      loading.classList.remove("hidden");
+      content.classList.add("hidden");
+      empty.classList.add("hidden");
+    } else {
+      healthNewsLoadingMore = true;
+      const moreButton = $("#healthNewsLoadMore");
+      if (moreButton) {
+        moreButton.disabled = true;
+        moreButton.textContent = "Đang tải thêm...";
+      }
+    }
+
+    const params = new URLSearchParams({
+      limit: String(HEALTH_NEWS_PAGE_SIZE),
+      offset: String(healthNewsOffset),
+      category: normalizedCategory
+    });
 
     try {
-      const response = await fetch("/api/health-news?limit=12", {
+      const response = await fetch(`/api/health-news?${params.toString()}`, {
         credentials: "same-origin",
         cache: "no-store"
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Không tải được bản tin.");
 
-      NEWS.clear();
+      // Bỏ qua response cũ nếu người dùng vừa chuyển sang tab khác.
+      if (requestId !== healthNewsRequestId) return;
+
       (data.items || []).forEach((article) => NEWS.set(String(article.id), article));
+      healthNewsOffset += (data.items || []).length;
+      healthNewsHasMore = Boolean(data.has_more);
       renderHealthNews([...NEWS.values()]);
     } catch (error) {
-      loading.classList.add("hidden");
-      empty.classList.remove("hidden");
-      empty.innerHTML = `
-        <strong>Chưa tải được bản tin.</strong>
-        <span>${M.escapeHTML(error.message || "Vui lòng thử lại sau.")}</span>
-      `;
+      if (requestId !== healthNewsRequestId) return;
+
+      if (!append) {
+        loading.classList.add("hidden");
+        content.classList.add("hidden");
+        empty.classList.remove("hidden");
+        empty.innerHTML = `
+          <strong>Chưa tải được bản tin.</strong>
+          <span>${M.escapeHTML(error.message || "Vui lòng thử lại sau.")}</span>
+        `;
+      } else if (M.showToast) {
+        M.showToast(error.message || "Không tải thêm được bản tin.", "error");
+      }
+    } finally {
+      if (requestId === healthNewsRequestId) {
+        healthNewsLoadingMore = false;
+        const moreButton = $("#healthNewsLoadMore");
+        if (moreButton) {
+          moreButton.disabled = false;
+          moreButton.textContent = "Xem thêm bài";
+          moreButton.classList.toggle("hidden", !healthNewsHasMore);
+        }
+      }
     }
   }
 
@@ -218,7 +281,13 @@
 
     document.addEventListener("click", (event) => {
       const button = event.target.closest("[data-dynamic-news-id]");
-      if (button) openArticle(button.dataset.dynamicNewsId);
+      if (button) {
+        openArticle(button.dataset.dynamicNewsId);
+        return;
+      }
+
+      const moreButton = event.target.closest("#healthNewsLoadMore");
+      if (moreButton) loadHealthNews(activeNewsFilter, { append: true });
     });
 
     $("#closeHomeNewsModal")?.addEventListener("click", () => modal.classList.add("hidden"));
@@ -227,16 +296,16 @@
     });
 
     $$("[data-news-filter]").forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", async () => {
         $$("[data-news-filter]").forEach((item) => {
           item.classList.toggle("active", item === button);
         });
         activeNewsFilter = button.dataset.newsFilter || "all";
-        renderHealthNews([...NEWS.values()]);
+        await loadHealthNews(activeNewsFilter);
       });
     });
 
-    await loadHealthNews();
+    await loadHealthNews("all");
   }
 
   function bmiInfo(profile) {
