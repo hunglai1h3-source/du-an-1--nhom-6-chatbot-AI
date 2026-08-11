@@ -514,16 +514,329 @@
     return refresh();
   }
 
+
+  function passwordFieldHTML(name, label, autocomplete) {
+    return `
+      <label class="settings-field">
+        <span>${escapeHTML(label)}</span>
+        <span class="password-input-wrap">
+          <input name="${escapeHTML(name)}" type="password" autocomplete="${escapeHTML(autocomplete)}" required>
+          <button type="button" class="password-eye" data-toggle-password aria-label="Hiện mật khẩu" title="Hiện/ẩn mật khẩu">👁</button>
+        </span>
+      </label>`;
+  }
+
+  function ensureSettingsModal() {
+    if ($("#settingsModal")) return $("#settingsModal");
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `
+      <div class="shared-modal hidden settings-modal settings-page-modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <section class="shared-modal-card settings-card settings-page-card">
+          <button class="shared-modal-close" data-settings-close type="button" aria-label="Đóng">×</button>
+          <header class="settings-header">
+            <div>
+              <p class="settings-eyebrow">CÀI ĐẶT</p>
+              <h2 id="settingsTitle">Cài đặt tài khoản</h2>
+              <p>Quản lý tài khoản, bảo mật, quyền riêng tư và dữ liệu cá nhân.</p>
+            </div>
+          </header>
+
+          <div class="settings-sections">
+            <section class="settings-box">
+              <h3>Tài khoản</h3>
+              <div class="settings-account-summary">
+                <span class="settings-avatar" id="settingsAvatar">K</span>
+                <div class="settings-account-main">
+                  <strong id="settingsAccountName">Khách</strong>
+                  <small id="settingsAccountEmail">Chưa đăng nhập</small>
+                  <button type="button" class="settings-link-btn" data-avatar-change>Thay đổi ảnh đại diện</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-box">
+              <h3>Thông tin tài khoản</h3>
+              <form id="settingsAccountForm" class="settings-profile-table">
+                <label><span>Họ và tên</span><input name="full_name" maxlength="120" required><em>Sửa</em></label>
+                <label><span>Email</span><input name="email" type="email" disabled><em class="muted-edit">Cố định</em></label>
+                <label><span>Số điện thoại</span><input name="phone" inputmode="tel" maxlength="20" placeholder="Chưa cập nhật"><em>Sửa</em></label>
+                <label><span>Ngày sinh</span><input name="birth_date" type="date"><em>Sửa</em></label>
+                <p class="settings-message" data-account-settings-message></p>
+                <div class="settings-row-actions"><button class="settings-primary" type="submit">Lưu thay đổi</button></div>
+              </form>
+            </section>
+
+            <section class="settings-box">
+              <h3>Mật khẩu & bảo mật</h3>
+              <div class="security-summary-row">
+                <span>Mật khẩu</span><b>••••••••••••</b>
+                <button type="button" class="settings-secondary" data-open-password>Đổi mật khẩu</button>
+              </div>
+              <div class="login-session">
+                <strong>Phiên đăng nhập</strong>
+                <span>Chrome · Windows · Thiết bị hiện tại</span>
+              </div>
+              <div class="settings-row-actions">
+                <button type="button" class="settings-secondary" data-logout-other>Đăng xuất khỏi thiết bị khác</button>
+              </div>
+            </section>
+
+            <section class="settings-box">
+              <h3>Quyền riêng tư</h3>
+              <div class="privacy-row"><div><strong>Lưu lịch sử trò chuyện</strong><small>Lưu các cuộc trò chuyện để xem lại.</small></div><label class="switch"><input type="checkbox" data-privacy="save_history"><span></span></label></div>
+              <div class="privacy-row"><div><strong>Cho AI sử dụng hồ sơ sức khỏe</strong><small>Dùng hồ sơ đã chọn để cá nhân hóa câu trả lời.</small></div><label class="switch"><input type="checkbox" data-privacy="use_health_profile"><span></span></label></div>
+              <div class="privacy-row"><div><strong>Nhận thông báo nhắc lịch</strong><small>Cho phép hiển thị nhắc lịch trên thiết bị.</small></div><label class="switch"><input type="checkbox" data-privacy="reminder_notifications"><span></span></label></div>
+            </section>
+
+            <section class="settings-box danger-data-box">
+              <h3>Dữ liệu cá nhân</h3>
+              <div class="personal-data-actions">
+                <button type="button" class="settings-secondary" data-export-data>Xuất dữ liệu của tôi</button>
+                <button type="button" class="settings-danger-outline" data-clear-server-chats>Xóa lịch sử trò chuyện</button>
+                <button type="button" class="settings-danger" data-delete-account>Xóa tài khoản</button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+
+      <div class="shared-modal hidden password-change-modal" id="passwordChangeModal" role="dialog" aria-modal="true" aria-labelledby="passwordChangeTitle">
+        <section class="shared-modal-card password-change-card">
+          <button class="shared-modal-close" data-password-close type="button" aria-label="Đóng">×</button>
+          <h2 id="passwordChangeTitle">Đổi mật khẩu</h2>
+          <form id="settingsPasswordForm" class="settings-form">
+            ${passwordFieldHTML("current_password", "Mật khẩu hiện tại", "current-password")}
+            ${passwordFieldHTML("new_password", "Mật khẩu mới", "new-password")}
+            ${passwordFieldHTML("confirm_password", "Xác nhận mật khẩu mới", "new-password")}
+            <div class="password-rules">
+              <span data-rule-length>✓ Ít nhất 8 ký tự</span>
+              <span data-rule-mixed>✓ Có chữ và số</span>
+            </div>
+            <p class="settings-message" data-password-settings-message></p>
+            <div class="password-actions">
+              <button type="button" class="settings-secondary" data-password-cancel>Hủy</button>
+              <button class="settings-primary" type="submit">Cập nhật mật khẩu</button>
+            </div>
+          </form>
+        </section>
+      </div>`;
+
+    document.body.append(...Array.from(wrapper.children));
+    const modal = $("#settingsModal");
+    const passwordModal = $("#passwordChangeModal");
+
+    const closePassword = () => passwordModal?.classList.add("hidden");
+    $("[data-settings-close]", modal)?.addEventListener("click", () => modal.classList.add("hidden"));
+    modal.addEventListener("click", (event) => { if (event.target === modal) modal.classList.add("hidden"); });
+    $("[data-password-close]", passwordModal)?.addEventListener("click", closePassword);
+    $("[data-password-cancel]", passwordModal)?.addEventListener("click", closePassword);
+    passwordModal?.addEventListener("click", (event) => { if (event.target === passwordModal) closePassword(); });
+    $("[data-open-password]", modal)?.addEventListener("click", () => passwordModal?.classList.remove("hidden"));
+
+    $$("[data-toggle-password]", passwordModal).forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = button.parentElement?.querySelector("input");
+        if (!input) return;
+        input.type = input.type === "password" ? "text" : "password";
+        button.textContent = input.type === "password" ? "👁" : "🙈";
+        button.setAttribute("aria-label", input.type === "password" ? "Hiện mật khẩu" : "Ẩn mật khẩu");
+      });
+    });
+
+    const newPassword = passwordModal?.querySelector('input[name="new_password"]');
+    const updateRules = () => {
+      const value = newPassword?.value || "";
+      const lengthRule = $("[data-rule-length]", passwordModal);
+      const mixedRule = $("[data-rule-mixed]", passwordModal);
+      lengthRule?.classList.toggle("valid", value.length >= 8);
+      mixedRule?.classList.toggle("valid", /[A-Za-zÀ-ỹ]/.test(value) && /\d/.test(value));
+    };
+    newPassword?.addEventListener("input", updateRules);
+
+    $("#settingsAccountForm", modal)?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const message = $("[data-account-settings-message]", form);
+      const submit = $("button[type=submit]", form);
+      const body = Object.fromEntries(new FormData(form));
+      delete body.email;
+      message.textContent = "";
+      submit.disabled = true;
+      submit.textContent = "Đang lưu...";
+      try {
+        const response = await fetch("/api/account/profile", {
+          method: "PATCH", credentials: "same-origin",
+          headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Không thể cập nhật tài khoản.");
+        message.textContent = data.message || "Đã lưu.";
+        message.dataset.kind = "success";
+        showToast(message.textContent, "success");
+        await fillSettingsAccount();
+        window.dispatchEvent(new CustomEvent("medicare:auth-changed", {detail:data.user}));
+      } catch (error) {
+        message.textContent = error.message; message.dataset.kind = "error";
+      } finally {
+        submit.disabled = false; submit.textContent = "Lưu thay đổi";
+      }
+    });
+
+    $("#settingsPasswordForm", passwordModal)?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const message = $("[data-password-settings-message]", form);
+      const submit = $("button[type=submit]", form);
+      const body = Object.fromEntries(new FormData(form));
+      message.textContent = "";
+      if (body.new_password.length < 8 || !/[A-Za-zÀ-ỹ]/.test(body.new_password) || !/\d/.test(body.new_password)) {
+        message.textContent = "Mật khẩu mới phải có ít nhất 8 ký tự, gồm chữ và số.";
+        message.dataset.kind = "error"; return;
+      }
+      if (body.new_password !== body.confirm_password) {
+        message.textContent = "Xác nhận mật khẩu mới không khớp.";
+        message.dataset.kind = "error"; return;
+      }
+      submit.disabled = true; submit.textContent = "Đang cập nhật...";
+      try {
+        const response = await fetch("/api/account/change-password", {
+          method:"POST", credentials:"same-origin",
+          headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Không thể đổi mật khẩu.");
+        form.reset(); updateRules();
+        $$("input", form).forEach(input => input.type = "password");
+        message.textContent = data.message || "Đổi mật khẩu thành công.";
+        message.dataset.kind = "success";
+        showToast(message.textContent, "success");
+        setTimeout(closePassword, 900);
+      } catch (error) {
+        message.textContent = error.message; message.dataset.kind = "error";
+      } finally {
+        submit.disabled = false; submit.textContent = "Cập nhật mật khẩu";
+      }
+    });
+
+    const privacyKey = "medicarePrivacyV1";
+    const defaults = {save_history:true, use_health_profile:true, reminder_notifications:true};
+    const loadPrivacy = () => ({...defaults, ...readJSON(privacyKey, {})});
+    $$("[data-privacy]", modal).forEach(input => {
+      input.checked = !!loadPrivacy()[input.dataset.privacy];
+      input.addEventListener("change", () => {
+        const prefs = loadPrivacy();
+        prefs[input.dataset.privacy] = input.checked;
+        writeJSON(privacyKey, prefs);
+        showToast("Đã cập nhật quyền riêng tư.", "success");
+      });
+    });
+
+    $("[data-avatar-change]", modal)?.addEventListener("click", () => {
+      showToast("Ảnh đại diện hiện dùng chữ viết tắt. Có thể bổ sung upload ảnh ở bản tiếp theo.");
+    });
+
+    $("[data-logout-other]", modal)?.addEventListener("click", () => {
+      showToast("Phiên đăng nhập hiện tại được giữ nguyên. Hệ thống hiện chưa lưu nhiều phiên để thu hồi riêng.");
+    });
+
+    $("[data-export-data]", modal)?.addEventListener("click", () => {
+      window.location.assign("/api/account/export");
+    });
+
+    $("[data-clear-server-chats]", modal)?.addEventListener("click", async () => {
+      if (!confirm("Bạn chắc chắn muốn xóa toàn bộ lịch sử trò chuyện? Hành động này không thể hoàn tác.")) return;
+      try {
+        const response = await fetch("/api/account/chat-history", {method:"DELETE", credentials:"same-origin"});
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Không thể xóa lịch sử.");
+        localStorage.removeItem(KEYS.chats); localStorage.removeItem(KEYS.currentChat);
+        showToast(data.message || "Đã xóa lịch sử trò chuyện.", "success");
+        window.dispatchEvent(new CustomEvent("medicare:chats-cleared"));
+      } catch(error) { showToast(error.message, "error"); }
+    });
+
+    $("[data-delete-account]", modal)?.addEventListener("click", async () => {
+      const typed = prompt('Để xóa tài khoản, nhập chính xác "XOA TAI KHOAN":');
+      if (typed !== "XOA TAI KHOAN") return;
+      try {
+        const response = await fetch("/api/account", {method:"DELETE", credentials:"same-origin"});
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Không thể xóa tài khoản.");
+        clearPrivateState();
+        alert(data.message || "Tài khoản đã được xóa.");
+        window.location.assign("/");
+      } catch(error) { showToast(error.message, "error"); }
+    });
+
+    return modal;
+  }
+
+  async function fillSettingsAccount() {
+    const modal = ensureSettingsModal();
+    const data = await currentUser();
+    if (!data.logged_in) return false;
+    const user = data.user || {};
+    $("#settingsAvatar", modal).textContent = initials(user.full_name || "K");
+    $("#settingsAccountName", modal).textContent = user.full_name || "Tài khoản";
+    $("#settingsAccountEmail", modal).textContent = user.email || "";
+    const form = $("#settingsAccountForm", modal);
+    form.elements.full_name.value = user.full_name || "";
+    form.elements.email.value = user.email || "";
+    form.elements.phone.value = user.phone || "";
+    form.elements.birth_date.value = user.birth_date || "";
+    return true;
+  }
+
+  async function openSettings() {
+    const data = await currentUser();
+    if (!data.logged_in) {
+      ensureAuthModal(); $("#authModal")?.classList.remove("hidden");
+      showToast("Vui lòng đăng nhập để mở Cài đặt."); return;
+    }
+    const modal = ensureSettingsModal();
+    await fillSettingsAccount();
+    modal.classList.remove("hidden");
+  }
+
   window.MediCare = {
     KEYS, $, $$, readJSON, writeJSON, escapeHTML, initials,
     getProfiles, saveProfiles, getSelectedProfile, selectProfile, addProfile, syncProfiles, clearPrivateState,
     showToast, applyTheme, toggleTheme, weatherCode, aqiLevel,
     getBestPosition, loadLocationContext, mapsSearchUrl, pharmacyMapUrl, mapsDirectionsUrl,
-    currentUser, bindAccountButton
+    currentUser, bindAccountButton, openSettings, ensureSettingsModal
   };
+
+  function bindSettingsTriggers(root = document) {
+    root.querySelectorAll?.('#openSettings, [data-open-settings]').forEach((button) => {
+      if (button.dataset.settingsBound === "1") return;
+      button.dataset.settingsBound = "1";
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openSettings().catch((error) => {
+          console.error("Không thể mở Cài đặt:", error);
+          showToast(error?.message || "Không thể mở Cài đặt.", "error");
+        });
+      });
+    });
+  }
+
+  window.MediCare.bindSettingsTriggers = bindSettingsTriggers;
+
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest?.('#openSettings, [data-open-settings]');
+    if (!trigger || trigger.dataset.settingsBound === "1") return;
+    event.preventDefault();
+    openSettings().catch((error) => {
+      console.error("Không thể mở Cài đặt:", error);
+      showToast(error?.message || "Không thể mở Cài đặt.", "error");
+    });
+  });
 
   document.addEventListener("DOMContentLoaded", () => {
     applyTheme();
     $$('[data-action="toggle-theme"]').forEach((button) => button.addEventListener("click", toggleTheme));
+    bindSettingsTriggers(document);
   });
 })();

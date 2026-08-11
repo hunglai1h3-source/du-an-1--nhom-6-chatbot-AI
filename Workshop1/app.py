@@ -806,6 +806,32 @@ def initialize_database():
             "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS profile_name TEXT"
         )
 
+        # Đánh giá câu trả lời AI từ người dùng.
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_rating TEXT"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_reason TEXT"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_text TEXT"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_updated_at TIMESTAMPTZ"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_status TEXT NOT NULL DEFAULT 'pending'"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_admin_note TEXT"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_handled_at TIMESTAMPTZ"
+        )
+        connection.execute(
+            "ALTER TABLE chat_logs ADD COLUMN IF NOT EXISTS feedback_handled_by INTEGER"
+        )
+
         connection.execute("""
             CREATE TABLE IF NOT EXISTS user_subscriptions (
                 id SERIAL PRIMARY KEY,
@@ -1317,7 +1343,7 @@ def record_chat_log(
         usage = usage or {}
         profile = profile or {}
         connection = get_database()
-        connection.execute(
+        cursor = connection.execute(
             """INSERT INTO chat_logs (
                    user_id, question, answer, model, has_image, latency_ms,
                    prompt_tokens, completion_tokens, status, error_message,
@@ -1341,9 +1367,16 @@ def record_chat_log(
             ),
         )
         connection.commit()
+        chat_log_id = cursor.lastrowid
         connection.close()
+        return chat_log_id
     except Exception as log_error:
         print("Không thể ghi chat log:", log_error)
+        try:
+            connection.close()
+        except Exception:
+            pass
+        return None
 
 
 def clean_history(history):
@@ -2052,7 +2085,11 @@ def current_user():
     # có thể vào /admin mà không bị giữ quyền cũ trong cookie phiên.
     connection = get_database()
     user = connection.execute(
-        "SELECT id, full_name, email, phone, role, is_active FROM users WHERE id = ?",
+        """SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active,
+                  hp.birth_date
+           FROM users u
+           LEFT JOIN health_profiles hp ON hp.user_id = u.id
+           WHERE u.id = ?""",
         (user_id,),
     ).fetchone()
     connection.close()
@@ -2084,8 +2121,219 @@ def current_user():
             "full_name": user["full_name"],
             "email": user["email"],
             "phone": user["phone"],
+            "birth_date": user["birth_date"],
             "role": user["role"]
         }
+    })
+
+
+@app.patch("/api/account/profile")
+@login_required
+def update_account_profile():
+    """Cập nhật thông tin tài khoản cơ bản; email giữ nguyên để tránh đổi định danh ngoài ý muốn."""
+    data = request.get_json(silent=True) or {}
+    full_name = str(data.get("full_name", "")).strip()
+    phone = re.sub(r"\s+", "", str(data.get("phone", "")).strip())
+    birth_date = str(data.get("birth_date", "")).strip() or None
+    if birth_date:
+        try:
+            datetime.strptime(birth_date, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "Ngày sinh không hợp lệ."}), 400
+
+    if len(full_name) < 2 or len(full_name) > 120:
+        return jsonify({"error": "Họ và tên phải từ 2 đến 120 ký tự."}), 400
+
+    if phone and not re.fullmatch(r"[0-9+().-]{8,20}", phone):
+        return jsonify({"error": "Số điện thoại không hợp lệ."}), 400
+
+    connection = get_database()
+    try:
+        if phone:
+            duplicate = connection.execute(
+                "SELECT id FROM users WHERE phone = ? AND id <> ?",
+                (phone, session["user_id"]),
+            ).fetchone()
+            if duplicate:
+                connection.close()
+                return jsonify({"error": "Số điện thoại này đã được tài khoản khác sử dụng."}), 409
+
+        connection.execute(
+            "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
+            (full_name, phone or None, session["user_id"]),
+        )
+        existing_health = connection.execute(
+            "SELECT id FROM health_profiles WHERE user_id = ?",
+            (session["user_id"],),
+        ).fetchone()
+        if existing_health:
+            connection.execute(
+                "UPDATE health_profiles SET birth_date = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+                (birth_date, session["user_id"]),
+            )
+        connection.commit()
+        user = connection.execute(
+            "SELECT id, full_name, email, phone, role FROM users WHERE id = ?",
+            (session["user_id"],),
+        ).fetchone()
+        connection.close()
+
+        session["full_name"] = user["full_name"]
+        session["phone"] = user["phone"]
+        return jsonify({"message": "Đã cập nhật thông tin tài khoản.", "user": dict(user)})
+    except Exception as error:
+        connection.rollback()
+        connection.close()
+        return jsonify({"error": f"Không thể cập nhật tài khoản: {error}"}), 500
+
+
+@app.post("/api/account/change-password")
+@login_required
+def change_account_password():
+    data = request.get_json(silent=True) or {}
+    current_password = str(data.get("current_password", ""))
+    new_password = str(data.get("new_password", ""))
+    confirm_password = str(data.get("confirm_password", ""))
+
+    if not current_password:
+        return jsonify({"error": "Vui lòng nhập mật khẩu hiện tại."}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "Mật khẩu mới phải có ít nhất 8 ký tự."}), 400
+    if not re.search(r"[A-Za-zÀ-ỹ]", new_password) or not re.search(r"\d", new_password):
+        return jsonify({"error": "Mật khẩu mới phải có cả chữ và số."}), 400
+    if new_password != confirm_password:
+        return jsonify({"error": "Xác nhận mật khẩu mới không khớp."}), 400
+    if current_password == new_password:
+        return jsonify({"error": "Mật khẩu mới phải khác mật khẩu hiện tại."}), 400
+
+    connection = get_database()
+    user = connection.execute(
+        "SELECT password_hash FROM users WHERE id = ?",
+        (session["user_id"],),
+    ).fetchone()
+
+    if user is None:
+        connection.close()
+        session.clear()
+        return jsonify({"error": "Tài khoản không còn tồn tại."}), 404
+
+    if not check_password_hash(user["password_hash"], current_password):
+        connection.close()
+        return jsonify({"error": "Mật khẩu hiện tại không chính xác."}), 400
+
+    connection.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(new_password), session["user_id"]),
+    )
+    connection.commit()
+    connection.close()
+    return jsonify({"message": "Đổi mật khẩu thành công."})
+
+
+
+@app.get("/api/account/export")
+@login_required
+def export_account_data():
+    """Xuất dữ liệu cá nhân của tài khoản hiện tại dưới dạng JSON."""
+    user_id = session["user_id"]
+    connection = get_database()
+    user = connection.execute(
+        "SELECT id, full_name, email, phone, role, created_at FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    profile = connection.execute(
+        "SELECT * FROM health_profiles WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    chats = connection.execute(
+        """SELECT id, question, answer, model, created_at, feedback_rating,
+                  feedback_reason, feedback_text
+           FROM chat_logs WHERE user_id = ? ORDER BY created_at DESC""", (user_id,)
+    ).fetchall()
+    connection.close()
+    payload = {
+        "exported_at": datetime.now(VIETNAM_TZ).isoformat(),
+        "account": serialize_row(user),
+        "health_profile": serialize_row(profile),
+        "chat_history": [serialize_row(row) for row in chats],
+    }
+    response = jsonify(payload)
+    response.headers["Content-Disposition"] = "attachment; filename=medicare-du-lieu-ca-nhan.json"
+    return response
+
+
+@app.delete("/api/account/chat-history")
+@login_required
+def delete_my_chat_history():
+    connection = get_database()
+    connection.execute("DELETE FROM chat_logs WHERE user_id = ?", (session["user_id"],))
+    connection.commit()
+    connection.close()
+    return jsonify({"message": "Đã xóa toàn bộ lịch sử trò chuyện."})
+
+
+@app.delete("/api/account")
+@login_required
+def delete_my_account():
+    user_id = session["user_id"]
+    connection = get_database()
+    try:
+        # chat_logs dùng ON DELETE SET NULL, nên xóa trước để dữ liệu hội thoại cá nhân không bị giữ lại.
+        connection.execute("DELETE FROM chat_logs WHERE user_id = ?", (user_id,))
+        connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        connection.commit()
+    except Exception as error:
+        connection.rollback()
+        connection.close()
+        return jsonify({"error": f"Không thể xóa tài khoản: {error}"}), 500
+    connection.close()
+    session.clear()
+    return jsonify({"message": "Tài khoản và dữ liệu liên quan đã được xóa."})
+
+
+@app.post("/api/chat-feedback")
+def save_chat_feedback():
+    """Lưu đánh giá 👍/👎 cho đúng lượt chat đã ghi trong chat_logs."""
+    data = request.get_json(silent=True) or {}
+    try:
+        chat_log_id = int(data.get("chat_log_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Không xác định được câu trả lời cần đánh giá."}), 400
+
+    rating = str(data.get("rating", "")).strip().lower()
+    if rating not in {"like", "dislike", ""}:
+        return jsonify({"error": "Đánh giá không hợp lệ."}), 400
+
+    reason = str(data.get("reason", "")).strip()[:120]
+    feedback_text = str(data.get("feedback_text", "")).strip()[:1200]
+
+    connection = get_database()
+    row = connection.execute(
+        "SELECT id, user_id FROM chat_logs WHERE id = ?",
+        (chat_log_id,),
+    ).fetchone()
+    if row is None:
+        connection.close()
+        return jsonify({"error": "Không tìm thấy lượt chat."}), 404
+
+    # Với lượt chat đã gắn tài khoản, chỉ chính tài khoản đó được cập nhật feedback.
+    owner_id = row["user_id"]
+    if owner_id is not None and int(owner_id) != int(session.get("user_id") or -1):
+        connection.close()
+        return jsonify({"error": "Bạn không có quyền đánh giá lượt chat này."}), 403
+
+    connection.execute(
+        """UPDATE chat_logs
+           SET feedback_rating = ?, feedback_reason = ?, feedback_text = ?,
+               feedback_updated_at = CURRENT_TIMESTAMP,
+               feedback_status = CASE WHEN ? = '' THEN 'pending' ELSE 'pending' END,
+               feedback_admin_note = NULL, feedback_handled_at = NULL, feedback_handled_by = NULL
+           WHERE id = ?""",
+        (rating or None, reason or None, feedback_text or None, rating, chat_log_id),
+    )
+    connection.commit()
+    connection.close()
+    return jsonify({
+        "message": "Cảm ơn bạn đã đánh giá câu trả lời.",
+        "rating": rating or None,
     })
 
 
@@ -2494,10 +2742,11 @@ def detect_emergency_message(message):
     return None
 
 
-def emergency_json_response(emergency):
+def emergency_json_response(emergency, chat_log_id=None):
     """Chuẩn hóa JSON để giao diện có thể hiện thẻ đỏ và nút gọi 115."""
     return jsonify({
         "reply": emergency["reply"],
+        "chat_log_id": chat_log_id,
         "emergency": {
             "active": True,
             "type": emergency["type"],
@@ -3006,7 +3255,7 @@ def chat():
         if user_message and not has_image:
             emergency = detect_emergency_message(user_message)
             if emergency:
-                record_chat_log(
+                chat_log_id = record_chat_log(
                     user_message,
                     emergency["reply"],
                     "local-emergency-detector",
@@ -3014,7 +3263,7 @@ def chat():
                     0,
                     status="emergency",
                 )
-                return emergency_json_response(emergency)
+                return emergency_json_response(emergency, chat_log_id=chat_log_id)
 
         # Yêu cầu xem hồ sơ được xử lý trực tiếp từ hồ sơ đã được server xác minh.
         # Nhờ vậy câu "hồ sơ của tôi" luôn trả dữ liệu thật thay vì để AI suy diễn.
@@ -3029,8 +3278,9 @@ def chat():
                     response_profile.get("id"),
                 )
 
+            chat_log_id = None
             try:
-                record_chat_log(
+                chat_log_id = record_chat_log(
                     user_message,
                     reply,
                     "local-profile-reader",
@@ -3046,6 +3296,7 @@ def chat():
                 "reply": reply,
                 "profile_used": response_profile or None,
                 "profile_lookup": True,
+                "chat_log_id": chat_log_id,
             })
 
         if client is None:
@@ -3348,7 +3599,7 @@ Yêu cầu bổ sung:
                 "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
                 "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
             }
-        record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data, profile=effective_profile)
+        chat_log_id = record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data, profile=effective_profile)
         response_profile = dict(effective_profile or {})
         if response_profile:
             # Trả lại đúng ID frontend đã gửi để xác nhận không nhầm hồ sơ.
@@ -3361,6 +3612,7 @@ Yêu cầu bổ sung:
         return jsonify({
             "reply": reply,
             "profile_used": response_profile or None,
+            "chat_log_id": chat_log_id,
         })
 
     except ValueError as error:
@@ -4332,6 +4584,142 @@ def inspect_dataset(path):
     except Exception as error:
         result["error"] = str(error)
     return result
+
+
+
+
+@app.get("/admin/api/feedback-summary")
+@admin_required
+def admin_feedback_summary():
+    """Số lượng và các đánh giá AI mới nhất đang chờ Admin xử lý."""
+    reason_labels = {
+        "incorrect": "Không chính xác",
+        "irrelevant": "Không đúng câu hỏi",
+        "hard_to_understand": "Khó hiểu / quá dài",
+        "missing_info": "Thiếu thông tin",
+        "unsafe": "Nội dung không an toàn",
+        "other": "Khác",
+    }
+    connection = get_database()
+    pending = connection.execute(
+        """SELECT COUNT(*)
+           FROM chat_logs
+           WHERE feedback_rating IS NOT NULL
+             AND COALESCE(feedback_status,'pending')='pending'"""
+    ).fetchone()[0]
+    rows = connection.execute(
+        """SELECT c.id, c.question, c.feedback_rating, c.feedback_reason,
+                  c.feedback_text, COALESCE(c.feedback_updated_at,c.created_at) updated_at,
+                  u.full_name, u.email
+           FROM chat_logs c
+           LEFT JOIN users u ON u.id=c.user_id
+           WHERE c.feedback_rating IS NOT NULL
+             AND COALESCE(c.feedback_status,'pending')='pending'
+           ORDER BY COALESCE(c.feedback_updated_at,c.created_at) DESC
+           LIMIT 6"""
+    ).fetchall()
+    connection.close()
+
+    items = []
+    for row in rows:
+        updated_at = row["updated_at"]
+        if hasattr(updated_at, "astimezone"):
+            try:
+                updated_text = updated_at.astimezone(VIETNAM_TZ).strftime("%H:%M %d/%m")
+            except Exception:
+                updated_text = str(updated_at)
+        else:
+            updated_text = str(updated_at or "")
+        reason = row["feedback_reason"] or ""
+        items.append({
+            "id": row["id"],
+            "rating": row["feedback_rating"],
+            "reason": reason,
+            "reason_label": reason_labels.get(reason, reason or "Không ghi lý do"),
+            "feedback_text": row["feedback_text"] or "",
+            "question": row["question"] or "",
+            "full_name": row["full_name"] or "",
+            "email": row["email"] or "",
+            "updated_at": updated_text,
+        })
+
+    return jsonify({"pending": int(pending or 0), "items": items})
+
+
+@app.get("/admin/feedback")
+@admin_required
+def admin_feedback_page():
+    status = str(request.args.get("status", "pending")).strip().lower()
+    if status not in {"pending", "resolved", "all"}:
+        status = "pending"
+    rating = str(request.args.get("rating", "all")).strip().lower()
+    if rating not in {"like", "dislike", "all"}:
+        rating = "all"
+
+    conditions = ["c.feedback_rating IS NOT NULL"]
+    params = []
+    if status != "all":
+        conditions.append("COALESCE(c.feedback_status, 'pending') = ?")
+        params.append(status)
+    if rating != "all":
+        conditions.append("c.feedback_rating = ?")
+        params.append(rating)
+
+    connection = get_database()
+    rows = connection.execute(
+        f"""SELECT c.id, c.question, c.answer, c.model, c.created_at,
+                   c.feedback_rating, c.feedback_reason, c.feedback_text,
+                   c.feedback_updated_at, COALESCE(c.feedback_status,'pending') feedback_status,
+                   c.feedback_admin_note, c.feedback_handled_at,
+                   u.full_name, u.email, a.full_name handled_by_name
+            FROM chat_logs c
+            LEFT JOIN users u ON u.id = c.user_id
+            LEFT JOIN users a ON a.id = c.feedback_handled_by
+            WHERE {' AND '.join(conditions)}
+            ORDER BY CASE WHEN COALESCE(c.feedback_status,'pending')='pending' THEN 0 ELSE 1 END,
+                     COALESCE(c.feedback_updated_at,c.created_at) DESC
+            LIMIT 500""",
+        tuple(params),
+    ).fetchall()
+    stats = connection.execute(
+        """SELECT
+             COUNT(*) FILTER (WHERE feedback_rating IS NOT NULL) total,
+             COUNT(*) FILTER (WHERE feedback_rating='like') likes,
+             COUNT(*) FILTER (WHERE feedback_rating='dislike') dislikes,
+             COUNT(*) FILTER (WHERE feedback_rating IS NOT NULL AND COALESCE(feedback_status,'pending')='pending') pending
+           FROM chat_logs"""
+    ).fetchone()
+    connection.close()
+    return render_template("admin/feedback.html", rows=rows, stats=stats, status=status, rating=rating)
+
+
+@app.post("/admin/feedback/<int:chat_log_id>/resolve")
+@admin_required
+def admin_feedback_resolve(chat_log_id):
+    note = str(request.form.get("admin_note", "")).strip()[:1200]
+    next_status = str(request.form.get("status", "resolved")).strip().lower()
+    if next_status not in {"pending", "resolved"}:
+        next_status = "resolved"
+    connection = get_database()
+    row = connection.execute("SELECT id FROM chat_logs WHERE id=? AND feedback_rating IS NOT NULL", (chat_log_id,)).fetchone()
+    if row is None:
+        connection.close()
+        return redirect(url_for("admin_feedback_page"))
+    if next_status == "resolved":
+        connection.execute(
+            """UPDATE chat_logs SET feedback_status='resolved', feedback_admin_note=?,
+               feedback_handled_at=CURRENT_TIMESTAMP, feedback_handled_by=? WHERE id=?""",
+            (note or None, session["user_id"], chat_log_id),
+        )
+    else:
+        connection.execute(
+            """UPDATE chat_logs SET feedback_status='pending', feedback_admin_note=?,
+               feedback_handled_at=NULL, feedback_handled_by=NULL WHERE id=?""",
+            (note or None, chat_log_id),
+        )
+    connection.commit()
+    connection.close()
+    return redirect(request.referrer or url_for("admin_feedback_page"))
 
 
 @app.get("/admin")

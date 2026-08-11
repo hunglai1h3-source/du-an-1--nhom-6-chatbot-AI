@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Xử lý đánh giá AI | MediCare Admin</title>
+  <style>
+    :root{--g:#087b3f;--gs:#eef9f3;--t:#17202d;--m:#667085;--b:#e3e8e5;--r:#d92d20;--bg:#f6f9f7}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font-family:Inter,Arial,sans-serif}.wrap{max-width:1450px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}.top h1{margin:0;font-size:28px}.top p{margin:5px 0 0;color:var(--m)}.back{padding:10px 14px;border:1px solid var(--b);border-radius:10px;background:#fff;color:var(--g);text-decoration:none;font-weight:800}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.stat{padding:16px;border:1px solid var(--b);border-radius:14px;background:#fff}.stat small{display:block;color:var(--m)}.stat strong{display:block;margin-top:5px;font-size:26px}.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}.filters a{padding:9px 12px;border:1px solid var(--b);border-radius:999px;background:#fff;text-decoration:none;color:var(--t);font-weight:700}.filters a.active{background:var(--g);color:#fff;border-color:var(--g)}.list{display:grid;gap:13px}.card{padding:17px;border:1px solid var(--b);border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.04)}.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.who strong,.who small{display:block}.who small{margin-top:4px;color:var(--m)}.badge{padding:6px 9px;border-radius:999px;font-weight:850;font-size:12px}.like{background:#eaf8ef;color:#087b3f}.dislike{background:#fff0ee;color:#c43225}.pending{background:#fff7df;color:#9b6b00}.resolved{background:#edf4ff;color:#2d63b8}.q,.a,.fb{margin-top:12px;padding:12px;border-radius:12px;background:#fafcfb}.q b,.a b,.fb b{display:block;margin-bottom:6px;font-size:12px}.q p,.a p,.fb p{margin:0;white-space:pre-wrap;line-height:1.55}.a{max-height:230px;overflow:auto}.fb{background:#fffaf2}.meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;color:var(--m);font-size:12px}.resolve{display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-top:12px}.resolve input{min-width:0;padding:10px 11px;border:1px solid var(--b);border-radius:9px}.resolve button{padding:10px 12px;border:0;border-radius:9px;font-weight:800;cursor:pointer}.done{background:var(--g);color:#fff}.reopen{background:#eef2f6;color:#344054}.empty{padding:48px;border:1px dashed var(--b);border-radius:16px;background:#fff;text-align:center;color:var(--m)}@media(max-width:850px){.stats{grid-template-columns:1fr 1fr}.resolve{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="top"><div><h1>💬 Xử lý đánh giá AI</h1><p>Tiếp nhận 👍/👎 và phản hồi của người dùng về từng câu trả lời.</p></div><a class="back" href="/admin">← Quay lại Admin</a></div>
+    <section class="stats">
+      <article class="stat"><small>Tổng đánh giá</small><strong>{{ stats.total or 0 }}</strong></article>
+      <article class="stat"><small>👍 Hữu ích</small><strong>{{ stats.likes or 0 }}</strong></article>
+      <article class="stat"><small>👎 Chưa tốt</small><strong>{{ stats.dislikes or 0 }}</strong></article>
+      <article class="stat"><small>Chờ xử lý</small><strong>{{ stats.pending or 0 }}</strong></article>
+    </section>
+    <nav class="filters">
+      <a class="{{ 'active' if status=='pending' else '' }}" href="?status=pending&rating={{ rating }}">Chờ xử lý</a>
+      <a class="{{ 'active' if status=='resolved' else '' }}" href="?status=resolved&rating={{ rating }}">Đã xử lý</a>
+      <a class="{{ 'active' if status=='all' else '' }}" href="?status=all&rating={{ rating }}">Tất cả</a>
+      <a class="{{ 'active' if rating=='dislike' else '' }}" href="?status={{ status }}&rating=dislike">👎 Chỉ đánh giá xấu</a>
+      <a class="{{ 'active' if rating=='like' else '' }}" href="?status={{ status }}&rating=like">👍 Chỉ đánh giá tốt</a>
+    </nav>
+    <section class="list">
+      {% for item in rows %}
+      <article class="card">
+        <div class="head"><div class="who"><strong>{{ item.full_name or 'Khách' }}</strong><small>{{ item.email or 'Không có email' }} · {{ item.feedback_updated_at or item.created_at }}</small></div><div><span class="badge {{ 'like' if item.feedback_rating=='like' else 'dislike' }}">{{ '👍 Hữu ích' if item.feedback_rating=='like' else '👎 Chưa tốt' }}</span> <span class="badge {{ item.feedback_status }}">{{ 'Chờ xử lý' if item.feedback_status=='pending' else 'Đã xử lý' }}</span></div></div>
+        <div class="q"><b>Câu hỏi</b><p>{{ item.question }}</p></div>
+        <div class="a"><b>Câu trả lời AI</b><p>{{ item.answer or 'Không có nội dung trả lời.' }}</p></div>
+        {% if item.feedback_reason or item.feedback_text %}<div class="fb"><b>Phản hồi người dùng</b><p>{% if item.feedback_reason %}Lý do: {{ item.feedback_reason }}{% endif %}{% if item.feedback_text %}\nGóp ý: {{ item.feedback_text }}{% endif %}</p></div>{% endif %}
+        <div class="meta"><span>Log #{{ item.id }}</span><span>Model: {{ item.model or '--' }}</span>{% if item.handled_by_name %}<span>Xử lý bởi: {{ item.handled_by_name }}</span>{% endif %}</div>
+        <form class="resolve" method="post" action="/admin/feedback/{{ item.id }}/resolve">
+          <input name="admin_note" maxlength="1200" value="{{ item.feedback_admin_note or '' }}" placeholder="Ghi chú xử lý của Admin (không bắt buộc)">
+          {% if item.feedback_status=='pending' %}<button class="done" name="status" value="resolved">✓ Đánh dấu đã xử lý</button>{% else %}<button class="reopen" name="status" value="pending">↶ Mở lại</button>{% endif %}
+        </form>
+      </article>
+      {% else %}<div class="empty">Không có đánh giá phù hợp bộ lọc hiện tại.</div>{% endfor %}
+    </section>
+  </main>
+</body>
+</html>

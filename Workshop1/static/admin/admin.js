@@ -1,14 +1,4 @@
-(()=>{"use strict";const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));const fmt=n=>new Intl.NumberFormat("vi-VN").format(Number(n||0));const toast=m=>{const e=$("#toast");if(!e)return;e.textContent=m;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),2200)};$("#menuToggle")?.addEventListener("click",()=>$("#sidebar")?.classList.toggle("open"));const theme=localStorage.getItem("admin-theme");if(theme)document.documentElement.dataset.theme=theme;
-const adminNav=$(".sidebar nav");
-if(adminNav&&!adminNav.querySelector("[data-admin-news-link]")){
-  const newsLink=document.createElement("a");
-  newsLink.href="/admin/news";
-  newsLink.dataset.adminNewsLink="";
-  newsLink.innerHTML="▤ Bản tin sức khỏe";
-  if(location.pathname.startsWith("/admin/news"))newsLink.classList.add("active");
-  adminNav.appendChild(newsLink);
-}
-$("#themeToggle")?.addEventListener("click",()=>{const d=document.documentElement;d.dataset.theme=d.dataset.theme==="dark"?"light":"dark";localStorage.setItem("admin-theme",d.dataset.theme)});
+(()=>{"use strict";const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));const fmt=n=>new Intl.NumberFormat("vi-VN").format(Number(n||0));const toast=m=>{const e=$("#toast");if(!e)return;e.textContent=m;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),2200)};$("#menuToggle")?.addEventListener("click",()=>$("#sidebar")?.classList.toggle("open"));const theme=localStorage.getItem("admin-theme");if(theme)document.documentElement.dataset.theme=theme;$("#themeToggle")?.addEventListener("click",()=>{const d=document.documentElement;d.dataset.theme=d.dataset.theme==="dark"?"light":"dark";localStorage.setItem("admin-theme",d.dataset.theme)});
 async function getJSON(url,opts){const r=await fetch(url,{cache:"no-store",...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Có lỗi xảy ra");return d}
 function setSync(t){$("#syncLabel")&&( $("#syncLabel").textContent="Đồng bộ "+t)}
 let chart;
@@ -24,268 +14,102 @@ if(window.AdminPage==="users"){document.addEventListener("click",e=>{const tab=e
 if(window.AdminPage==="chats"){$("#closeChatDetail")?.addEventListener("click",()=>$("#chatDetailModal").classList.add("hidden"));$("#chatDetailModal")?.addEventListener("click",e=>{if(e.target.id==="chatDetailModal")e.currentTarget.classList.add("hidden")});loadChats();$("#refreshChats")?.addEventListener("click",()=>loadChats(1));$("#chatFilters")?.addEventListener("submit",e=>{e.preventDefault();loadChats(1)});setInterval(()=>loadChats(1),5000)}
 if(window.AdminPage==="ai-settings"){$("#testGeminiButton")?.addEventListener("click",async()=>{const b=$("#testGeminiButton"),r=$("#geminiTestResult");b.disabled=true;b.textContent="Đang kiểm tra...";r.className="test-result muted";r.textContent="Đang gửi một yêu cầu kiểm tra ngắn tới Gemini...";try{const d=await getJSON("/admin/api/ai/test",{method:"POST"});r.className="test-result success";r.textContent=`Kết nối thành công · Model: ${d.model} · Độ trễ: ${fmt(d.latency_ms)} ms · Phản hồi: ${d.reply}`}catch(e){r.className="test-result error";r.textContent="Kiểm tra thất bại: "+e.message}finally{b.disabled=false;b.textContent="Kiểm tra kết nối Gemini"}})}
 document.addEventListener("click",async e=>{const b=e.target.closest("[data-premium-action]");if(!b)return;const action=b.dataset.premiumAction;const label=action==="approve"?"xác nhận đã nhận thanh toán và kích hoạt Premium":"từ chối hóa đơn";if(!confirm(`Bạn chắc chắn muốn ${label}?`))return;try{await getJSON(`/admin/premium/${b.dataset.orderId}/${action}`,{method:"POST"});toast("Đã cập nhật hóa đơn");setTimeout(()=>location.reload(),500)}catch(x){toast(x.message)}});
+})();
 
-if(window.AdminPage==="news"){
-  let newsItems=[];
+/* ===== ADMIN AI FEEDBACK NOTIFICATION ===== */
+(() => {
+  const bell = document.getElementById("feedbackBell");
+  if (!bell) return;
 
-  const statusLabel=s=>({
-    pending:"Chờ duyệt",
-    approved:"Đã duyệt",
-    draft:"Đã ẩn",
-    rejected:"Từ chối"
-  }[s]||s);
+  const badge = document.getElementById("feedbackBadge");
+  const sideBadge = document.getElementById("sideFeedbackBadge");
+  const popover = document.getElementById("feedbackPopover");
+  const list = document.getElementById("feedbackPopoverList");
+  const summary = document.getElementById("feedbackPopoverSummary");
+  let previousPending = null;
 
-  const statusClass=s=>s==="approved"?"success":s==="rejected"?"danger":s==="pending"?"warning":"";
+  const escFeedback = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
 
-  function setNewsImagePreview(url="", label=""){
-    const box=$("#newsImagePreviewBox");
-    const image=$("#newsImagePreview");
-    const fileName=$("#newsImageFileName");
-
-    if(!box||!image||!fileName)return;
-
-    if(url){
-      image.src=url;
-      fileName.textContent=label||"Ảnh đại diện đã tải lên";
-      box.classList.remove("hidden");
-    }else{
-      image.removeAttribute("src");
-      fileName.textContent="Ảnh đại diện";
-      box.classList.add("hidden");
-    }
-  }
-
-  function resetNewsForm(){
-    $("#newsForm")?.reset();
-    $("#newsId").value="";
-    $("#newsImageUrl").value="";
-    setNewsImagePreview();
-    $("#newsFormTitle").textContent="Thêm bài báo";
-    $("#saveNewsButton").textContent="Tạo bài chờ duyệt";
-    $("#cancelNewsEdit")?.classList.add("hidden");
-  }
-
-  function fillNewsForm(item){
-    $("#newsId").value=item.id;
-    $("#newsTitle").value=item.title||"";
-    $("#newsSourceName").value=item.source_name||"";
-    $("#newsCategory").value=item.category||"general";
-    $("#newsSourceUrl").value=item.source_url||"";
-    $("#newsImageUrl").value=item.image_url||"";
-    $("#newsImageFile").value="";
-    setNewsImagePreview(
-      item.image_url||"",
-      item.image_url?"Ảnh đại diện hiện tại":""
-    );
-    $("#newsSummary").value=item.summary||"";
-    $("#newsFormTitle").textContent=`Sửa bài #${item.id}`;
-    $("#saveNewsButton").textContent="Lưu thay đổi";
-    $("#cancelNewsEdit")?.classList.remove("hidden");
-    window.scrollTo({top:0,behavior:"smooth"});
-  }
-
-  async function loadNews(){
-    const status=$("#newsStatusFilter")?.value||"all";
-    const category=$("#newsCategoryFilter")?.value||"all";
-
-    try{
-      const d=await getJSON(`/admin/api/news?status=${encodeURIComponent(status)}&category=${encodeURIComponent(category)}`);
-      newsItems=d.items||[];
-
-      $("#newsCountAll").textContent=fmt(d.counts?.all);
-      $("#newsCountPending").textContent=fmt(d.counts?.pending);
-      $("#newsCountApproved").textContent=fmt(d.counts?.approved);
-      $("#newsCountRejected").textContent=fmt(d.counts?.rejected);
-
-      $("#newsTableBody").innerHTML=newsItems.map(item=>`
-        <tr>
-          <td>
-            <div class="news-admin-cell">
-              <img src="${esc(item.image_url||"/static/images/news-doctor.svg")}" alt="" onerror="this.onerror=null;this.src='/static/images/news-doctor.svg'">
-              <div>
-                <b>${esc(item.title)}</b>
-                <small>${esc(item.summary).slice(0,130)}${String(item.summary||"").length>130?"…":""}</small>
-              </div>
-            </div>
-          </td>
-          <td>
-            <b>${esc(item.source_name)}</b>
-            <small><a class="admin-source-link" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">Mở bài gốc ↗</a></small>
-          </td>
-          <td><span class="badge">${esc(item.category_label)}</span></td>
-          <td>
-            <span class="badge ${statusClass(item.status)}">${esc(statusLabel(item.status))}</span>
-            ${item.rejection_reason?`<small class="danger-text">${esc(item.rejection_reason)}</small>`:""}
-          </td>
-          <td>${item.is_featured?'<span class="badge success">Nổi bật</span>':'-'}</td>
-          <td>
-            <div class="actions">
-              <button class="btn" type="button" data-news-edit="${item.id}">Sửa</button>
-              ${item.status!=="approved"?`<button class="btn primary" type="button" data-news-action="approve" data-news-id="${item.id}">Duyệt</button>`:""}
-              ${item.status==="approved"&&!item.is_featured?`<button class="btn" type="button" data-news-action="feature" data-news-id="${item.id}">Nổi bật</button>`:""}
-              ${item.status==="approved"?`<button class="btn" type="button" data-news-action="hide" data-news-id="${item.id}">Ẩn</button>`:""}
-              ${item.status!=="rejected"?`<button class="btn danger" type="button" data-news-action="reject" data-news-id="${item.id}">Từ chối</button>`:""}
-              ${item.status==="rejected"||item.status==="draft"?`<button class="btn" type="button" data-news-action="pending" data-news-id="${item.id}">Gửi duyệt lại</button>`:""}
-              <button class="btn danger" type="button" data-news-action="delete" data-news-id="${item.id}">Xóa</button>
-            </div>
-          </td>
-        </tr>
-      `).join("")||'<tr><td colspan="6" class="empty">Không có bài báo phù hợp.</td></tr>';
-
-      setSync(new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"}));
-    }catch(e){
-      toast(e.message);
-    }
-  }
-
-  async function uploadSelectedNewsImage(){
-    const input=$("#newsImageFile");
-    const file=input?.files?.[0];
-
-    if(!file)return $("#newsImageUrl")?.value||"";
-
-    const formData=new FormData();
-    formData.append("image",file);
-
-    const response=await fetch("/admin/api/news/upload-image",{
-      method:"POST",
-      body:formData,
-      cache:"no-store"
+  function updateCount(count){
+    const n = Number(count || 0);
+    [badge, sideBadge].forEach(el => {
+      if (!el) return;
+      el.textContent = n > 99 ? "99+" : String(n);
+      el.classList.toggle("hidden", n <= 0);
     });
-
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok)throw new Error(data.error||"Không tải được ảnh.");
-
-    $("#newsImageUrl").value=data.image_url||"";
-    setNewsImagePreview(
-      data.image_url||"",
-      file.name
-    );
-
-    return data.image_url||"";
+    bell.classList.toggle("has-pending", n > 0);
+    bell.title = n > 0 ? `${n} đánh giá AI đang chờ xử lý` : "Không có đánh giá AI mới";
+    summary.textContent = n > 0 ? `${n} đánh giá đang chờ bạn kiểm tra` : "Không có đánh giá mới";
   }
 
-  $("#newsImageFile")?.addEventListener("change",()=>{
-    const file=$("#newsImageFile")?.files?.[0];
-    if(!file)return;
-
-    if(file.size>5*1024*1024){
-      toast("Ảnh không được vượt quá 5 MB.");
-      $("#newsImageFile").value="";
+  function renderRecent(items){
+    if (!Array.isArray(items) || !items.length){
+      list.innerHTML = '<div class="feedback-popover-empty">✓ Không có đánh giá nào đang chờ xử lý.</div>';
       return;
     }
+    list.innerHTML = items.map(item => {
+      const ratingLabel = item.rating === "dislike" ? "👎 Chưa tốt" : "👍 Hữu ích";
+      const reason = item.reason_label || item.reason || "Không ghi lý do";
+      const user = item.full_name || item.email || "Khách";
+      return `<a class="feedback-popover-item" href="/admin/feedback?status=pending#feedback-${item.id}">
+        <div class="row-top">
+          <span class="rating ${escFeedback(item.rating)}">${ratingLabel}</span>
+          <time>${escFeedback(item.updated_at || "")}</time>
+        </div>
+        <b>${escFeedback(user)} · ${escFeedback(reason)}</b>
+        <p>${escFeedback(item.feedback_text || item.question || "Đánh giá câu trả lời AI")}</p>
+      </a>`;
+    }).join("");
+  }
 
-    const allowed=["image/jpeg","image/png","image/webp"];
-    if(file.type&&!allowed.includes(file.type)){
-      toast("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.");
-      $("#newsImageFile").value="";
-      return;
-    }
-
-    const objectUrl=URL.createObjectURL(file);
-    setNewsImagePreview(objectUrl,file.name);
-
-    const preview=$("#newsImagePreview");
-    preview?.addEventListener("load",()=>{
-      URL.revokeObjectURL(objectUrl);
-    },{once:true});
-  });
-
-  $("#removeNewsImage")?.addEventListener("click",()=>{
-    $("#newsImageFile").value="";
-    $("#newsImageUrl").value="";
-    setNewsImagePreview();
-  });
-
-  $("#newsForm")?.addEventListener("submit",async e=>{
-    e.preventDefault();
-    const id=$("#newsId").value.trim();
-    const saveButton=$("#saveNewsButton");
-
+  async function loadFeedbackNotice(showError=false){
     try{
-      saveButton.disabled=true;
-      saveButton.textContent=$("#newsImageFile")?.files?.[0]
-        ?"Đang tải ảnh..."
-        :"Đang lưu...";
+      const response = await fetch("/admin/api/feedback-summary", {cache:"no-store", credentials:"same-origin"});
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Không tải được đánh giá.");
+      const pending = Number(data.pending || 0);
 
-      const imageUrl=await uploadSelectedNewsImage();
-
-      const payload={
-        title:$("#newsTitle").value,
-        source_name:$("#newsSourceName").value,
-        category:$("#newsCategory").value,
-        source_url:$("#newsSourceUrl").value,
-        image_url:imageUrl,
-        summary:$("#newsSummary").value
-      };
-
-      saveButton.textContent="Đang lưu...";
-
-      await getJSON(
-        id?`/admin/api/news/${id}`:"/admin/api/news",
-        {
-          method:id?"PUT":"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify(payload)
+      if (previousPending !== null && pending > previousPending){
+        const toast = document.getElementById("toast");
+        if (toast){
+          toast.textContent = `Có ${pending - previousPending} đánh giá AI mới cần xử lý.`;
+          toast.classList.add("show");
+          setTimeout(() => toast.classList.remove("show"), 3500);
         }
-      );
-      toast(id?"Đã lưu thay đổi.":"Đã tạo bài chờ duyệt.");
-      resetNewsForm();
-      await loadNews();
-    }catch(e){
-      toast(e.message);
-    }finally{
-      saveButton.disabled=false;
-      saveButton.textContent=$("#newsId").value
-        ?"Lưu thay đổi"
-        :"Tạo bài chờ duyệt";
+      }
+      previousPending = pending;
+      updateCount(pending);
+      renderRecent(data.items || []);
+    }catch(error){
+      if (showError){
+        summary.textContent = "Không tải được thông báo";
+        list.innerHTML = `<div class="feedback-popover-empty">${escFeedback(error.message)}</div>`;
+      }
+    }
+  }
+
+  bell.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    const opening = popover.classList.contains("hidden");
+    popover.classList.toggle("hidden", !opening);
+    bell.setAttribute("aria-expanded", opening ? "true" : "false");
+    if (opening) await loadFeedbackNotice(true);
+  });
+
+  popover.addEventListener("click", event => event.stopPropagation());
+  document.addEventListener("click", () => {
+    popover.classList.add("hidden");
+    bell.setAttribute("aria-expanded", "false");
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape"){
+      popover.classList.add("hidden");
+      bell.setAttribute("aria-expanded", "false");
     }
   });
 
-  $("#cancelNewsEdit")?.addEventListener("click",resetNewsForm);
-  $("#refreshNews")?.addEventListener("click",loadNews);
-  $("#newsFilters")?.addEventListener("change",loadNews);
-
-  document.addEventListener("click",async e=>{
-    const edit=e.target.closest("[data-news-edit]");
-    if(edit){
-      const item=newsItems.find(x=>String(x.id)===String(edit.dataset.newsEdit));
-      if(item)fillNewsForm(item);
-      return;
-    }
-
-    const actionButton=e.target.closest("[data-news-action]");
-    if(!actionButton)return;
-
-    const action=actionButton.dataset.newsAction;
-    const id=actionButton.dataset.newsId;
-    let reason="";
-
-    if(action==="delete"&&!confirm("Xóa vĩnh viễn bài báo này?"))return;
-    if(action==="approve"&&!confirm("Duyệt bài này để hiển thị cho người dùng?"))return;
-    if(action==="hide"&&!confirm("Ẩn bài này khỏi Trang chủ?"))return;
-    if(action==="feature"&&!confirm("Đặt bài này làm bài nổi bật?"))return;
-    if(action==="pending"&&!confirm("Chuyển bài về trạng thái chờ duyệt?"))return;
-
-    if(action==="reject"){
-      reason=prompt("Lý do từ chối (có thể để trống):","")||"";
-      if(!confirm("Xác nhận từ chối bài này?"))return;
-    }
-
-    try{
-      await getJSON(`/admin/api/news/${id}/${action}`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({reason})
-      });
-      toast("Đã cập nhật bản tin.");
-      await loadNews();
-    }catch(e){
-      toast(e.message);
-    }
-  });
-
-  loadNews();
-}
-
+  loadFeedbackNotice(false);
+  window.setInterval(() => loadFeedbackNotice(false), 10000);
 })();

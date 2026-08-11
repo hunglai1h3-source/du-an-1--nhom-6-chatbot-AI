@@ -584,6 +584,107 @@ function renderEmergencyPanel(message) {
 
  
 
+
+function ensureFeedbackModal() {
+  let modal = $("#feedbackModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "feedbackModal";
+  modal.className = "shared-modal hidden";
+  modal.innerHTML = `
+    <section class="shared-modal-card feedback-modal-card" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <button class="shared-modal-close" data-feedback-close type="button" aria-label="Đóng">×</button>
+      <p class="modal-eyebrow">ĐÁNH GIÁ CÂU TRẢ LỜI</p>
+      <h2 id="feedbackTitle">Điều gì chưa tốt?</h2>
+      <p class="feedback-help">Góp ý giúp MediCare AI cải thiện chất lượng tư vấn. Không nhập thông tin nhạy cảm không cần thiết.</p>
+      <form id="feedbackForm">
+        <div class="feedback-reasons">
+          ${[
+            ["inaccurate","Không chính xác"],
+            ["irrelevant","Không đúng câu hỏi"],
+            ["hard_to_understand","Khó hiểu / quá dài"],
+            ["missing_info","Thiếu thông tin"],
+            ["unsafe","Có nội dung không an toàn"],
+            ["other","Khác"]
+          ].map(([value,label]) => `<label><input type="radio" name="reason" value="${value}"><span>${label}</span></label>`).join("")}
+        </div>
+        <label class="feedback-note">Góp ý thêm (không bắt buộc)
+          <textarea name="feedback_text" maxlength="1200" rows="3" placeholder="Ví dụ: câu trả lời chưa giải thích rõ phần..."></textarea>
+        </label>
+        <p class="feedback-form-message"></p>
+        <div class="feedback-form-actions">
+          <button type="button" class="feedback-cancel" data-feedback-close>Hủy</button>
+          <button type="submit" class="feedback-submit">Gửi đánh giá</button>
+        </div>
+      </form>
+    </section>`;
+  document.body.appendChild(modal);
+  $$("[data-feedback-close]", modal).forEach((button) => button.addEventListener("click", () => modal.classList.add("hidden")));
+  modal.addEventListener("click", (event) => { if (event.target === modal) modal.classList.add("hidden"); });
+  return modal;
+}
+
+async function postMessageFeedback(message, rating, reason = "", feedbackText = "") {
+  message.feedback = rating || "";
+  message.feedbackReason = reason;
+  message.feedbackText = feedbackText;
+  persistSessions();
+
+  if (!message.chatLogId) {
+    M.showToast("Đã ghi nhận đánh giá trên thiết bị.", "success");
+    return;
+  }
+
+  const response = await fetch("/api/chat-feedback", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_log_id: message.chatLogId,
+      rating,
+      reason,
+      feedback_text: feedbackText
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Không thể gửi đánh giá.");
+  M.showToast(data.message || "Cảm ơn bạn đã đánh giá!", "success");
+}
+
+function openDislikeFeedback(index) {
+  const session = ensureSession();
+  const message = session.messages[Number(index)];
+  if (!message) return;
+
+  const modal = ensureFeedbackModal();
+  const form = $("#feedbackForm", modal);
+  form.reset();
+  form.dataset.messageIndex = String(index);
+  $(".feedback-form-message", form).textContent = "";
+  modal.classList.remove("hidden");
+
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const submit = $(".feedback-submit", form);
+    const status = $(".feedback-form-message", form);
+    const data = Object.fromEntries(new FormData(form));
+    submit.disabled = true;
+    submit.textContent = "Đang gửi...";
+    status.textContent = "";
+    try {
+      await postMessageFeedback(message, "dislike", data.reason || "", data.feedback_text || "");
+      modal.classList.add("hidden");
+      renderMessages();
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Gửi đánh giá";
+    }
+  };
+}
+
 function renderMessages() {
 
   const session = ensureSession();
@@ -614,7 +715,12 @@ function renderMessages() {
 
           <div class="message-meta"><time>${M.escapeHTML(message.time || "")}</time>${isUser ? "<span>✓✓</span>" : ""}</div>
 
-          ${isUser ? "" : `<div class="message-actions"><button type="button" data-copy-index="${index}">Sao chép</button><button type="button" data-like-index="${index}">${message.liked ? "♥ Đã lưu" : "♡ Lưu"}</button></div>`}
+          ${isUser ? "" : `<div class="message-actions">
+            <button type="button" data-copy-index="${index}" title="Sao chép">⧉ <span>Sao chép</span></button>
+            <button type="button" class="feedback-action ${message.feedback === "like" ? "active" : ""}" data-feedback-like="${index}" title="Câu trả lời hữu ích" aria-label="Hữu ích">👍</button>
+            <button type="button" class="feedback-action ${message.feedback === "dislike" ? "active" : ""}" data-feedback-dislike="${index}" title="Câu trả lời chưa tốt" aria-label="Chưa tốt">👎</button>
+            <button type="button" data-like-index="${index}">${message.liked ? "♥ Đã lưu" : "♡ Lưu"}</button>
+          </div>`}
 
         </div>
 
@@ -636,6 +742,26 @@ function renderMessages() {
 
     M.showToast("Đã sao chép câu trả lời.", "success");
 
+  }));
+
+  $$("[data-feedback-like]").forEach((button) => button.addEventListener("click", async () => {
+    const message = session.messages[Number(button.dataset.feedbackLike)];
+    const next = message.feedback === "like" ? "" : "like";
+    try {
+      await postMessageFeedback(message, next);
+      renderMessages();
+    } catch (error) {
+      M.showToast(error.message, "error");
+    }
+  }));
+
+  $$("[data-feedback-dislike]").forEach((button) => button.addEventListener("click", () => {
+    const message = session.messages[Number(button.dataset.feedbackDislike)];
+    if (message.feedback === "dislike") {
+      postMessageFeedback(message, "").then(renderMessages).catch((error) => M.showToast(error.message, "error"));
+      return;
+    }
+    openDislikeFeedback(button.dataset.feedbackDislike);
   }));
 
   $$('[data-like-index]').forEach((button) => button.addEventListener("click", () => {
@@ -1226,7 +1352,8 @@ async function sendMessage(event) {
 
       time: nowTime(),
 
-      emergency: data.emergency?.active ? data.emergency : null
+      emergency: data.emergency?.active ? data.emergency : null,
+      chatLogId: data.chat_log_id || null
 
     });
 

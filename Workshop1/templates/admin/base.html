@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}MediCare Admin{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css') }}?v=20260806-premium-fixed-1">
-  <script defer src="{{ url_for('static', filename='admin/admin.js') }}?v=20260806-premium-fixed-1"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css') }}?v=20260811-feedback-notify-v1">
+  <script defer src="{{ url_for('static', filename='admin/admin.js') }}?v=20260811-feedback-notify-v1"></script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -25,6 +25,8 @@
       <a class="{{ 'active' if request.endpoint=='admin_prompt' }}" href="{{ url_for('admin_prompt') }}">✦ <span>Prompt</span></a>
       <a class="{{ 'active' if request.endpoint=='admin_ai_settings' }}" href="{{ url_for('admin_ai_settings') }}">⚙ <span>AI & API</span></a>
       <a class="{{ 'active' if request.endpoint=='admin_audit_logs' }}" href="{{ url_for('admin_audit_logs') }}">⌁ <span>Nhật ký</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_health_news_page' }}" href="/admin/news">▤ <span>Bản tin sức khỏe</span></a>
+      <a class="{{ 'active' if request.endpoint=='admin_feedback_page' }}" href="/admin/feedback">💬 <span>Đánh giá AI</span><b class="side-feedback-badge hidden" id="sideFeedbackBadge">0</b></a>
     </nav>
     <div class="sidebar-bottom">
       <a href="{{ url_for('admin_backup_users_db') }}">⇩ <span>Sao lưu DB</span></a>
@@ -36,7 +38,35 @@
     <header class="topbar">
       <button class="icon-btn mobile-menu" id="menuToggle">☰</button>
       <div><h1>{% block page_title %}Admin{% endblock %}</h1><p>{% block page_subtitle %}Quản trị hệ thống MediCare AI{% endblock %}</p></div>
-      <div class="top-actions"><span class="live-dot"></span><span id="syncLabel">Đang đồng bộ</span><button class="icon-btn" id="themeToggle" title="Đổi giao diện">◐</button><div class="avatar">{{ (session.get('full_name') or 'A')[0] }}</div></div>
+      <div class="top-actions">
+        <span class="live-dot"></span>
+        <span id="syncLabel">Đang đồng bộ</span>
+
+        <div class="admin-feedback-notify">
+          <button class="icon-btn feedback-bell" id="feedbackBell" type="button"
+                  title="Đánh giá AI cần xử lý" aria-label="Đánh giá AI cần xử lý"
+                  aria-expanded="false">
+            <span aria-hidden="true">🔔</span>
+            <b class="feedback-badge hidden" id="feedbackBadge">0</b>
+          </button>
+
+          <section class="feedback-popover hidden" id="feedbackPopover" aria-label="Đánh giá AI mới">
+            <div class="feedback-popover-head">
+              <div>
+                <strong>Đánh giá AI cần xử lý</strong>
+                <small id="feedbackPopoverSummary">Không có đánh giá mới</small>
+              </div>
+              <a href="/admin/feedback">Xem tất cả →</a>
+            </div>
+            <div class="feedback-popover-list" id="feedbackPopoverList">
+              <div class="feedback-popover-empty">Đang kiểm tra...</div>
+            </div>
+          </section>
+        </div>
+
+        <button class="icon-btn" id="themeToggle" title="Đổi giao diện">◐</button>
+        <div class="avatar">{{ (session.get('full_name') or 'A')[0] }}</div>
+      </div>
     </header>
     <section class="content">{% block content %}{% endblock %}</section>
   </main>

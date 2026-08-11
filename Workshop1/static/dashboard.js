@@ -1819,7 +1819,7 @@
      window.setTimeout(() => firstField?.focus(), 80);
    });
  
-   $("#openSettings")?.addEventListener("click", () => M.showToast("Bạn có thể đổi giao diện bằng nút trăng ở góc phải."));
+   $("#openSettings")?.addEventListener("click", () => M.openSettings?.("account"));
  
   const premiumModal = $("#premiumModal");
  

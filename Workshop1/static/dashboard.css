@@ -9,6 +9,7 @@
   --muted: #758091;
   --border: #e4e9ee;
   --panel: #ffffff;
+  --white: #ffffff;
   --page: #f7faf8;
   --shadow: 0 12px 34px rgba(18, 44, 30, .07);
 }
@@ -2095,3 +2096,54 @@ body.dark .news-empty-state {
   border-color: #2b4937;
 }
 /* ===== /BẢN TIN SỨC KHỎE ===== */
+
+
+/* ===== ACCOUNT SETTINGS 20260811 ===== */
+.settings-card{width:min(760px,calc(100vw - 32px));padding:28px}
+.settings-header{padding-right:42px}.settings-header h2{font-size:26px}.settings-header>div>p:last-child{margin-top:5px;color:var(--muted);font-size:12px}
+.settings-eyebrow{margin-bottom:5px;color:var(--green);font-size:10px;font-weight:850;letter-spacing:.08em}
+.settings-tabs{display:flex;gap:7px;margin:20px 0;padding:5px;border-radius:13px;background:#f2f7f4}
+.settings-tabs button{flex:1;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:#586477;font-weight:750}
+.settings-tabs button.active{color:var(--green-dark);background:#fff;box-shadow:0 5px 16px rgba(15,23,42,.07)}
+.settings-pane{min-height:330px}
+.settings-account-summary{display:flex;align-items:center;gap:12px;padding:15px;margin-bottom:15px;border:1px solid var(--border);border-radius:14px;background:#fbfefc}
+.settings-avatar{width:52px;height:52px;display:grid;place-items:center;border-radius:50%;color:#fff;background:linear-gradient(145deg,#20b66d,#087b43);font-weight:850}
+.settings-account-summary strong,.settings-account-summary small{display:block}.settings-account-summary small{margin-top:3px;color:var(--muted)}
+.settings-form{display:grid;gap:12px}.settings-field{display:grid;gap:6px;color:#445164;font-size:12px;font-weight:700}
+.settings-field input{width:100%;height:44px;padding:0 12px;border:1px solid var(--border);border-radius:10px;outline:0;background:#fff;color:var(--text)}
+.settings-field input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(7,150,83,.1)}.settings-field input:disabled{background:#f5f7f6;color:#7c8791}
+.settings-field small{color:var(--muted);font-size:10px;font-weight:500}
+.password-input-wrap{position:relative;display:block}.password-input-wrap input{padding-right:48px}.password-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:36px;height:32px;border:0;border-radius:8px;background:transparent}
+.password-eye:hover{background:var(--green-soft)}
+.password-rules{display:flex;gap:14px;color:#677568;font-size:10px}
+.settings-notice{padding:13px 14px;margin-bottom:14px;border:1px solid #cfe6d7;border-radius:12px;background:#f4fbf7}.settings-notice strong{font-size:12px}.settings-notice p{margin-top:5px;color:var(--muted);font-size:10px;line-height:1.55}
+.settings-message{min-height:19px;font-size:11px}.settings-message[data-kind="error"]{color:#b42318}.settings-message[data-kind="success"]{color:var(--green)}
+.settings-primary{min-height:44px;border:0;border-radius:10px;color:#fff;background:linear-gradient(135deg,#0aaa5d,#078c4c);font-weight:800}.settings-primary:disabled{opacity:.6}
+.settings-list{display:grid;gap:10px}.settings-list article{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px;border:1px solid var(--border);border-radius:13px;background:#fff}
+.settings-list strong,.settings-list small{display:block}.settings-list small{margin-top:4px;color:var(--muted);font-size:10px}
+.settings-secondary,.settings-danger-outline{padding:9px 12px;border-radius:9px;background:#fff;font-weight:750;white-space:nowrap}.settings-secondary{border:1px solid #cfe5d7;color:var(--green-dark)}.settings-danger-outline{border:1px solid #ffd0d0;color:#c73737}
+html[data-theme="dark"] .settings-tabs,html[data-theme="dark"] .settings-account-summary,html[data-theme="dark"] .settings-notice{background:#111913}
+html[data-theme="dark"] .settings-tabs button.active,html[data-theme="dark"] .settings-field input,html[data-theme="dark"] .settings-list article,html[data-theme="dark"] .settings-secondary,html[data-theme="dark"] .settings-danger-outline{background:#17201b;color:var(--text)}
+@media(max-width:680px){.settings-card{padding:20px}.settings-tabs{overflow:auto}.settings-tabs button{min-width:105px}.settings-list article{align-items:flex-start;flex-direction:column}.password-rules{flex-direction:column;gap:4px}}
+
+
+/* FIX 20260811-v2: Settings modal always clickable and above dashboard */
+.settings-modal{z-index:12000!important;pointer-events:auto!important}
+.settings-modal .settings-card{position:relative;z-index:12001;background:var(--white,#fff)!important;pointer-events:auto!important}
+#openSettings,[data-open-settings]{pointer-events:auto!important;cursor:pointer!important}
+
+/* ===== SETTINGS V4 ===== */
+.settings-page-card{width:min(860px,calc(100vw - 30px));max-height:92vh;overflow:auto;padding:28px}
+.settings-sections{display:grid;gap:15px;margin-top:18px}
+.settings-box{padding:18px;border:1px solid var(--border);border-radius:15px;background:#fff}
+.settings-box h3{margin:0 0 15px;font-size:15px}
+.settings-account-main{display:grid;gap:3px}.settings-link-btn{width:max-content;margin-top:5px;padding:0;border:0;background:none;color:var(--green);font-size:11px;font-weight:800;cursor:pointer}
+.settings-profile-table{display:grid}.settings-profile-table label{display:grid;grid-template-columns:150px 1fr 55px;align-items:center;gap:12px;min-height:54px;border-bottom:1px solid var(--border);font-size:12px}.settings-profile-table label:last-of-type{border-bottom:0}.settings-profile-table input{height:38px;padding:0 10px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--text);font:inherit}.settings-profile-table input:hover,.settings-profile-table input:focus{border-color:var(--border);background:#fbfefc;outline:none}.settings-profile-table input:disabled{color:var(--muted)}.settings-profile-table em{color:var(--green);font-size:11px;font-style:normal;font-weight:800}.settings-profile-table .muted-edit{color:var(--muted)}
+.settings-row-actions{display:flex;justify-content:flex-end;margin-top:14px}
+.security-summary-row{display:grid;grid-template-columns:150px 1fr auto;align-items:center;gap:12px;padding:4px 0 15px;border-bottom:1px solid var(--border);font-size:12px}.security-summary-row b{letter-spacing:2px}.login-session{display:grid;gap:5px;padding:15px 0 4px;font-size:12px}.login-session span{color:var(--muted)}
+.privacy-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 0;border-bottom:1px solid var(--border)}.privacy-row:last-child{border-bottom:0}.privacy-row strong,.privacy-row small{display:block}.privacy-row strong{font-size:12px}.privacy-row small{margin-top:4px;color:var(--muted);font-size:10px}
+.switch{position:relative;flex:0 0 auto;width:42px;height:24px}.switch input{position:absolute;opacity:0}.switch span{position:absolute;inset:0;border-radius:999px;background:#cbd5e1;cursor:pointer;transition:.2s}.switch span:after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.2s}.switch input:checked+span{background:var(--green)}.switch input:checked+span:after{transform:translateX(18px)}
+.personal-data-actions{display:flex;gap:9px;flex-wrap:wrap}.settings-danger{min-height:40px;padding:0 13px;border:1px solid #dc2626;border-radius:10px;background:#dc2626;color:#fff;font-weight:800}.settings-danger-outline{min-height:40px;padding:0 13px;border:1px solid #fecaca;border-radius:10px;background:#fff;color:#b42318;font-weight:800}
+.password-change-card{width:min(520px,calc(100vw - 30px));padding:28px}.password-change-card h2{margin:0 0 20px}.password-actions{display:flex;justify-content:flex-end;gap:9px}.password-rules span{color:#7c8791}.password-rules span.valid{color:var(--green);font-weight:800}
+[data-theme="dark"] .settings-box,[data-theme="dark"] .settings-account-summary,[data-theme="dark"] .settings-danger-outline{background:var(--panel)}
+@media(max-width:640px){.settings-page-card{padding:20px 14px}.settings-profile-table label{grid-template-columns:1fr}.settings-profile-table label span{padding-top:10px}.settings-profile-table label em{display:none}.security-summary-row{grid-template-columns:1fr}.personal-data-actions>*{width:100%}}
