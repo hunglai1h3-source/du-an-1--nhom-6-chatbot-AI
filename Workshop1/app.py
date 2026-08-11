@@ -24,6 +24,7 @@ import subprocess
 import tempfile
 import unicodedata
 from uuid import uuid4
+from io import BytesIO
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
@@ -863,6 +864,27 @@ def initialize_database():
         """)
 
 
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS health_news_images (
+                id SERIAL PRIMARY KEY,
+                content BYTEA NOT NULL,
+                mime_type TEXT NOT NULL,
+                original_name TEXT,
+                created_by INTEGER,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_health_news_image_creator
+                    FOREIGN KEY (created_by)
+                    REFERENCES users(id)
+                    ON DELETE SET NULL
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_health_news_images_created_at
+            ON health_news_images(created_at DESC, id DESC)
+        """)
+
         connection.execute("""
             CREATE TABLE IF NOT EXISTS health_news (
                 id SERIAL PRIMARY KEY,
@@ -1065,12 +1087,16 @@ def normalize_health_news_url(value, field_name="Đường dẫn", allow_empty=F
 
 
 def normalize_health_news_image_url(value):
-    """Cho phép ảnh ngoài http/https hoặc ảnh đã upload vào static của MediCare."""
+    """Cho phép ảnh ngoài http/https hoặc ảnh do MediCare lưu bền vững."""
     raw = str(value or "").strip()
     if not raw:
         return ""
 
-    # Ảnh upload từ máy tính chỉ được dùng trong thư mục riêng của bản tin.
+    # Ảnh mới: lưu trong PostgreSQL và phục vụ qua endpoint riêng.
+    if raw.startswith("/health-news/image/"):
+        return raw[:1500]
+
+    # Giữ tương thích với ảnh local cũ (nếu còn).
     if raw.startswith("/static/uploads/health_news/"):
         return raw[:1500]
 
@@ -1096,7 +1122,12 @@ def detect_health_news_image_extension(content):
     return None
 
 
-def save_health_news_image_upload(file_storage):
+def prepare_health_news_image_upload(file_storage):
+    """
+    Đọc và xác minh ảnh upload.
+    Ảnh KHÔNG còn ghi vào filesystem của web service vì filesystem Render
+    có thể bị xóa khi restart/redeploy. Dữ liệu ảnh sẽ được lưu trong PostgreSQL.
+    """
     if file_storage is None or not getattr(file_storage, "filename", ""):
         raise ValueError("Bạn chưa chọn ảnh từ máy tính.")
 
@@ -1112,14 +1143,29 @@ def save_health_news_image_upload(file_storage):
     if extension is None:
         raise ValueError("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.")
 
-    upload_dir = BASE_DIR / "static" / "uploads" / "health_news"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    mime_by_extension = {
+        "jpg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp",
+    }
 
-    filename = f"{uuid4().hex}.{extension}"
-    target = upload_dir / filename
-    target.write_bytes(content)
+    original_name = Path(
+        getattr(file_storage, "filename", "") or f"news-image.{extension}"
+    ).name[:255]
 
-    return f"/static/uploads/health_news/{filename}"
+    return {
+        "content": content,
+        "mime_type": mime_by_extension[extension],
+        "original_name": original_name,
+    }
+
+
+def extract_health_news_image_id(image_url):
+    match = re.fullmatch(
+        r"/health-news/image/(\d+)",
+        str(image_url or "").strip(),
+    )
+    return int(match.group(1)) if match else None
 
 
 def health_news_row_to_dict(row):
@@ -1737,6 +1783,41 @@ def health_utilities_page():
     return render_template("health_utilities.html")
 
 
+
+
+
+
+@app.get("/health-news/image/<int:image_id>")
+def health_news_image(image_id):
+    connection = get_database()
+    try:
+        row = connection.execute(
+            """
+            SELECT content, mime_type, original_name
+            FROM health_news_images
+            WHERE id = ?
+            """,
+            (image_id,),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    if not row:
+        return "", 404
+
+    content = bytes(row["content"])
+    mime_type = row["mime_type"] or "application/octet-stream"
+    original_name = row["original_name"] or f"health-news-{image_id}"
+
+    response = send_file(
+        BytesIO(content),
+        mimetype=mime_type,
+        as_attachment=False,
+        download_name=original_name,
+        max_age=60 * 60 * 24 * 30,
+    )
+    response.headers["Cache-Control"] = "public, max-age=2592000"
+    return response
 
 
 @app.get("/api/health-news")
@@ -4392,13 +4473,46 @@ def admin_upload_health_news_image():
     image = request.files.get("image")
 
     try:
-        image_url = save_health_news_image_upload(image)
+        image_data = prepare_health_news_image_upload(image)
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
 
+    connection = get_database()
+    try:
+        cursor = connection.execute(
+            """
+            INSERT INTO health_news_images (
+                content,
+                mime_type,
+                original_name,
+                created_by
+            )
+            VALUES (?, ?, ?, ?)
+            RETURNING id
+            """,
+            (
+                image_data["content"],
+                image_data["mime_type"],
+                image_data["original_name"],
+                session["user_id"],
+            ),
+        )
+        returned = cursor.fetchone()
+        image_id = returned[0] if returned else None
+
+        if image_id is None:
+            raise RuntimeError("Không lấy được ID ảnh vừa tải lên.")
+
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
     return jsonify({
         "message": "Tải ảnh lên thành công.",
-        "image_url": image_url,
+        "image_url": f"/health-news/image/{image_id}",
     }), 201
 
 
@@ -4476,6 +4590,13 @@ def admin_update_health_news(news_id):
         if not existing:
             return jsonify({"error": "Không tìm thấy bài báo."}), 404
 
+        old_stored_image_id = extract_health_news_image_id(
+            existing["image_url"]
+        )
+        new_stored_image_id = extract_health_news_image_id(
+            payload["image_url"]
+        )
+
         connection.execute(
             """
             UPDATE health_news
@@ -4498,6 +4619,15 @@ def admin_update_health_news(news_id):
                 news_id,
             ),
         )
+
+        if (
+            old_stored_image_id is not None
+            and old_stored_image_id != new_stored_image_id
+        ):
+            connection.execute(
+                "DELETE FROM health_news_images WHERE id = ?",
+                (old_stored_image_id,),
+            )
 
         write_admin_log(
             connection,
@@ -4627,10 +4757,18 @@ def admin_health_news_action(news_id, action):
             )
 
         elif action == "delete":
+            stored_image_id = extract_health_news_image_id(row["image_url"])
+
             connection.execute(
                 "DELETE FROM health_news WHERE id = ?",
                 (news_id,),
             )
+
+            if stored_image_id is not None:
+                connection.execute(
+                    "DELETE FROM health_news_images WHERE id = ?",
+                    (stored_image_id,),
+                )
 
         write_admin_log(
             connection,
