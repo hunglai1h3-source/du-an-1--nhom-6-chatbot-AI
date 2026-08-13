@@ -4623,20 +4623,20 @@ def admin_feedback_summary():
     connection = get_database()
     pending = connection.execute(
         """SELECT COUNT(*)
-           FROM chat_logs
-           WHERE feedback_rating IS NOT NULL
-             AND COALESCE(feedback_status,'pending')='pending'"""
+        FROM chat_logs
+        WHERE feedback_rating IS NOT NULL
+        AND COALESCE(feedback_status,'pending')='pending'"""
     ).fetchone()[0]
     rows = connection.execute(
         """SELECT c.id, c.question, c.feedback_rating, c.feedback_reason,
-                  c.feedback_text, COALESCE(c.feedback_updated_at,c.created_at) updated_at,
-                  u.full_name, u.email
-           FROM chat_logs c
-           LEFT JOIN users u ON u.id=c.user_id
-           WHERE c.feedback_rating IS NOT NULL
-             AND COALESCE(c.feedback_status,'pending')='pending'
-           ORDER BY COALESCE(c.feedback_updated_at,c.created_at) DESC
-           LIMIT 6"""
+                c.feedback_text, COALESCE(c.feedback_updated_at,c.created_at) updated_at,
+                u.full_name, u.email
+        FROM chat_logs c
+        LEFT JOIN users u ON u.id=c.user_id
+        WHERE c.feedback_rating IS NOT NULL
+            AND COALESCE(c.feedback_status,'pending')='pending'
+        ORDER BY COALESCE(c.feedback_updated_at,c.created_at) DESC
+        LIMIT 6"""
     ).fetchall()
     connection.close()
 
@@ -4688,26 +4688,26 @@ def admin_feedback_page():
     connection = get_database()
     rows = connection.execute(
         f"""SELECT c.id, c.question, c.answer, c.model, c.created_at,
-                   c.feedback_rating, c.feedback_reason, c.feedback_text,
-                   c.feedback_updated_at, COALESCE(c.feedback_status,'pending') feedback_status,
-                   c.feedback_admin_note, c.feedback_handled_at,
-                   u.full_name, u.email, a.full_name handled_by_name
+                c.feedback_rating, c.feedback_reason, c.feedback_text,
+                c.feedback_updated_at, COALESCE(c.feedback_status,'pending') feedback_status,
+                c.feedback_admin_note, c.feedback_handled_at,
+                u.full_name, u.email, a.full_name handled_by_name
             FROM chat_logs c
             LEFT JOIN users u ON u.id = c.user_id
             LEFT JOIN users a ON a.id = c.feedback_handled_by
             WHERE {' AND '.join(conditions)}
             ORDER BY CASE WHEN COALESCE(c.feedback_status,'pending')='pending' THEN 0 ELSE 1 END,
-                     COALESCE(c.feedback_updated_at,c.created_at) DESC
+                    COALESCE(c.feedback_updated_at,c.created_at) DESC
             LIMIT 500""",
         tuple(params),
     ).fetchall()
     stats = connection.execute(
         """SELECT
-             COUNT(*) FILTER (WHERE feedback_rating IS NOT NULL) total,
-             COUNT(*) FILTER (WHERE feedback_rating='like') likes,
-             COUNT(*) FILTER (WHERE feedback_rating='dislike') dislikes,
-             COUNT(*) FILTER (WHERE feedback_rating IS NOT NULL AND COALESCE(feedback_status,'pending')='pending') pending
-           FROM chat_logs"""
+            COUNT(*) FILTER (WHERE feedback_rating IS NOT NULL) total,
+            COUNT(*) FILTER (WHERE feedback_rating='like') likes,
+            COUNT(*) FILTER (WHERE feedback_rating='dislike') dislikes,
+            COUNT(*) FILTER (WHERE feedback_rating IS NOT NULL AND COALESCE(feedback_status,'pending')='pending') pending
+        FROM chat_logs"""
     ).fetchone()
     connection.close()
     return render_template("admin/feedback.html", rows=rows, stats=stats, status=status, rating=rating)
@@ -4728,13 +4728,13 @@ def admin_feedback_resolve(chat_log_id):
     if next_status == "resolved":
         connection.execute(
             """UPDATE chat_logs SET feedback_status='resolved', feedback_admin_note=?,
-               feedback_handled_at=CURRENT_TIMESTAMP, feedback_handled_by=? WHERE id=?""",
+            feedback_handled_at=CURRENT_TIMESTAMP, feedback_handled_by=? WHERE id=?""",
             (note or None, session["user_id"], chat_log_id),
         )
     else:
         connection.execute(
             """UPDATE chat_logs SET feedback_status='pending', feedback_admin_note=?,
-               feedback_handled_at=NULL, feedback_handled_by=NULL WHERE id=?""",
+            feedback_handled_at=NULL, feedback_handled_by=NULL WHERE id=?""",
             (note or None, chat_log_id),
         )
     connection.commit()
