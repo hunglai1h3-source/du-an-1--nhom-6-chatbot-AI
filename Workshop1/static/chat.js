@@ -1943,6 +1943,18 @@ async function initialize() {
 
   $("#refreshQuickButton").addEventListener("click", () => { quickSetIndex = (quickSetIndex + 1) % quickSets.length; renderQuickPrompts(); });
 
+  const quickArea = $("#quickArea");
+  const quickToggleButton = $("#quickToggleButton");
+
+  quickToggleButton?.addEventListener("click", () => {
+    const isCollapsed = quickArea.classList.toggle("collapsed");
+
+    quickToggleButton.textContent = isCollapsed ? "▲" : "▼";
+    quickToggleButton.setAttribute("aria-expanded", String(!isCollapsed));
+    quickToggleButton.setAttribute("aria-label", isCollapsed ? "Hiện gợi ý" : "Thu gọn gợi ý");
+    quickToggleButton.title = isCollapsed ? "Hiện gợi ý" : "Thu gọn gợi ý";
+  });
+
   $("#removeSpecialtyButton").addEventListener("click", () => { localStorage.removeItem(M.KEYS.specialty); renderSpecialty(); });
 
   $("#chatForm")?.addEventListener("submit", sendMessage);

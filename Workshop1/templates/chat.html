@@ -102,14 +102,27 @@
 
         <section class="message-list" id="messageList" aria-live="polite"></section>
 
-        <section class="quick-area">
-          <div class="quick-heading">
-            <div>
-              <strong>Gợi ý nhanh</strong>
+        <section class="quick-area" id="quickArea">
+          <div class="quick-content" id="quickContent">
+            <div class="quick-heading">
+              <div>
+                <strong>Gợi ý nhanh</strong>
+              </div>
+              <button id="refreshQuickButton" type="button">↻ Đổi gợi ý</button>
             </div>
-            <button id="refreshQuickButton" type="button">↻ Đổi gợi ý</button>
+            <div class="quick-list" id="quickList"></div>
           </div>
-          <div class="quick-list" id="quickList"></div>
+
+          <button
+            class="quick-toggle-button"
+            id="quickToggleButton"
+            type="button"
+            aria-label="Thu gọn gợi ý"
+            aria-expanded="true"
+            title="Thu gọn gợi ý"
+          >
+            ▼
+          </button>
         </section>
 
         <div class="image-preview hidden" id="imagePreview">
@@ -227,3 +240,4 @@
   <script src="{{ url_for('static', filename='chat.js', v='20260811-feedback-settings-v1') }}"></script>
 </body>
 </html>
+

@@ -1638,6 +1638,70 @@ a {
 
 }
 
+
+/* ===== Thu gọn / mở rộng gợi ý nhanh ===== */
+.quick-area {
+  position:relative;
+  padding:9px 18px 13px;
+  border-top:1px solid var(--border);
+}
+
+.quick-content {
+  max-height:90px;
+  opacity:1;
+  overflow:hidden;
+  transition:max-height .28s ease, opacity .20s ease, transform .28s ease;
+}
+
+.quick-area.collapsed .quick-content {
+  max-height:0;
+  opacity:0;
+  transform:translateY(5px);
+  pointer-events:none;
+}
+
+.quick-toggle-button {
+  position:absolute;
+  left:50%;
+  bottom:-12px;
+  transform:translateX(-50%);
+  width:28px;
+  height:24px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  border:1px solid #bfe5ce;
+  border-radius:8px;
+  background:#fff;
+  color:var(--green);
+  font-size:10px;
+  font-weight:900;
+  line-height:1;
+  box-shadow:0 3px 8px rgba(15,38,25,.08);
+  z-index:20;
+  transition:background .2s ease, border-color .2s ease, transform .2s ease;
+}
+
+.quick-toggle-button:hover {
+  background:var(--green-soft);
+  border-color:var(--green);
+}
+
+.quick-toggle-button:active {
+  transform:translateX(-50%) scale(.92);
+}
+
+.quick-area.collapsed {
+  padding-top:0;
+  padding-bottom:13px;
+}
+
+.quick-area + .image-preview.hidden + .composer,
+.quick-area + .composer {
+  margin-top:5px;
+}
+
  
 
 .image-preview {
