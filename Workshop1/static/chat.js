@@ -28,6 +28,9 @@ let audioChunks = [];
 
 let isSending = false;
 
+// Chặn vòng lặp profile-changed -> switchToProfile -> selectProfile -> profile-changed
+let isSwitchingProfile = false;
+
  
 
 const quickSets = [
@@ -144,94 +147,71 @@ function latestSessionForProfile(profileId) {
 
 function switchToProfile(profileId) {
 
-  const profiles = M.getProfiles();
+  if (isSwitchingProfile) return;
 
-  const nextProfile = profiles.find((profile) => String(profile.id) === String(profileId));
+  isSwitchingProfile = true;
 
- 
+  try {
+    const profiles = M.getProfiles();
 
-  if (!nextProfile) {
+    const nextProfile = profiles.find(
+      (profile) => String(profile.id) === String(profileId)
+    );
 
-    M.showToast("Không tìm thấy hồ sơ đã chọn.", "error");
+    if (!nextProfile) {
+      M.showToast("Không tìm thấy hồ sơ đã chọn.", "error");
+      return;
+    }
 
-    return;
+    const oldSession = currentSession();
+    const oldProfileId = oldSession?.profileId;
 
-  }
+    if (String(oldProfileId) === String(nextProfile.id)) {
+      M.selectProfile(nextProfile);
+      renderProfiles();
+      closeMenus();
+      return;
+    }
 
- 
+    // Chuyển currentChatId sang đúng hồ sơ TRƯỚC khi phát profile-changed.
+    let targetSession = latestSessionForProfile(nextProfile.id);
 
-  const oldSession = currentSession();
+    if (!targetSession) {
+      targetSession = createSession({ profile: nextProfile });
+    } else {
+      currentChatId = targetSession.id;
+    }
 
-  const oldProfileId = oldSession?.profileId;
-
- 
-
-  if (String(oldProfileId) === String(nextProfile.id)) {
-
+    // Sau khi session đã đúng profile mới gọi selectProfile.
     M.selectProfile(nextProfile);
 
+    clearSelectedImage();
+
+    const chatInput = $("#chatInput");
+    if (chatInput) chatInput.value = "";
+
+    autoResizeInput();
+
+    localStorage.removeItem(M.KEYS.specialty);
+    renderSpecialty();
+
+    persistSessions();
     renderProfiles();
+    renderHistory();
+    renderMessages();
+    renderEnvironmentAdvice(M.readJSON(M.KEYS.locationContext, null));
 
     closeMenus();
 
-    return;
-
+    M.showToast(
+      `Đã chuyển sang hồ sơ ${nextProfile.name}. Lịch sử và ngữ cảnh đã được tách riêng.`,
+      "success"
+    );
+  } finally {
+    isSwitchingProfile = false;
   }
-
- 
-
-  // Không thay profileId của cuộc trò chuyện cũ để tránh trộn lịch sử giữa các thành viên.
-
-  M.selectProfile(nextProfile);
-
-  let targetSession = latestSessionForProfile(nextProfile.id);
-
- 
-
-  if (!targetSession) {
-
-    targetSession = createSession({ profile: nextProfile });
-
-  } else {
-
-    currentChatId = targetSession.id;
-
-  }
-
- 
-
-  // Dọn dữ liệu tạm của hồ sơ trước.
-
-  clearSelectedImage();
-
-  $("#chatInput").value = "";
-
-  autoResizeInput();
-
-  localStorage.removeItem(M.KEYS.specialty);
-
-  renderSpecialty();
-
- 
-
-  persistSessions();
-
-  renderProfiles();
-
-  renderHistory();
-
-  renderMessages();
-
-  renderEnvironmentAdvice(M.readJSON(M.KEYS.locationContext, null));
-
-  closeMenus();
-
-  M.showToast(`Đã chuyển sang hồ sơ ${nextProfile.name}. Lịch sử và ngữ cảnh đã được tách riêng.`, "success");
 
 }
-
- 
-
 function renderProfiles() {
 
   const selected = M.getSelectedProfile();
@@ -2011,24 +1991,22 @@ async function initialize() {
 
   $("#notificationButton").addEventListener("click", () => M.showToast("Bạn có 3 nhắc nhở sức khỏe chưa xem."));
 
-  window.addEventListener("medicare:profile-changed", () => {
+  window.addEventListener("medicare:profile-changed", (event) => {
 
-    const selected = M.getSelectedProfile();
+    // Nếu chính switchToProfile đang đồng bộ profile thì bỏ qua event lồng nhau.
+    if (isSwitchingProfile) return;
+
+    const selected = event.detail || M.getSelectedProfile();
 
     if (String(currentSession()?.profileId) !== String(selected.id)) {
-
       switchToProfile(selected.id);
-
       return;
-
     }
 
     renderProfiles();
-
     renderEnvironmentAdvice(M.readJSON(M.KEYS.locationContext, null));
 
   });
-
   window.addEventListener("medicare:auth-changed", async (event) => {
 
     if (event.detail) {
