@@ -77,15 +77,28 @@
     const profile = typeof profileOrId === "object"
       ? profileOrId
       : profiles.find((item) => String(item.id) === String(profileOrId));
+
     if (!profile) {
       localStorage.removeItem(KEYS.selectedProfile);
       return { ...guestProfile };
     }
+
+    const previousSelected = readJSON(KEYS.selectedProfile, null);
     writeJSON(KEYS.selectedProfile, profile);
-    window.dispatchEvent(new CustomEvent("medicare:profile-changed", { detail: profile }));
+
+    // Chỉ phát sự kiện nếu thực sự đổi sang ID hồ sơ khác.
+    // Tránh selectProfile -> profile-changed -> switchToProfile -> selectProfile lặp vô hạn.
+    const profileChanged =
+      String(previousSelected?.id ?? "") !== String(profile.id ?? "");
+
+    if (profileChanged) {
+      window.dispatchEvent(
+        new CustomEvent("medicare:profile-changed", { detail: profile })
+      );
+    }
+
     return profile;
   }
-
   function mapFamilyMember(member) {
     return {
       id: `family-${member.id}`,

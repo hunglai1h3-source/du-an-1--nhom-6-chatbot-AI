@@ -165,9 +165,9 @@ print("MODEL GIỌNG NÓI ĐANG DÙNG:", AUDIO_TRANSCRIPTION_MODEL)
 # Giới hạn thời gian chờ Gemini để giao diện không bị treo quá lâu.
 # Có thể chỉnh trong .env, ví dụ: GEMINI_REQUEST_TIMEOUT=25
 try:
-    GEMINI_REQUEST_TIMEOUT = float(os.getenv("GEMINI_REQUEST_TIMEOUT", "25"))
+    GEMINI_REQUEST_TIMEOUT = float(os.getenv("GEMINI_REQUEST_TIMEOUT", "35"))
 except (TypeError, ValueError):
-    GEMINI_REQUEST_TIMEOUT = 25.0
+    GEMINI_REQUEST_TIMEOUT = 35.0
 GEMINI_REQUEST_TIMEOUT = max(10.0, min(GEMINI_REQUEST_TIMEOUT, 45.0))
 
 if API_KEY:
@@ -2873,10 +2873,24 @@ def load_self_profile_context(connection, user_id):
         return {}
 
     latest_weight = get_latest_weight(connection, user_id)
-    try:
-        age = calculate_age(profile["birth_date"], profile["age"])
-    except (ValueError, TypeError):
-        age = profile["age"]
+
+    # Trong chat, trường age đang lưu trong health_profiles là nguồn tuổi
+    # mà giao diện hồ sơ cũng sử dụng. Ưu tiên trường này để tránh trường hợp
+    # birth_date cũ và age mới không đồng bộ làm AI nói sai tuổi.
+    age = profile["age"]
+    if age in (None, ""):
+        try:
+            age = calculate_age(profile["birth_date"], None)
+        except (ValueError, TypeError):
+            age = None
+    else:
+        try:
+            age = int(age)
+        except (TypeError, ValueError):
+            try:
+                age = calculate_age(profile["birth_date"], None)
+            except (ValueError, TypeError):
+                age = None
 
     user = connection.execute(
         "SELECT full_name FROM users WHERE id = ?", (user_id,)
@@ -3162,7 +3176,7 @@ GEMINI_FALLBACK_MODELS = [
     name.strip().removeprefix("models/")
     for name in os.getenv(
         "GEMINI_FALLBACK_MODELS",
-        "gemini-3.5-flash,gemini-flash-latest"
+        "gemini-3.5-flash,gemini-3.5-flash-lite"
     ).split(",")
     if name.strip()
 ]
@@ -3188,32 +3202,76 @@ def is_model_not_found_error(error):
     )
 
 
-def create_gemini_completion_with_fallback(**kwargs):
-    """Gọi Gemini và tự thử model dự phòng nếu model hiện tại không tồn tại."""
-    preferred_model = kwargs.get("model", MODEL_NAME)
-    last_error = None
+def is_transient_gemini_error(error):
+    """Lỗi tạm thời có thể thử model Gemini 3.5 dự phòng."""
+    status = get_error_status(error)
+    text = str(error).lower()
+    return (
+        status in {408, 500, 502, 503, 504}
+        or any(token in text for token in (
+            "timeout",
+            "timed out",
+            "temporarily unavailable",
+            "unavailable",
+            "high demand",
+            "overloaded",
+            "bad gateway",
+            "gateway timeout",
+            "connection reset",
+        ))
+    )
 
-    for model_name in gemini_model_candidates(preferred_model):
+
+def create_gemini_completion_with_fallback(**kwargs):
+    """
+    Ưu tiên Gemini 3.5 Flash.
+    Nếu 3.5 Flash không khả dụng hoặc tạm quá tải, thử 3.5 Flash-Lite.
+    Không hạ xuống Gemini 2.5.
+    """
+    preferred_model = str(
+        kwargs.get("model", MODEL_NAME) or MODEL_NAME
+    ).strip().removeprefix("models/")
+    last_error = None
+    candidates = gemini_model_candidates(preferred_model)
+
+    for index, model_name in enumerate(candidates):
         request_kwargs = dict(kwargs)
         request_kwargs["model"] = model_name
+
         try:
             response = client.chat.completions.create(**request_kwargs)
             if model_name != preferred_model:
                 print(
-                    f"⚠️ Model {preferred_model} không dùng được; "
-                    f"đã tự chuyển sang {model_name}."
+                    f"✅ GEMINI 3.5 FALLBACK: "
+                    f"{preferred_model} -> {model_name}"
                 )
+            print(
+                "MODEL GEMINI THỰC TẾ:",
+                getattr(response, "model", None) or model_name,
+            )
             return response
+
         except Exception as error:
             last_error = error
-            if not is_model_not_found_error(error):
+            can_fallback = (
+                is_model_not_found_error(error)
+                or is_transient_gemini_error(error)
+            )
+
+            print(
+                f"⚠️ GEMINI MODEL ERROR: {model_name} | "
+                f"status={get_error_status(error)} | {error}"
+            )
+
+            if not can_fallback or index >= len(candidates) - 1:
                 raise
-            print(f"Model Gemini không khả dụng: {model_name}: {error}")
 
-    raise last_error or RuntimeError("Không tìm thấy model Gemini khả dụng.")
+            print(f"↪ Thử model dự phòng: {candidates[index + 1]}")
+
+    raise last_error or RuntimeError("Không tìm thấy model Gemini 3.5 khả dụng.")
 
 
-AI_CONCURRENCY = max(1, int(os.getenv("AI_CONCURRENCY", "8")))
+AI_CONCURRENCY = max(1, int(os.getenv("AI_CONCURRENCY", "4")))
 AI_REQUEST_SEMAPHORE = __import__("threading").BoundedSemaphore(AI_CONCURRENCY)
 
 
@@ -3222,7 +3280,7 @@ def create_chat_completion_with_retry(**kwargs):
     # Mặc định 1 lần để tránh một câu hỏi bị treo hàng phút.
     # Nếu thực sự cần retry khi deploy, có thể đặt AI_RETRY_ATTEMPTS=2 trong .env.
     try:
-        attempts = int(os.getenv("AI_RETRY_ATTEMPTS", "1"))
+        attempts = int(os.getenv("AI_RETRY_ATTEMPTS", "2"))
     except (TypeError, ValueError):
         attempts = 1
     attempts = max(1, min(attempts, 2))
@@ -3474,8 +3532,9 @@ def chat():
                     "- Dữ liệu do người dùng tự khai, không coi là chẩn đoán.\n"
                     "- Không hiển thị JSON hoặc các tên trường kỹ thuật như age, sex, "
                     "name, height_cm, latest_weight_kg trong câu trả lời.\n"
-                    "- Khi cần nhắc lại hồ sơ, chỉ viết bằng tiếng Việt tự nhiên, ví dụ: "
-                    "18 tuổi, Nam, cao 180 cm, nặng 75 kg."
+                    "- Khi cần nhắc lại hồ sơ, chỉ viết bằng tiếng Việt tự nhiên và "
+                    "phải dùng đúng các giá trị trong HỒ SƠ DUY NHẤT ĐANG ĐƯỢC DÙNG ĐỂ TƯ VẤN; "
+                    "không dùng số liệu ví dụ hoặc số liệu từ lịch sử nếu chúng mâu thuẫn."
                 ),
             })
 
@@ -3577,6 +3636,22 @@ def chat():
 
         messages.extend(history)
 
+        # Nhắc lại snapshot hồ sơ sau lịch sử hội thoại.
+        # System message này nằm gần câu hỏi hiện tại hơn, giúp loại bỏ số liệu
+        # cũ trong history (ví dụ tuổi cũ) khi hồ sơ vừa được cập nhật.
+        if effective_profile:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "SNAPSHOT HỒ SƠ HIỆN TẠI - NGUỒN DỮ LIỆU ƯU TIÊN CAO NHẤT:\n"
+                    + format_profile_for_prompt(effective_profile)
+                    + "\nQUY TẮC: Nếu bất kỳ tin nhắn cũ nào có tuổi, cân nặng, chiều cao, "
+                    "giới tính, bệnh nền hoặc dị ứng khác với snapshot này, phải bỏ qua "
+                    "số liệu cũ và chỉ dùng snapshot hiện tại. Không được tự thay đổi tuổi "
+                    "hoặc suy ra một tuổi khác."
+                ),
+            })
+
         # Với yêu cầu tăng/giảm cân, nhắc lại hồ sơ ngay trước câu hỏi hiện tại
         # để mô hình không hỏi lại tuổi, chiều cao và cân nặng đã có.
         normalized_intent = unicodedata.normalize(
@@ -3609,9 +3684,15 @@ def chat():
                     + "\n- Không hỏi lại bất kỳ trường nào đã có trong hồ sơ.\n"
                     "- Không đưa danh sách nhiều câu hỏi khảo sát.\n"
                     "- Hãy bắt đầu đánh giá và đưa lộ trình sơ bộ ngay.\n"
-                    "- Cuối câu trả lời chỉ được hỏi tối đa một thông tin "
-                    "thiết yếu còn thiếu, ưu tiên cân nặng mục tiêu hoặc "
-                    "thời gian mong muốn.\n"
+                    "- KHÔNG được chỉ nêu BMI rồi dừng. Phản hồi phải hoàn chỉnh đủ để "
+                    "người dùng có thể bắt đầu áp dụng ngay.\n"
+                    "- Tối thiểu phải có: (1) đánh giá hiện trạng ngắn, "
+                    "(2) mục tiêu giảm cân an toàn, (3) nguyên tắc ăn uống, "
+                    "(4) lịch vận động khởi đầu 7 ngày hoặc lịch mẫu tương đương, "
+                    "(5) cách theo dõi tiến độ và (6) dấu hiệu cần lưu ý.\n"
+                    "- Nếu còn thiếu cân nặng mục tiêu hoặc thời gian mong muốn, vẫn phải "
+                    "đưa kế hoạch khởi đầu an toàn trước; cuối câu trả lời chỉ hỏi tối đa "
+                    "một thông tin thiết yếu còn thiếu để cá nhân hóa bước tiếp theo.\n"
                     "- Không sao chép nguyên khối hồ sơ vào câu trả lời và không hiển thị "
                     "các tên trường kỹ thuật bằng tiếng Anh."
                 ),
@@ -3670,13 +3751,23 @@ Yêu cầu bổ sung:
             else MODEL_NAME
         )
 
-        # Ảnh cần mô tả chi tiết hơn; chat văn bản nên gọn để giảm độ trễ.
-        max_output_tokens = 2200 if has_image else 1200
+        # Giữ 1200 token cho chat thông thường như cấu hình cũ.
+        # Riêng các yêu cầu lập lộ trình tăng/giảm cân 7 ngày cần nhiều nội dung hơn,
+        # nên tăng giới hạn để tránh câu trả lời bị cắt giữa danh sách.
+        if has_image:
+            max_output_tokens = 2200
+        elif weight_plan_type:
+            max_output_tokens = 3200
+        else:
+            max_output_tokens = 1200
+
+        print("GIỚI HẠN OUTPUT TOKEN:", max_output_tokens)
 
         response = create_chat_completion_with_retry(
             model=selected_model,
             messages=messages,
             temperature=0.2 if has_image else 0.3,
+            reasoning_effort="low" if has_image else "minimal",
             max_completion_tokens=max_output_tokens,
             timeout=GEMINI_REQUEST_TIMEOUT,
         )
@@ -3700,6 +3791,100 @@ Yêu cầu bổ sung:
         )
 
         print("LÝ DO GEMINI DỪNG:", finish_reason)
+        print("ĐỘ DÀI REPLY GEMINI:", len(reply), "ký tự")
+
+        # Một số model Gemini có thể trả phần nội dung nhìn thấy rất ngắn khi
+        # finish_reason báo LENGTH/MAX_TOKENS. Khi đó nối tiếp đúng 1 lần để
+        # tránh câu trả lời bị dừng giữa câu như "tôi xin đưa ra đánh...".
+        finish_reason_text = str(finish_reason or "").strip().lower()
+
+        # Không chỉ dựa vào finish_reason. Một số phản hồi có thể báo STOP
+        # nhưng nội dung nhìn thấy vẫn quá ngắn hoặc dừng giữa ý.
+        cleaned_reply_for_check = reply.strip()
+        reply_ends_cleanly = bool(
+            re.search(r"[.!?…:;)\]\}]\s*$", cleaned_reply_for_check)
+        )
+        weight_plan_too_short = bool(
+            weight_plan_type
+            and (
+                len(cleaned_reply_for_check) < 700
+                or not all(
+                    token in normalize_search_text(cleaned_reply_for_check)
+                    for token in ("van dong", "theo doi")
+                )
+            )
+        )
+        visibly_incomplete = bool(
+            cleaned_reply_for_check
+            and (
+                not reply_ends_cleanly
+                or len(cleaned_reply_for_check) < 120
+                or weight_plan_too_short
+            )
+        )
+
+        if (
+            cleaned_reply_for_check
+            and (
+                finish_reason_text in {
+                    "length", "max_tokens", "max_token", "max_output_tokens"
+                }
+                or visibly_incomplete
+            )
+        ):
+            continuation_messages = list(messages)
+            continuation_messages.append({
+                "role": "assistant",
+                "content": reply,
+            })
+            continuation_messages.append({
+                "role": "user",
+                "content": (
+                    "Câu trả lời trước chưa hoàn chỉnh. Hãy tiếp tục ngay từ chỗ đang dở, "
+                    "không lặp lại phần đã viết và không đổi bất kỳ dữ liệu hồ sơ nào. "
+                    + (
+                        "Vì đây là yêu cầu lập lộ trình cân nặng, hãy bảo đảm phần còn lại "
+                        "có kế hoạch ăn uống, lịch vận động khởi đầu 7 ngày, cách theo dõi "
+                        "tiến độ và dấu hiệu cần lưu ý; sau đó chỉ hỏi tối đa một thông tin "
+                        "còn thiếu để cá nhân hóa tiếp. "
+                        if weight_plan_type else ""
+                    )
+                    + "Phải kết thúc bằng một câu hoàn chỉnh."
+                ),
+            })
+
+            try:
+                continuation_response = create_chat_completion_with_retry(
+                    model=selected_model,
+                    messages=continuation_messages,
+                    temperature=0.2 if has_image else 0.3,
+                    reasoning_effort="low" if has_image else "minimal",
+                    max_completion_tokens=max_output_tokens,
+                    timeout=GEMINI_REQUEST_TIMEOUT,
+                )
+
+                if continuation_response.choices:
+                    continuation_text = (
+                        continuation_response.choices[0].message.content or ""
+                    ).strip()
+                    if continuation_text:
+                        reply = reply.rstrip() + "\n" + continuation_text
+
+                    continuation_finish_reason = getattr(
+                        continuation_response.choices[0],
+                        "finish_reason",
+                        None,
+                    )
+                    print(
+                        "LÝ DO GEMINI DỪNG SAU KHI NỐI TIẾP:",
+                        continuation_finish_reason,
+                    )
+            except Exception as continuation_error:
+                # Giữ phần trả lời đầu thay vì biến cả request thành lỗi.
+                print(
+                    "Không thể nối tiếp câu trả lời bị cắt:",
+                    repr(continuation_error),
+                )
 
         reply = re.sub(
             r"<think>.*?</think>\s*",
