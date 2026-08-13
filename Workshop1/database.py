@@ -114,6 +114,8 @@ TABLES_WITH_AUTO_ID = {
     "premium_orders",
     "user_notifications",
     "health_news",
+    "symptom_logs",
+    "health_metric_logs",
 }
 
 

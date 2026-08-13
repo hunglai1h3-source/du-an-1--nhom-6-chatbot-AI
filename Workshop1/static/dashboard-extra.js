@@ -612,6 +612,316 @@
     }, 120);
   }
 
+
+  const SYMPTOM_STATUS_LABELS = {
+    improving: "Đang cải thiện",
+    stable: "Không đổi",
+    worsening: "Đang nặng hơn",
+    recovered: "Đã hồi phục"
+  };
+
+  function selectedTrackingProfile() {
+    const profile = M.getSelectedProfile();
+    if (!profile || profile.id === "guest") return null;
+    if (profile.serverId) {
+      return {
+        profile_type: "family",
+        profile_ref: String(profile.serverId),
+        name: profile.name,
+        meta: `${profile.relationship || "Thành viên"} · ${profile.age || "--"} tuổi`
+      };
+    }
+    return {
+      profile_type: "self",
+      profile_ref: "self",
+      name: profile.name,
+      meta: `Bản thân · ${profile.age || "--"} tuổi`
+    };
+  }
+
+  function updateSymptomProfileHeader() {
+    const profile = selectedTrackingProfile();
+    const selected = M.getSelectedProfile();
+    if ($("#symptomProfileAvatar")) $("#symptomProfileAvatar").textContent = profile ? M.initials(profile.name) : "K";
+    if ($("#symptomProfileName")) $("#symptomProfileName").textContent = profile?.name || "Chưa có hồ sơ";
+    if ($("#symptomProfileMeta")) $("#symptomProfileMeta").textContent = profile?.meta || "Hãy đăng nhập và chọn hồ sơ sức khỏe";
+    return { profile, selected };
+  }
+
+  function formatSymptomTime(value) {
+    if (!value) return "Không rõ thời gian";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+    }).format(date);
+  }
+
+  function renderSymptomTimeline(items = []) {
+    const root = $("#symptomTimeline");
+    if (!root) return;
+    $("#symptomLogCount") && ($("#symptomLogCount").textContent = String(items.length));
+    const latest = items[0];
+    $("#symptomLatestTrend") && ($("#symptomLatestTrend").textContent = latest ? (SYMPTOM_STATUS_LABELS[latest.progress_status] || "Không rõ") : "Chưa có");
+    $("#symptomLatestTemp") && ($("#symptomLatestTemp").textContent = latest?.temperature_c != null ? `${Number(latest.temperature_c).toFixed(1)}°C` : "--");
+    $("#symptomLatestSeverity") && ($("#symptomLatestSeverity").textContent = latest ? `${latest.severity}/5` : "--");
+
+    if (!items.length) {
+      root.innerHTML = '<div class="symptom-empty"><span>🩺</span><strong>Chưa có diễn biến nào được ghi</strong><small>Bấm “Ghi nhận diễn biến” để bắt đầu theo dõi.</small></div>';
+      return;
+    }
+    root.innerHTML = items.map((item) => {
+      const status = SYMPTOM_STATUS_LABELS[item.progress_status] || item.progress_status || "Không rõ";
+      const high = Number(item.severity) >= 4 ? " severity-high" : "";
+      const trendClass = ` trend-${M.escapeHTML(item.progress_status || "stable")}`;
+      const temp = item.temperature_c != null ? `<span>🌡 ${Number(item.temperature_c).toFixed(1)}°C</span>` : "";
+      const details = item.details ? `<p>${M.escapeHTML(item.details)}</p>` : "";
+      const note = item.note ? `<p class="symptom-entry-note"><b>Ghi chú:</b> ${M.escapeHTML(item.note)}</p>` : "";
+      return `
+        <article class="symptom-entry">
+          <span aria-hidden="true"></span>
+          <div class="symptom-entry-main">
+            <div class="symptom-entry-head"><strong>${M.escapeHTML(item.symptom_name)}</strong><time>${M.escapeHTML(formatSymptomTime(item.occurred_at))}</time></div>
+            <div class="symptom-entry-meta">
+              <span class="${high.trim()}">Mức ${M.escapeHTML(item.severity)}/5</span>
+              <span class="${trendClass.trim()}">${M.escapeHTML(status)}</span>
+              ${temp}
+            </div>
+            ${details}${note}
+          </div>
+          <div class="symptom-entry-actions"><button type="button" data-delete-symptom="${item.id}">Xóa</button></div>
+        </article>`;
+    }).join("");
+
+    $$('[data-delete-symptom]', root).forEach((button) => button.addEventListener("click", async () => {
+      if (!window.confirm("Xóa bản ghi diễn biến này?")) return;
+      try {
+        const response = await fetch(`/api/health/symptoms/${button.dataset.deleteSymptom}`, { method: "DELETE", credentials: "same-origin" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Không thể xóa bản ghi.");
+        M.showToast(data.message || "Đã xóa bản ghi.", "success");
+        await loadSymptomTimeline();
+      } catch (error) { M.showToast(error.message, "error"); }
+    }));
+  }
+
+  async function loadSymptomTimeline() {
+    if (!$("#symptomTimeline")) return;
+    const { profile } = updateSymptomProfileHeader();
+    if (!profile) { renderSymptomTimeline([]); return; }
+    const root = $("#symptomTimeline");
+    root.innerHTML = '<div class="symptom-empty"><span>⌛</span><strong>Đang tải diễn biến...</strong><small>Đang lấy nhật ký của đúng hồ sơ đã chọn.</small></div>';
+    try {
+      const auth = await M.currentUser();
+      if (!auth.logged_in) { renderSymptomTimeline([]); return; }
+      const params = new URLSearchParams({ profile_type: profile.profile_type, profile_ref: profile.profile_ref, limit: "60" });
+      const response = await fetch(`/api/health/symptoms?${params}`, { credentials: "same-origin", cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Không tải được diễn biến sức khỏe.");
+      renderSymptomTimeline(data.items || []);
+    } catch (error) {
+      root.innerHTML = `<div class="symptom-empty"><span>!</span><strong>Không tải được diễn biến</strong><small>${M.escapeHTML(error.message)}</small></div>`;
+    }
+  }
+
+  function setSymptomNow() {
+    const input = $("#symptomOccurredAt");
+    if (!input) return;
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    input.value = now.toISOString().slice(0, 16);
+  }
+
+  async function openSymptomModal() {
+    const auth = await M.currentUser();
+    if (!auth.logged_in) { $("#accountButton")?.click(); return; }
+    const { profile } = updateSymptomProfileHeader();
+    if (!profile) { M.showToast("Hãy chọn hồ sơ sức khỏe trước.", "error"); return; }
+    $("#symptomForm")?.reset();
+    if ($("#symptomSeverity")) $("#symptomSeverity").value = "3";
+    if ($("#symptomProgress")) $("#symptomProgress").value = "stable";
+    if ($("#symptomFormMessage")) $("#symptomFormMessage").textContent = "";
+    setSymptomNow();
+    $("#symptomModal")?.classList.remove("hidden");
+    window.setTimeout(() => $("#symptomName")?.focus(), 80);
+  }
+
+  function closeSymptomModal() { $("#symptomModal")?.classList.add("hidden"); }
+
+  function bindSymptomTracking() {
+    if (!$("#symptom-tracking")) return;
+    updateSymptomProfileHeader();
+    $("#openSymptomForm")?.addEventListener("click", openSymptomModal);
+    $("#refreshSymptomTimeline")?.addEventListener("click", loadSymptomTimeline);
+    $("#closeSymptomModal")?.addEventListener("click", closeSymptomModal);
+    $("#cancelSymptomForm")?.addEventListener("click", closeSymptomModal);
+    $("#symptomModal")?.addEventListener("click", (event) => { if (event.target.id === "symptomModal") closeSymptomModal(); });
+    $("#symptomForm")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const { profile } = updateSymptomProfileHeader();
+      if (!profile) return;
+      const button = $("#saveSymptomButton");
+      const message = $("#symptomFormMessage");
+      const body = {
+        profile_type: profile.profile_type,
+        profile_ref: profile.profile_ref,
+        symptom_name: $("#symptomName")?.value.trim(),
+        severity: Number($("#symptomSeverity")?.value || 3),
+        progress_status: $("#symptomProgress")?.value || "stable",
+        temperature_c: $("#symptomTemperature")?.value || null,
+        occurred_at: $("#symptomOccurredAt")?.value || null,
+        details: $("#symptomDetails")?.value.trim(),
+        note: $("#symptomNote")?.value.trim()
+      };
+      try {
+        button.disabled = true; button.textContent = "Đang lưu..."; message.textContent = "";
+        const response = await fetch("/api/health/symptoms", {
+          method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Không thể lưu diễn biến.");
+        closeSymptomModal();
+        M.showToast(data.message || "Đã ghi nhận diễn biến.", "success");
+        await loadSymptomTimeline();
+      } catch (error) { message.textContent = error.message; }
+      finally { button.disabled = false; button.textContent = "Lưu diễn biến"; }
+    });
+    loadSymptomTimeline();
+  }
+
+
+  const METRIC_META = {
+    systolic_mmhg: { label: "Huyết áp tâm thu", unit: "mmHg" },
+    diastolic_mmhg: { label: "Huyết áp tâm trương", unit: "mmHg" },
+    heart_rate_bpm: { label: "Nhịp tim", unit: "bpm" },
+    spo2_percent: { label: "SpO₂", unit: "%" },
+    temperature_c: { label: "Nhiệt độ", unit: "°C" },
+    glucose_mg_dl: { label: "Đường huyết", unit: "mg/dL" },
+    weight_kg: { label: "Cân nặng", unit: "kg" }
+  };
+  let metricItems = [];
+
+  function updateMetricProfileHeader() {
+    const profile = selectedTrackingProfile();
+    if ($("#metricProfileAvatar")) $("#metricProfileAvatar").textContent = profile ? M.initials(profile.name) : "K";
+    if ($("#metricProfileName")) $("#metricProfileName").textContent = profile?.name || "Chưa có hồ sơ";
+    if ($("#metricProfileMeta")) $("#metricProfileMeta").textContent = profile?.meta || "Hãy đăng nhập và chọn hồ sơ sức khỏe";
+    return profile;
+  }
+
+  function metricValue(value, digits = 0) {
+    if (value == null || value === "") return "--";
+    const n = Number(value); if (!Number.isFinite(n)) return "--";
+    return digits ? n.toFixed(digits) : String(Math.round(n));
+  }
+
+  function latestNonEmpty(items, key) { return items.find((item) => item[key] != null)?.[key] ?? null; }
+  function formatMetricTime(value) {
+    if (!value) return "Không rõ";
+    const d = new Date(value); if (Number.isNaN(d.getTime())) return String(value);
+    return new Intl.DateTimeFormat("vi-VN", { day:"2-digit", month:"2-digit", year:"2-digit", hour:"2-digit", minute:"2-digit" }).format(d);
+  }
+
+  function renderMetricLatest(items) {
+    const sys = latestNonEmpty(items, "systolic_mmhg"), dia = latestNonEmpty(items, "diastolic_mmhg");
+    $("#metricBloodPressure") && ($("#metricBloodPressure").textContent = sys != null && dia != null ? `${metricValue(sys)}/${metricValue(dia)}` : "--/--");
+    $("#metricHeartRate") && ($("#metricHeartRate").textContent = metricValue(latestNonEmpty(items, "heart_rate_bpm")));
+    $("#metricSpo2") && ($("#metricSpo2").textContent = metricValue(latestNonEmpty(items, "spo2_percent"), 0));
+    $("#metricTemperature") && ($("#metricTemperature").textContent = metricValue(latestNonEmpty(items, "temperature_c"), 1));
+    $("#metricGlucose") && ($("#metricGlucose").textContent = metricValue(latestNonEmpty(items, "glucose_mg_dl"), 0));
+    $("#metricWeight") && ($("#metricWeight").textContent = metricValue(latestNonEmpty(items, "weight_kg"), 1));
+  }
+
+  function metricBadges(item) {
+    const values = [];
+    if (item.systolic_mmhg != null && item.diastolic_mmhg != null) values.push(`🩸 ${metricValue(item.systolic_mmhg)}/${metricValue(item.diastolic_mmhg)} mmHg`);
+    if (item.heart_rate_bpm != null) values.push(`❤️ ${metricValue(item.heart_rate_bpm)} bpm`);
+    if (item.spo2_percent != null) values.push(`🫁 ${metricValue(item.spo2_percent)}%`);
+    if (item.temperature_c != null) values.push(`🌡 ${metricValue(item.temperature_c,1)}°C`);
+    if (item.glucose_mg_dl != null) values.push(`🧪 ${metricValue(item.glucose_mg_dl)} mg/dL`);
+    if (item.weight_kg != null) values.push(`⚖ ${metricValue(item.weight_kg,1)} kg`);
+    return values;
+  }
+
+  function renderMetricHistory(items) {
+    const root = $("#metricHistoryList"); if (!root) return;
+    $("#metricHistoryCount") && ($("#metricHistoryCount").textContent = `${items.length} bản ghi`);
+    if (!items.length) { root.innerHTML = '<div class="metric-history-empty">Chưa có lần đo nào.</div>'; return; }
+    root.innerHTML = items.slice(0,40).map(item => `
+      <article class="metric-history-item">
+        <div><header><strong>Lần đo</strong><time>${M.escapeHTML(formatMetricTime(item.measured_at))}</time></header>
+        <div class="metric-history-values">${metricBadges(item).map(x=>`<span>${M.escapeHTML(x)}</span>`).join("")}</div></div>
+        <button type="button" data-delete-metric="${item.id}">Xóa</button>
+        ${item.note ? `<p>${M.escapeHTML(item.note)}</p>` : ""}
+      </article>`).join("");
+    $$('[data-delete-metric]', root).forEach(button => button.addEventListener("click", async () => {
+      if (!window.confirm("Xóa lần đo này?")) return;
+      try {
+        const response = await fetch(`/api/health/metrics/${button.dataset.deleteMetric}`, {method:"DELETE", credentials:"same-origin"});
+        const data = await response.json().catch(()=>({})); if (!response.ok) throw new Error(data.error || "Không thể xóa.");
+        M.showToast(data.message || "Đã xóa.", "success"); await loadHealthMetrics();
+      } catch(error) { M.showToast(error.message, "error"); }
+    }));
+  }
+
+  function renderMetricChart(items, key = "heart_rate_bpm") {
+    const root = $("#metricTrendChart"); if (!root) return;
+    const rows = items.filter(item => item[key] != null).slice(0,20).reverse();
+    if (rows.length < 2) { root.innerHTML = '<div class="metric-chart-empty">Cần ít nhất 2 lần đo của chỉ số này để vẽ xu hướng.</div>'; return; }
+    const values = rows.map(item => Number(item[key])).filter(Number.isFinite);
+    const min = Math.min(...values), max = Math.max(...values), span = Math.max(max-min, 1);
+    const w=720,h=230,padX=48,padY=28;
+    const pts = rows.map((item,i)=>{
+      const x=padX + i*(w-padX*2)/Math.max(rows.length-1,1);
+      const y=padY + (max-Number(item[key]))*(h-padY*2)/span;
+      return {x,y,v:Number(item[key]), t:formatMetricTime(item.measured_at)};
+    });
+    const path = pts.map((p,i)=>`${i?'L':'M'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const meta=METRIC_META[key] || {label:key,unit:""};
+    root.innerHTML = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Biểu đồ ${M.escapeHTML(meta.label)}">
+      <line x1="${padX}" y1="${h-padY}" x2="${w-padX}" y2="${h-padY}" stroke="#dfe8e2"/>
+      <line x1="${padX}" y1="${padY}" x2="${padX}" y2="${h-padY}" stroke="#dfe8e2"/>
+      <text x="${padX}" y="18" font-size="10" fill="#667085">${M.escapeHTML(meta.label)} · ${M.escapeHTML(meta.unit)}</text>
+      <text x="8" y="${padY+4}" font-size="9" fill="#667085">${max.toFixed(max%1?1:0)}</text>
+      <text x="8" y="${h-padY+4}" font-size="9" fill="#667085">${min.toFixed(min%1?1:0)}</text>
+      <path d="${path}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color:#079653"/>
+      ${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="4" fill="#079653"><title>${M.escapeHTML(p.t)}: ${p.v} ${M.escapeHTML(meta.unit)}</title></circle>`).join('')}
+    </svg>`;
+  }
+
+  async function loadHealthMetrics() {
+    if (!$("#health-metrics")) return;
+    const profile = updateMetricProfileHeader();
+    if (!profile) { metricItems=[]; renderMetricLatest([]); renderMetricHistory([]); renderMetricChart([]); return; }
+    try {
+      const auth = await M.currentUser(); if (!auth.logged_in) { metricItems=[]; renderMetricHistory([]); return; }
+      const params = new URLSearchParams({profile_type:profile.profile_type, profile_ref:profile.profile_ref, limit:"120"});
+      const response = await fetch(`/api/health/metrics?${params}`, {credentials:"same-origin", cache:"no-store"});
+      const data = await response.json().catch(()=>({})); if (!response.ok) throw new Error(data.error || "Không tải được chỉ số.");
+      metricItems = data.items || []; renderMetricLatest(metricItems); renderMetricHistory(metricItems); renderMetricChart(metricItems, $("#metricChartType")?.value || "heart_rate_bpm");
+    } catch(error) { M.showToast(error.message, "error"); }
+  }
+
+  function setMetricNow() { const input=$("#metricMeasuredAt"); if(!input)return; const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); input.value=d.toISOString().slice(0,16); }
+  async function openMetricModal() {
+    const auth=await M.currentUser(); if(!auth.logged_in){$("#accountButton")?.click();return;} if(!updateMetricProfileHeader()){M.showToast("Hãy chọn hồ sơ sức khỏe trước.","error");return;}
+    $("#metricForm")?.reset(); $("#metricFormMessage") && ($("#metricFormMessage").textContent=""); setMetricNow(); $("#metricModal")?.classList.remove("hidden");
+  }
+  function closeMetricModal(){ $("#metricModal")?.classList.add("hidden"); }
+  function bindHealthMetrics(){
+    if(!$("#health-metrics"))return; updateMetricProfileHeader();
+    $("#openMetricForm")?.addEventListener("click",openMetricModal); $("#refreshHealthMetrics")?.addEventListener("click",loadHealthMetrics);
+    $("#closeMetricModal")?.addEventListener("click",closeMetricModal); $("#cancelMetricForm")?.addEventListener("click",closeMetricModal);
+    $("#metricModal")?.addEventListener("click",e=>{if(e.target.id==="metricModal")closeMetricModal()});
+    $("#metricChartType")?.addEventListener("change",e=>renderMetricChart(metricItems,e.target.value));
+    $("#metricForm")?.addEventListener("submit",async e=>{
+      e.preventDefault(); const profile=updateMetricProfileHeader(); if(!profile)return; const button=$("#saveMetricButton"), message=$("#metricFormMessage");
+      const body={profile_type:profile.profile_type,profile_ref:profile.profile_ref,systolic_mmhg:$("#metricSystolic")?.value||null,diastolic_mmhg:$("#metricDiastolic")?.value||null,heart_rate_bpm:$("#metricHeartRateInput")?.value||null,spo2_percent:$("#metricSpo2Input")?.value||null,temperature_c:$("#metricTemperatureInput")?.value||null,glucose_mg_dl:$("#metricGlucoseInput")?.value||null,weight_kg:$("#metricWeightInput")?.value||null,measured_at:$("#metricMeasuredAt")?.value||null,note:$("#metricNote")?.value.trim()||""};
+      try{button.disabled=true;button.textContent="Đang lưu...";message.textContent="";const response=await fetch("/api/health/metrics",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||"Không thể lưu chỉ số.");closeMetricModal();M.showToast(data.message||"Đã lưu chỉ số.","success");await loadHealthMetrics();}catch(error){message.textContent=error.message}finally{button.disabled=false;button.textContent="Lưu chỉ số"}
+    });
+    loadHealthMetrics();
+  }
+
   function bindHealthActions() {
     $$('[data-health-action]').forEach((button) => button.addEventListener("click", async () => {
       const action = button.dataset.healthAction;
@@ -642,6 +952,8 @@
     await bindNews();
     bindHealthReport();
     bindHealthActions();
+    bindSymptomTracking();
+    bindHealthMetrics();
     bindHomeShortcuts();
     window.setTimeout(async () => {
       await updateHomeSummary();
@@ -650,10 +962,14 @@
     window.addEventListener("medicare:profile-changed", async () => {
       await updateHomeSummary();
       await refreshHealthReport();
+      await loadSymptomTimeline();
+      await loadHealthMetrics();
     });
     window.addEventListener("medicare:profiles-updated", async () => {
       await updateHomeSummary();
       await refreshHealthReport();
+      await loadSymptomTimeline();
+      await loadHealthMetrics();
     });
   }
 

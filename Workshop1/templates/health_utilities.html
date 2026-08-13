@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <meta name="description" content="MediCare AI - Hồ sơ sức khỏe, tiện ích và báo cáo sức khỏe">
   <title>MediCare AI | Sức khỏe &amp; Tiện ích</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260811-settings-v4') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260813-metrics-v2') }}">
 
 <style>
   /* Chỉ áp dụng cho trang Sức khỏe & Tiện ích */
@@ -163,6 +163,8 @@
       <section class="health-page-heading"><div><p class="eyebrow">TRUNG TÂM SỨC KHỎE</p><h1>Sức khỏe &amp; Tiện ích</h1><p>Quản lý hồ sơ sức khỏe gia đình và xem báo cáo được tổng hợp tự động.</p></div></section>
       <nav class="health-section-tabs" aria-label="Các phần sức khỏe và tiện ích">
         <button class="active" type="button" data-section-target="family-health">▣ Hồ sơ sức khỏe</button>
+        <button type="button" data-section-target="symptom-tracking">🩺 Diễn biến bệnh</button>
+        <button type="button" data-section-target="health-metrics">❤️ Chỉ số sức khỏe</button>
         <button type="button" data-section-target="health-report">▤ Báo cáo sức khỏe</button>
       </nav>
 
@@ -176,6 +178,72 @@
             <button type="button" id="showAllProfiles">Quản lý tất cả hồ sơ →</button>
           </div>
           <div class="family-grid health-page-family-grid profile-only-family-grid" id="familyGrid"></div>
+        </div>
+      </section>
+
+
+      <section class="panel symptom-tracking-panel" id="symptom-tracking">
+        <div class="symptom-tracking-heading">
+          <div>
+            <p class="eyebrow">NHẬT KÝ THEO DÕI</p>
+            <h2>Diễn biến bệnh &amp; triệu chứng</h2>
+            <p>Ghi lại từng thay đổi theo đúng hồ sơ đang chọn để xem xu hướng theo thời gian và giúp AI có thêm ngữ cảnh khi tư vấn.</p>
+          </div>
+          <button type="button" id="openSymptomForm">＋ Ghi nhận diễn biến</button>
+        </div>
+
+        <div class="symptom-profile-strip">
+          <span class="symptom-profile-avatar" id="symptomProfileAvatar">K</span>
+          <div><small>ĐANG THEO DÕI CHO</small><strong id="symptomProfileName">Chưa có hồ sơ</strong><em id="symptomProfileMeta">Hãy chọn hồ sơ sức khỏe</em></div>
+          <button type="button" id="refreshSymptomTimeline">↻ Làm mới</button>
+        </div>
+
+        <div class="symptom-summary-grid">
+          <article><span>📝</span><div><small>Bản ghi gần đây</small><strong id="symptomLogCount">0</strong></div></article>
+          <article><span>📈</span><div><small>Xu hướng mới nhất</small><strong id="symptomLatestTrend">Chưa có</strong></div></article>
+          <article><span>🌡</span><div><small>Nhiệt độ gần nhất</small><strong id="symptomLatestTemp">--</strong></div></article>
+          <article><span>⚕</span><div><small>Mức độ gần nhất</small><strong id="symptomLatestSeverity">--</strong></div></article>
+        </div>
+
+        <div class="symptom-timeline" id="symptomTimeline">
+          <div class="symptom-empty"><span>🩺</span><strong>Chưa có diễn biến nào được ghi</strong><small>Bấm “Ghi nhận diễn biến” để bắt đầu theo dõi.</small></div>
+        </div>
+      </section>
+
+      <section class="panel health-metrics-panel" id="health-metrics">
+        <div class="health-metrics-heading">
+          <div>
+            <p class="eyebrow">THEO DÕI CHỈ SỐ</p>
+            <h2>Dashboard chỉ số sức khỏe</h2>
+            <p>Lưu các lần đo theo đúng hồ sơ đang chọn và xem xu hướng gần đây. Số liệu tự nhập chỉ dùng để theo dõi, không tự thay thế đánh giá của bác sĩ.</p>
+          </div>
+          <button type="button" id="openMetricForm">＋ Thêm lần đo</button>
+        </div>
+
+        <div class="metric-profile-strip">
+          <span id="metricProfileAvatar">K</span>
+          <div><small>ĐANG XEM CHỈ SỐ CỦA</small><strong id="metricProfileName">Chưa có hồ sơ</strong><em id="metricProfileMeta">Hãy chọn hồ sơ sức khỏe</em></div>
+          <button type="button" id="refreshHealthMetrics">↻ Làm mới</button>
+        </div>
+
+        <div class="metric-latest-grid">
+          <article><span>🩸</span><div><small>Huyết áp</small><strong id="metricBloodPressure">--/--</strong><em>mmHg</em></div></article>
+          <article><span>❤️</span><div><small>Nhịp tim</small><strong id="metricHeartRate">--</strong><em>bpm</em></div></article>
+          <article><span>🫁</span><div><small>SpO₂</small><strong id="metricSpo2">--</strong><em>%</em></div></article>
+          <article><span>🌡</span><div><small>Nhiệt độ</small><strong id="metricTemperature">--</strong><em>°C</em></div></article>
+          <article><span>🧪</span><div><small>Đường huyết</small><strong id="metricGlucose">--</strong><em>mg/dL</em></div></article>
+          <article><span>⚖</span><div><small>Cân nặng</small><strong id="metricWeight">--</strong><em>kg</em></div></article>
+        </div>
+
+        <div class="metric-dashboard-grid">
+          <section class="metric-chart-card">
+            <div class="metric-card-head"><div><h3>Xu hướng gần đây</h3><small>Chọn chỉ số để xem biểu đồ theo thời gian</small></div><select id="metricChartType"><option value="heart_rate_bpm">Nhịp tim</option><option value="systolic_mmhg">Huyết áp tâm thu</option><option value="diastolic_mmhg">Huyết áp tâm trương</option><option value="spo2_percent">SpO₂</option><option value="temperature_c">Nhiệt độ</option><option value="glucose_mg_dl">Đường huyết</option><option value="weight_kg">Cân nặng</option></select></div>
+            <div class="metric-chart" id="metricTrendChart"><div class="metric-chart-empty">Chưa có dữ liệu để vẽ biểu đồ.</div></div>
+          </section>
+          <section class="metric-history-card">
+            <div class="metric-card-head"><div><h3>Lịch sử đo</h3><small id="metricHistoryCount">0 bản ghi</small></div></div>
+            <div class="metric-history-list" id="metricHistoryList"><div class="metric-history-empty">Chưa có lần đo nào.</div></div>
+          </section>
         </div>
       </section>
 
@@ -228,6 +296,70 @@
       <section class="emergency-panel"><strong>Hỗ trợ khẩn cấp</strong><p>Trong trường hợp khó thở nặng, đau ngực, bất tỉnh hoặc phản vệ, hãy gọi ngay.</p><a href="tel:115">☎ 115</a></section>
       <section class="zalo-support-card"><div class="zalo-card-heading"><span class="zalo-card-icon">Z</span><div><strong>Hỗ trợ qua Zalo</strong><p>Nhắn tin để được hỗ trợ nhanh.</p></div></div><a href="https://zalo.me/0869585139" target="_blank" rel="noopener noreferrer" class="zalo-support-button">Liên hệ Zalo</a></section>
     </aside>
+  </div>
+
+
+  <div class="shared-modal hidden" id="metricModal" role="dialog" aria-modal="true" aria-labelledby="metricModalTitle">
+    <section class="shared-modal-card metric-modal-card">
+      <button class="shared-modal-close" id="closeMetricModal" type="button" aria-label="Đóng">×</button>
+      <p class="modal-eyebrow">CHỈ SỐ SỨC KHỎE</p>
+      <h2 id="metricModalTitle">Thêm lần đo mới</h2>
+      <p class="metric-modal-help">Bạn không cần nhập tất cả. Hãy điền những chỉ số thực sự đã đo được.</p>
+      <form id="metricForm" class="metric-form">
+        <label>Huyết áp tâm thu (mmHg)<input id="metricSystolic" type="number" min="50" max="260" placeholder="Ví dụ: 120"></label>
+        <label>Huyết áp tâm trương (mmHg)<input id="metricDiastolic" type="number" min="30" max="180" placeholder="Ví dụ: 80"></label>
+        <label>Nhịp tim (bpm)<input id="metricHeartRateInput" type="number" min="25" max="250" placeholder="Ví dụ: 72"></label>
+        <label>SpO₂ (%)<input id="metricSpo2Input" type="number" min="50" max="100" step="0.1" placeholder="Ví dụ: 98"></label>
+        <label>Nhiệt độ (°C)<input id="metricTemperatureInput" type="number" min="30" max="45" step="0.1" placeholder="Ví dụ: 36.8"></label>
+        <label>Đường huyết (mg/dL)<input id="metricGlucoseInput" type="number" min="20" max="700" step="0.1" placeholder="Ví dụ: 95"></label>
+        <label>Cân nặng (kg)<input id="metricWeightInput" type="number" min="2" max="350" step="0.1" placeholder="Ví dụ: 65.5"></label>
+        <label>Thời gian đo<input id="metricMeasuredAt" type="datetime-local"></label>
+        <label class="full">Ghi chú<textarea id="metricNote" rows="2" maxlength="1000" placeholder="Ví dụ: đo sau khi nghỉ 5 phút, trước ăn sáng..."></textarea></label>
+        <p class="metric-form-message full" id="metricFormMessage"></p>
+        <div class="metric-form-actions full"><button type="button" id="cancelMetricForm">Hủy</button><button type="submit" id="saveMetricButton">Lưu chỉ số</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="shared-modal hidden" id="symptomModal" role="dialog" aria-modal="true" aria-labelledby="symptomModalTitle">
+    <section class="shared-modal-card symptom-modal-card">
+      <button class="shared-modal-close" id="closeSymptomModal" type="button" aria-label="Đóng">×</button>
+      <p class="modal-eyebrow">NHẬT KÝ DIỄN BIẾN</p>
+      <h2 id="symptomModalTitle">Ghi nhận diễn biến mới</h2>
+      <p class="symptom-modal-help">Thông tin này do bạn tự ghi nhận để theo dõi xu hướng, không phải kết luận chẩn đoán.</p>
+      <form id="symptomForm" class="symptom-form">
+        <label class="full">Triệu chứng / vấn đề đang theo dõi
+          <input id="symptomName" name="symptom_name" maxlength="160" required placeholder="Ví dụ: Sốt, ho, đau đầu, đau bụng...">
+        </label>
+        <label>Mức độ hiện tại
+          <select id="symptomSeverity" name="severity">
+            <option value="1">1 - Rất nhẹ</option><option value="2">2 - Nhẹ</option><option value="3" selected>3 - Trung bình</option><option value="4">4 - Nặng</option><option value="5">5 - Rất nặng</option>
+          </select>
+        </label>
+        <label>Diễn biến
+          <select id="symptomProgress" name="progress_status">
+            <option value="improving">Đang cải thiện</option><option value="stable" selected>Không đổi / ổn định</option><option value="worsening">Đang nặng hơn</option><option value="recovered">Đã hồi phục</option>
+          </select>
+        </label>
+        <label>Nhiệt độ (°C)
+          <input id="symptomTemperature" name="temperature_c" type="number" min="30" max="45" step="0.1" placeholder="Ví dụ: 38.5">
+        </label>
+        <label>Thời gian ghi nhận
+          <input id="symptomOccurredAt" name="occurred_at" type="datetime-local">
+        </label>
+        <label class="full">Mô tả triệu chứng
+          <textarea id="symptomDetails" name="details" rows="3" maxlength="1200" placeholder="Ví dụ: ho nhiều hơn về đêm, đau đầu khi đứng dậy..."></textarea>
+        </label>
+        <label class="full">Ghi chú thêm
+          <textarea id="symptomNote" name="note" rows="2" maxlength="1200" placeholder="Ví dụ: đã nghỉ ngơi, uống đủ nước; chưa dùng thuốc..."></textarea>
+        </label>
+        <p class="symptom-form-message" id="symptomFormMessage"></p>
+        <div class="symptom-form-actions full">
+          <button class="secondary-button" id="cancelSymptomForm" type="button">Hủy</button>
+          <button class="primary-button" id="saveSymptomButton" type="submit">Lưu diễn biến</button>
+        </div>
+      </form>
+    </section>
   </div>
 
   <div class="shared-modal hidden" id="healthReportModal" role="dialog" aria-modal="true" aria-labelledby="healthReportModalTitle">
@@ -661,8 +793,8 @@
 
 
   <script src="{{ url_for('static', filename='common.js', v='20260811-settings-v4') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard.js', v='20260810-dashboard-v2') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard-extra.js', v='20260810-dashboard-v2') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard.js', v='20260813-metrics-v2') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard-extra.js', v='20260813-metrics-v2') }}"></script>
   <script src="{{ url_for('static', filename='premium.js', v='20260806-premium-qr-2') }}"></script>
 </body>
 </html>

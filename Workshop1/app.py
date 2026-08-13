@@ -162,12 +162,22 @@ print("MODEL VĂN BẢN ĐANG DÙNG:", MODEL_NAME)
 print("MODEL HÌNH ẢNH ĐANG DÙNG:", VISION_MODEL_NAME)
 print("MODEL GIỌNG NÓI ĐANG DÙNG:", AUDIO_TRANSCRIPTION_MODEL)
 
+# Giới hạn thời gian chờ Gemini để giao diện không bị treo quá lâu.
+# Có thể chỉnh trong .env, ví dụ: GEMINI_REQUEST_TIMEOUT=25
+try:
+    GEMINI_REQUEST_TIMEOUT = float(os.getenv("GEMINI_REQUEST_TIMEOUT", "25"))
+except (TypeError, ValueError):
+    GEMINI_REQUEST_TIMEOUT = 25.0
+GEMINI_REQUEST_TIMEOUT = max(10.0, min(GEMINI_REQUEST_TIMEOUT, 45.0))
+
 if API_KEY:
     client = OpenAI(
         api_key=API_KEY,
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        timeout=40.0,
-        max_retries=2,
+        timeout=GEMINI_REQUEST_TIMEOUT,
+        # Tắt retry ngầm của SDK. Project đã có lớp xử lý retry riêng,
+        # tránh 1 câu hỏi bị chờ 2-3 phút khi Gemini chậm.
+        max_retries=0,
     )
 else:
     client = None
@@ -718,6 +728,63 @@ def initialize_database():
                     REFERENCES users(id)
                     ON DELETE CASCADE
             )
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS symptom_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                profile_type TEXT NOT NULL DEFAULT 'self',
+                profile_ref TEXT NOT NULL DEFAULT 'self',
+                profile_name TEXT,
+                symptom_name TEXT NOT NULL,
+                details TEXT,
+                severity INTEGER NOT NULL DEFAULT 1,
+                progress_status TEXT NOT NULL DEFAULT 'stable',
+                temperature_c DOUBLE PRECISION,
+                note TEXT,
+                occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_symptom_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_symptom_logs_profile_time
+            ON symptom_logs(user_id, profile_type, profile_ref, occurred_at DESC)
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS health_metric_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                profile_type TEXT NOT NULL DEFAULT 'self',
+                profile_ref TEXT NOT NULL DEFAULT 'self',
+                profile_name TEXT,
+                systolic_mmhg INTEGER,
+                diastolic_mmhg INTEGER,
+                heart_rate_bpm INTEGER,
+                spo2_percent DOUBLE PRECISION,
+                temperature_c DOUBLE PRECISION,
+                glucose_mg_dl DOUBLE PRECISION,
+                weight_kg DOUBLE PRECISION,
+                note TEXT,
+                measured_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_metric_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_health_metric_profile_time
+            ON health_metric_logs(user_id, profile_type, profile_ref, measured_at DESC)
         """)
 
         connection.execute("""
@@ -3151,8 +3218,14 @@ AI_REQUEST_SEMAPHORE = __import__("threading").BoundedSemaphore(AI_CONCURRENCY)
 
 
 def create_chat_completion_with_retry(**kwargs):
-    """Giới hạn tải cục bộ và thử lại lỗi tạm thời/rate-limit có backoff."""
-    attempts = max(1, int(os.getenv("AI_RETRY_ATTEMPTS", "3")))
+    """Giới hạn tải cục bộ; mặc định không lặp lại request chậm nhiều lần."""
+    # Mặc định 1 lần để tránh một câu hỏi bị treo hàng phút.
+    # Nếu thực sự cần retry khi deploy, có thể đặt AI_RETRY_ATTEMPTS=2 trong .env.
+    try:
+        attempts = int(os.getenv("AI_RETRY_ATTEMPTS", "1"))
+    except (TypeError, ValueError):
+        attempts = 1
+    attempts = max(1, min(attempts, 2))
     last_error = None
     acquired = AI_REQUEST_SEMAPHORE.acquire(timeout=10)
     if not acquired:
@@ -3406,6 +3479,39 @@ def chat():
                 ),
             })
 
+        symptom_timeline_context = load_recent_symptom_context(
+            session.get("user_id"), effective_profile
+        )
+        if symptom_timeline_context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "DIỄN BIẾN SỨC KHỎE GẦN ĐÂY CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
+                    + symptom_timeline_context
+                    + "\nQuy tắc: chỉ dùng như dữ liệu người dùng tự ghi để nhận biết xu hướng. "
+                      "Không coi nhật ký này là chẩn đoán; nếu diễn biến nặng lên hoặc có dấu hiệu nguy hiểm, "
+                      "ưu tiên khuyến nghị đi khám/cấp cứu phù hợp."
+                ),
+            })
+
+        health_metric_context = load_recent_health_metric_context(
+            session.get("user_id"), effective_profile
+        )
+        if health_metric_context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "CHỈ SỐ SỨC KHỎE GẦN ĐÂY CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
+                    + health_metric_context
+                    + "\nQUY TẮC KHI DÙNG CHỈ SỐ:\n"
+                      "- Đây là số đo do người dùng nhập, không tự coi là kết quả chẩn đoán.\n"
+                      "- Khi câu hỏi liên quan, hãy đối chiếu nhiều lần đo để nhận xét xu hướng thay vì chỉ nhìn một số duy nhất.\n"
+                      "- Không tự kết luận bệnh chỉ dựa trên một chỉ số; xét cùng triệu chứng, hồ sơ và bối cảnh đo.\n"
+                      "- Nếu số đo có vẻ bất thường hoặc diễn biến xấu, nêu mức độ cần lưu ý bằng ngôn ngữ thận trọng và hướng dẫn đo lại/đi khám khi phù hợp.\n"
+                      "- Không bịa thêm chỉ số không có trong dữ liệu và không hiển thị tên trường kỹ thuật."
+                ),
+            })
+
         if selected_specialty:
             messages.append({
                 "role": "system",
@@ -3564,13 +3670,15 @@ Yêu cầu bổ sung:
             else MODEL_NAME
         )
 
-        max_output_tokens = 3200 if has_image else 2400
+        # Ảnh cần mô tả chi tiết hơn; chat văn bản nên gọn để giảm độ trễ.
+        max_output_tokens = 2200 if has_image else 1200
 
         response = create_chat_completion_with_retry(
             model=selected_model,
             messages=messages,
             temperature=0.2 if has_image else 0.3,
             max_completion_tokens=max_output_tokens,
+            timeout=GEMINI_REQUEST_TIMEOUT,
         )
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000)
@@ -4160,6 +4268,488 @@ def weight_logs():
     except ValueError as error:
         connection.close()
         return jsonify({"error": str(error)}), 400
+
+
+
+
+def normalize_tracking_profile(connection, user_id, data):
+    """Xác minh hồ sơ được theo dõi thuộc đúng tài khoản đang đăng nhập."""
+    data = data if isinstance(data, dict) else {}
+    raw_type = str(data.get("profile_type") or "self").strip().lower()
+    raw_ref = str(data.get("profile_ref") or "self").strip()
+
+    if raw_type == "self" or raw_ref.lower() in {"", "self", "me"} or raw_ref.startswith("self-"):
+        user = connection.execute(
+            "SELECT full_name FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        return "self", "self", (user["full_name"] if user else "Bản thân")
+
+    match = re.search(r"(\d+)$", raw_ref)
+    if raw_type in {"family", "member"} and match:
+        member_id = int(match.group(1))
+    elif match:
+        member_id = int(match.group(1))
+    else:
+        raise ValueError("Hồ sơ theo dõi không hợp lệ.")
+
+    member = connection.execute(
+        "SELECT id, full_name FROM family_members WHERE id = ? AND user_id = ?",
+        (member_id, user_id),
+    ).fetchone()
+    if not member:
+        raise ValueError("Không tìm thấy hồ sơ thành viên thuộc tài khoản này.")
+    return "family", str(member["id"]), member["full_name"]
+
+
+def serialize_symptom_log(row):
+    if row is None:
+        return None
+    item = dict(row)
+    for key in ("occurred_at", "created_at", "updated_at"):
+        value = item.get(key)
+        if hasattr(value, "isoformat"):
+            item[key] = value.isoformat()
+    return item
+
+
+@app.route("/api/health/symptoms", methods=["GET", "POST"])
+@login_required
+def symptom_tracking_logs():
+    user_id = session["user_id"]
+    connection = get_database()
+    try:
+        if request.method == "GET":
+            profile_type, profile_ref, profile_name = normalize_tracking_profile(
+                connection,
+                user_id,
+                {
+                    "profile_type": request.args.get("profile_type", "self"),
+                    "profile_ref": request.args.get("profile_ref", "self"),
+                },
+            )
+            limit = min(max(request.args.get("limit", 60, type=int), 1), 200)
+            rows = connection.execute(
+                """
+                SELECT id, profile_type, profile_ref, profile_name, symptom_name,
+                       details, severity, progress_status, temperature_c, note,
+                       occurred_at, created_at, updated_at
+                FROM symptom_logs
+                WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT ?
+                """,
+                (user_id, profile_type, profile_ref, limit),
+            ).fetchall()
+            return jsonify({
+                "profile": {
+                    "profile_type": profile_type,
+                    "profile_ref": profile_ref,
+                    "profile_name": profile_name,
+                },
+                "items": [serialize_symptom_log(row) for row in rows],
+            })
+
+        data = request.get_json(silent=True) or {}
+        profile_type, profile_ref, profile_name = normalize_tracking_profile(
+            connection, user_id, data
+        )
+        symptom_name = str(data.get("symptom_name") or "").strip()
+        if not symptom_name:
+            raise ValueError("Vui lòng nhập triệu chứng hoặc vấn đề đang theo dõi.")
+        symptom_name = symptom_name[:160]
+        details = str(data.get("details") or "").strip()[:1200]
+        note = str(data.get("note") or "").strip()[:1200]
+
+        try:
+            severity = int(data.get("severity", 1))
+        except (TypeError, ValueError):
+            raise ValueError("Mức độ triệu chứng không hợp lệ.")
+        if severity < 1 or severity > 5:
+            raise ValueError("Mức độ triệu chứng phải từ 1 đến 5.")
+
+        progress_status = str(data.get("progress_status") or "stable").strip().lower()
+        if progress_status not in {"improving", "stable", "worsening", "recovered"}:
+            raise ValueError("Trạng thái diễn biến không hợp lệ.")
+
+        temperature = data.get("temperature_c")
+        if temperature in (None, ""):
+            temperature = None
+        else:
+            temperature = parse_float(temperature, "Nhiệt độ", 30, 45)
+
+        occurred_at = str(data.get("occurred_at") or "").strip() or None
+        if occurred_at:
+            try:
+                datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+            except ValueError:
+                raise ValueError("Thời gian ghi nhận không hợp lệ.")
+
+        cursor = connection.execute(
+            """
+            INSERT INTO symptom_logs (
+                user_id, profile_type, profile_ref, profile_name,
+                symptom_name, details, severity, progress_status,
+                temperature_c, note, occurred_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+            """,
+            (
+                user_id, profile_type, profile_ref, profile_name,
+                symptom_name, details, severity, progress_status,
+                temperature, note, occurred_at,
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT * FROM symptom_logs WHERE id = ?", (cursor.lastrowid,)
+        ).fetchone()
+        return jsonify({
+            "message": "Đã ghi nhận diễn biến sức khỏe.",
+            "item": serialize_symptom_log(row),
+        }), 201
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    finally:
+        connection.close()
+
+
+@app.route("/api/health/symptoms/<int:log_id>", methods=["PUT", "DELETE"])
+@login_required
+def symptom_tracking_log_detail(log_id):
+    user_id = session["user_id"]
+    connection = get_database()
+    try:
+        row = connection.execute(
+            "SELECT * FROM symptom_logs WHERE id = ? AND user_id = ?",
+            (log_id, user_id),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Không tìm thấy bản ghi diễn biến."}), 404
+
+        if request.method == "DELETE":
+            connection.execute(
+                "DELETE FROM symptom_logs WHERE id = ? AND user_id = ?",
+                (log_id, user_id),
+            )
+            connection.commit()
+            return jsonify({"message": "Đã xóa bản ghi diễn biến."})
+
+        data = request.get_json(silent=True) or {}
+        symptom_name = str(data.get("symptom_name", row["symptom_name"]) or "").strip()
+        if not symptom_name:
+            raise ValueError("Triệu chứng không được để trống.")
+        details = str(data.get("details", row["details"]) or "").strip()[:1200]
+        note = str(data.get("note", row["note"]) or "").strip()[:1200]
+        severity = int(data.get("severity", row["severity"]))
+        if not 1 <= severity <= 5:
+            raise ValueError("Mức độ triệu chứng phải từ 1 đến 5.")
+        progress_status = str(data.get("progress_status", row["progress_status"]) or "stable").strip().lower()
+        if progress_status not in {"improving", "stable", "worsening", "recovered"}:
+            raise ValueError("Trạng thái diễn biến không hợp lệ.")
+        temperature = data.get("temperature_c", row["temperature_c"])
+        if temperature in (None, ""):
+            temperature = None
+        else:
+            temperature = parse_float(temperature, "Nhiệt độ", 30, 45)
+        occurred_at = str(data.get("occurred_at") or "").strip() or row["occurred_at"]
+
+        connection.execute(
+            """
+            UPDATE symptom_logs
+            SET symptom_name = ?, details = ?, severity = ?, progress_status = ?,
+                temperature_c = ?, note = ?, occurred_at = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND user_id = ?
+            """,
+            (
+                symptom_name[:160], details, severity, progress_status,
+                temperature, note, occurred_at, log_id, user_id,
+            ),
+        )
+        connection.commit()
+        updated = connection.execute(
+            "SELECT * FROM symptom_logs WHERE id = ?", (log_id,)
+        ).fetchone()
+        return jsonify({
+            "message": "Đã cập nhật diễn biến.",
+            "item": serialize_symptom_log(updated),
+        })
+    except (ValueError, TypeError) as error:
+        return jsonify({"error": str(error)}), 400
+    finally:
+        connection.close()
+
+
+def load_recent_symptom_context(user_id, profile):
+    """Lấy tối đa 7 diễn biến gần nhất của đúng hồ sơ để AI có ngữ cảnh theo thời gian."""
+    if not user_id or not isinstance(profile, dict) or not profile:
+        return ""
+    profile_type = str(profile.get("profile_type") or "self").lower()
+    profile_ref = "self" if profile_type == "self" else str(
+        profile.get("canonical_id") or profile.get("id") or ""
+    )
+    if profile_type == "family" and not profile_ref:
+        return ""
+
+    connection = get_database()
+    try:
+        rows = connection.execute(
+            """
+            SELECT symptom_name, details, severity, progress_status,
+                   temperature_c, note, occurred_at
+            FROM symptom_logs
+            WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT 7
+            """,
+            (user_id, profile_type, profile_ref),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    if not rows:
+        return ""
+    status_labels = {
+        "improving": "đang cải thiện",
+        "stable": "ổn định/chưa đổi",
+        "worsening": "đang nặng hơn",
+        "recovered": "đã hồi phục",
+    }
+    lines = []
+    for row in reversed(rows):
+        when = row["occurred_at"]
+        if hasattr(when, "strftime"):
+            when = when.astimezone(VIETNAM_TZ).strftime("%d/%m/%Y %H:%M")
+        detail_parts = [
+            f"{row['symptom_name']}",
+            f"mức {row['severity']}/5",
+            status_labels.get(row["progress_status"], row["progress_status"]),
+        ]
+        if row["temperature_c"] is not None:
+            detail_parts.append(f"nhiệt độ {float(row['temperature_c']):.1f}°C")
+        if row["details"]:
+            detail_parts.append(str(row["details"])[:300])
+        if row["note"]:
+            detail_parts.append("ghi chú: " + str(row["note"])[:250])
+        lines.append(f"- {when}: " + "; ".join(detail_parts))
+    return "\n".join(lines)
+
+
+def load_recent_health_metric_context(user_id, profile):
+    """Lấy tối đa 7 lần đo gần nhất của đúng hồ sơ để AI nhận biết xu hướng chỉ số."""
+    if not user_id or not isinstance(profile, dict) or not profile:
+        return ""
+
+    profile_type = str(profile.get("profile_type") or "self").lower()
+    profile_ref = "self" if profile_type == "self" else str(
+        profile.get("canonical_id") or profile.get("id") or ""
+    )
+    if profile_type == "family" and not profile_ref:
+        return ""
+
+    connection = get_database()
+    try:
+        rows = connection.execute(
+            """
+            SELECT systolic_mmhg, diastolic_mmhg, heart_rate_bpm,
+                   spo2_percent, temperature_c, glucose_mg_dl, weight_kg,
+                   note, measured_at
+            FROM health_metric_logs
+            WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
+            ORDER BY measured_at DESC, id DESC
+            LIMIT 7
+            """,
+            (user_id, profile_type, profile_ref),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    if not rows:
+        return ""
+
+    lines = []
+    for row in reversed(rows):
+        when = row["measured_at"]
+        if hasattr(when, "strftime"):
+            try:
+                when = when.astimezone(VIETNAM_TZ).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                when = when.strftime("%d/%m/%Y %H:%M")
+
+        parts = []
+        systolic = row["systolic_mmhg"]
+        diastolic = row["diastolic_mmhg"]
+        if systolic is not None or diastolic is not None:
+            parts.append(
+                "huyết áp "
+                + f"{systolic if systolic is not None else '--'}/"
+                + f"{diastolic if diastolic is not None else '--'} mmHg"
+            )
+        if row["heart_rate_bpm"] is not None:
+            parts.append(f"nhịp tim {row['heart_rate_bpm']} bpm")
+        if row["spo2_percent"] is not None:
+            parts.append(f"SpO₂ {row['spo2_percent']}%")
+        if row["temperature_c"] is not None:
+            parts.append(f"nhiệt độ {float(row['temperature_c']):.1f}°C")
+        if row["glucose_mg_dl"] is not None:
+            parts.append(f"đường huyết {float(row['glucose_mg_dl']):g} mg/dL")
+        if row["weight_kg"] is not None:
+            parts.append(f"cân nặng {float(row['weight_kg']):g} kg")
+        if row["note"]:
+            parts.append("ghi chú: " + str(row["note"])[:250])
+
+        if parts:
+            lines.append(f"- {when}: " + "; ".join(parts))
+
+    return "\n".join(lines)
+
+
+def serialize_health_metric(row):
+    if row is None:
+        return None
+    item = dict(row)
+    for key in ("measured_at", "created_at"):
+        value = item.get(key)
+        if hasattr(value, "isoformat"):
+            item[key] = value.isoformat()
+    return item
+
+
+def _optional_int_metric(data, key, label, minimum, maximum):
+    value = data.get(key)
+    if value in (None, ""):
+        return None
+    try:
+        number = int(round(float(value)))
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} không hợp lệ.")
+    if number < minimum or number > maximum:
+        raise ValueError(f"{label} phải trong khoảng {minimum}–{maximum}.")
+    return number
+
+
+def _optional_float_metric(data, key, label, minimum, maximum):
+    value = data.get(key)
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} không hợp lệ.")
+    if number < minimum or number > maximum:
+        raise ValueError(f"{label} phải trong khoảng {minimum}–{maximum}.")
+    return round(number, 2)
+
+
+@app.route("/api/health/metrics", methods=["GET", "POST"])
+@login_required
+def health_metric_logs():
+    user_id = session["user_id"]
+    connection = get_database()
+    try:
+        if request.method == "GET":
+            profile_type, profile_ref, profile_name = normalize_tracking_profile(
+                connection, user_id, {
+                    "profile_type": request.args.get("profile_type", "self"),
+                    "profile_ref": request.args.get("profile_ref", "self"),
+                }
+            )
+            limit = min(max(request.args.get("limit", 90, type=int), 1), 365)
+            rows = connection.execute(
+                """
+                SELECT id, profile_type, profile_ref, profile_name,
+                       systolic_mmhg, diastolic_mmhg, heart_rate_bpm,
+                       spo2_percent, temperature_c, glucose_mg_dl, weight_kg,
+                       note, measured_at, created_at
+                FROM health_metric_logs
+                WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
+                ORDER BY measured_at DESC, id DESC
+                LIMIT ?
+                """,
+                (user_id, profile_type, profile_ref, limit),
+            ).fetchall()
+            return jsonify({
+                "profile": {
+                    "profile_type": profile_type,
+                    "profile_ref": profile_ref,
+                    "profile_name": profile_name,
+                },
+                "items": [serialize_health_metric(row) for row in rows],
+            })
+
+        data = request.get_json(silent=True) or {}
+        profile_type, profile_ref, profile_name = normalize_tracking_profile(
+            connection, user_id, data
+        )
+        systolic = _optional_int_metric(data, "systolic_mmhg", "Huyết áp tâm thu", 50, 260)
+        diastolic = _optional_int_metric(data, "diastolic_mmhg", "Huyết áp tâm trương", 30, 180)
+        heart_rate = _optional_int_metric(data, "heart_rate_bpm", "Nhịp tim", 25, 250)
+        spo2 = _optional_float_metric(data, "spo2_percent", "SpO₂", 50, 100)
+        temperature = _optional_float_metric(data, "temperature_c", "Nhiệt độ", 30, 45)
+        glucose = _optional_float_metric(data, "glucose_mg_dl", "Đường huyết", 20, 700)
+        weight = _optional_float_metric(data, "weight_kg", "Cân nặng", 2, 350)
+
+        if systolic is None and diastolic is not None or systolic is not None and diastolic is None:
+            raise ValueError("Hãy nhập đủ cả huyết áp tâm thu và tâm trương.")
+        if all(value is None for value in (systolic, diastolic, heart_rate, spo2, temperature, glucose, weight)):
+            raise ValueError("Hãy nhập ít nhất một chỉ số sức khỏe.")
+
+        note = str(data.get("note") or "").strip()[:1000]
+        measured_at = str(data.get("measured_at") or "").strip() or None
+        if measured_at:
+            try:
+                datetime.fromisoformat(measured_at.replace("Z", "+00:00"))
+            except ValueError:
+                raise ValueError("Thời gian đo không hợp lệ.")
+
+        cursor = connection.execute(
+            """
+            INSERT INTO health_metric_logs (
+                user_id, profile_type, profile_ref, profile_name,
+                systolic_mmhg, diastolic_mmhg, heart_rate_bpm, spo2_percent,
+                temperature_c, glucose_mg_dl, weight_kg, note, measured_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+            """,
+            (
+                user_id, profile_type, profile_ref, profile_name,
+                systolic, diastolic, heart_rate, spo2, temperature, glucose,
+                weight, note, measured_at,
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT * FROM health_metric_logs WHERE id = ?", (cursor.lastrowid,)
+        ).fetchone()
+        return jsonify({
+            "message": "Đã lưu chỉ số sức khỏe.",
+            "item": serialize_health_metric(row),
+        }), 201
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    finally:
+        connection.close()
+
+
+@app.delete("/api/health/metrics/<int:metric_id>")
+@login_required
+def delete_health_metric(metric_id):
+    connection = get_database()
+    try:
+        row = connection.execute(
+            "SELECT id FROM health_metric_logs WHERE id = ? AND user_id = ?",
+            (metric_id, session["user_id"]),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Không tìm thấy bản ghi chỉ số."}), 404
+        connection.execute(
+            "DELETE FROM health_metric_logs WHERE id = ? AND user_id = ?",
+            (metric_id, session["user_id"]),
+        )
+        connection.commit()
+        return jsonify({"message": "Đã xóa bản ghi chỉ số."})
+    finally:
+        connection.close()
 
 
 @app.route("/api/health/water", methods=["GET", "POST"])
