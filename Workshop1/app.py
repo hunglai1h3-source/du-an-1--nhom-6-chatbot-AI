@@ -62,10 +62,21 @@ API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 PREMIUM_PRICE = max(1000, int(os.getenv("PREMIUM_PRICE", "20000")))
 PREMIUM_DURATION_DAYS = max(1, int(os.getenv("PREMIUM_DURATION_DAYS", "30")))
-BANK_NAME = os.getenv("BANK_NAME", "").strip()
-BANK_ACCOUNT_NUMBER = os.getenv("BANK_ACCOUNT_NUMBER", "").strip()
-BANK_ACCOUNT_NAME = os.getenv("BANK_ACCOUNT_NAME", "").strip()
-BANK_BIN = os.getenv("BANK_BIN", "").strip()
+# Thông tin nhận thanh toán Premium. Biến môi trường vẫn được ưu tiên khi có.
+# Có giá trị dự phòng để website vẫn hiển thị STK/QR khi server chưa khai báo đủ biến BANK_*.
+BANK_NAME = os.getenv("BANK_NAME", "MB BANK").strip()
+BANK_ACCOUNT_NUMBER = os.getenv("BANK_ACCOUNT_NUMBER", "20335259862").strip()
+BANK_ACCOUNT_NAME = os.getenv("BANK_ACCOUNT_NAME", "NGUYEN VAN NGHIA").strip()
+BANK_BIN = os.getenv("BANK_BIN", "970422").strip()
+
+# Tự sửa trường hợp file .env cũ nhập ngược BANK_NAME và BANK_ACCOUNT_NAME.
+if "BANK" in BANK_ACCOUNT_NAME.upper() and "BANK" not in BANK_NAME.upper():
+    BANK_NAME, BANK_ACCOUNT_NAME = BANK_ACCOUNT_NAME, BANK_NAME
+
+# Chế độ tự động: sau khi người dùng xác nhận đã chuyển khoản,
+# Premium được kích hoạt ngay, không cần Admin duyệt.
+# Lưu ý: đây KHÔNG phải xác minh giao dịch ngân hàng bằng webhook.
+PREMIUM_AUTO_APPROVE = True
 FREE_CHAT_DAILY_LIMIT = 20
 FREE_IMAGE_DAILY_LIMIT = 10
 FREE_FAMILY_PROFILE_LIMIT = 3
@@ -2440,6 +2451,52 @@ def subscription_status():
         "SELECT * FROM premium_orders WHERE user_id=? AND status IN ('pending_payment','awaiting_review') ORDER BY id DESC LIMIT 1",
         (session["user_id"],),
     ).fetchone()
+
+    # Nếu trước đây người dùng đã bấm "đã chuyển khoản" và hóa đơn đang
+    # kẹt ở awaiting_review, khi bật tự động thì kích hoạt ngay ở lần tải tiếp theo.
+    if PREMIUM_AUTO_APPROVE and pending and pending["status"] == "awaiting_review":
+        connection.execute(
+            """
+            INSERT INTO user_subscriptions (
+                user_id, plan_code, status, starts_at, expires_at, granted_by, updated_at
+            )
+            VALUES (
+                ?, 'premium', 'active', CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP + (? * INTERVAL '1 day'), NULL, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (user_id) DO UPDATE SET
+                plan_code='premium',
+                status='active',
+                starts_at=CURRENT_TIMESTAMP,
+                expires_at=GREATEST(
+                    COALESCE(user_subscriptions.expires_at, CURRENT_TIMESTAMP),
+                    CURRENT_TIMESTAMP
+                ) + (? * INTERVAL '1 day'),
+                granted_by=NULL,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (pending["user_id"], pending["duration_days"], pending["duration_days"]),
+        )
+        connection.execute(
+            """
+            UPDATE premium_orders
+            SET status='approved', reviewed_by=NULL, reviewed_at=CURRENT_TIMESTAMP,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (pending["id"],),
+        )
+        create_notification(
+            connection, pending["user_id"],
+            "Premium đã được kích hoạt",
+            f"Hóa đơn {pending['invoice_code']} đã được kích hoạt tự động. "
+            f"Gói Premium có hiệu lực {pending['duration_days']} ngày.",
+            "success",
+        )
+        connection.commit()
+        entitlement = get_user_entitlement(connection, session["user_id"])
+        pending = None
+
     usage = connection.execute(
         "SELECT COUNT(*) chats, COALESCE(SUM(CASE WHEN has_image=1 THEN 1 ELSE 0 END),0) images FROM chat_logs WHERE user_id=? AND created_at::date=CURRENT_DATE",
         (session["user_id"],),
@@ -2456,6 +2513,7 @@ def subscription_status():
         "pending_order": dict(pending) if pending else None,
         "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME and BANK_BIN), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME, "bin": BANK_BIN},
         "price": PREMIUM_PRICE, "duration_days": PREMIUM_DURATION_DAYS,
+        "auto_approve": PREMIUM_AUTO_APPROVE,
         "notifications": [dict(n) for n in notifications]
     })
 
@@ -2488,11 +2546,11 @@ def create_premium_order():
 @app.post("/api/premium/orders/<int:order_id>/submitted")
 @login_required
 def submit_premium_payment(order_id):
-    """Người dùng chỉ được báo đã chuyển khoản khi hệ thống có đủ thông tin ngân hàng."""
+    """Ghi nhận người dùng đã chuyển khoản; có thể tự kích hoạt nếu bật PREMIUM_AUTO_APPROVE."""
     if not (BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME and BANK_BIN):
         return jsonify({
             "error": (
-                "Admin chưa cập nhật đầy đủ thông tin ngân hàng. "
+                "Chưa cấu hình đầy đủ thông tin ngân hàng. "
                 "Bạn chưa thể xác nhận chuyển khoản lúc này."
             )
         }), 409
@@ -2508,18 +2566,81 @@ def submit_premium_payment(order_id):
         connection.close()
         return jsonify({"error": "Không tìm thấy hóa đơn."}), 404
 
+    if order["status"] == "approved":
+        connection.close()
+        return jsonify({
+            "ok": True,
+            "activated": True,
+            "message": "Premium của hóa đơn này đã được kích hoạt."
+        })
+
+    if order["status"] not in {"pending_payment", "awaiting_review"}:
+        connection.close()
+        return jsonify({
+            "error": "Hóa đơn không còn ở trạng thái có thể xác nhận thanh toán."
+        }), 400
+
+    user_note = str(data.get("note", ""))[:500]
+
+    if PREMIUM_AUTO_APPROVE:
+        # Chế độ này chỉ dựa trên thao tác xác nhận của người dùng, không phải webhook ngân hàng.
+        connection.execute(
+            """
+            INSERT INTO user_subscriptions (
+                user_id, plan_code, status, starts_at, expires_at, granted_by, updated_at
+            )
+            VALUES (
+                ?, 'premium', 'active', CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP + (? * INTERVAL '1 day'), NULL, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (user_id) DO UPDATE SET
+                plan_code='premium',
+                status='active',
+                starts_at=CURRENT_TIMESTAMP,
+                expires_at=GREATEST(
+                    COALESCE(user_subscriptions.expires_at, CURRENT_TIMESTAMP),
+                    CURRENT_TIMESTAMP
+                ) + (? * INTERVAL '1 day'),
+                granted_by=NULL,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (order["user_id"], order["duration_days"], order["duration_days"]),
+        )
+        connection.execute(
+            """
+            UPDATE premium_orders
+            SET status='approved',
+                user_note=?,
+                reviewed_by=NULL,
+                reviewed_at=CURRENT_TIMESTAMP,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (user_note, order_id),
+        )
+        create_notification(
+            connection,
+            order["user_id"],
+            "Premium đã được kích hoạt",
+            f"Hóa đơn {order['invoice_code']} đã được kích hoạt tự động. "
+            f"Gói Premium có hiệu lực {order['duration_days']} ngày.",
+            "success",
+        )
+        connection.commit()
+        connection.close()
+        return jsonify({
+            "ok": True,
+            "activated": True,
+            "message": "Premium đã được kích hoạt tự động."
+        })
+
     if order["status"] == "awaiting_review":
         connection.close()
         return jsonify({
             "ok": True,
+            "activated": False,
             "message": "Hóa đơn này đã được gửi và đang chờ Admin xác nhận."
         })
-
-    if order["status"] != "pending_payment":
-        connection.close()
-        return jsonify({
-            "error": "Hóa đơn không còn ở trạng thái chờ thanh toán."
-        }), 400
 
     connection.execute(
         """
@@ -2529,7 +2650,7 @@ def submit_premium_payment(order_id):
             updated_at=CURRENT_TIMESTAMP
         WHERE id=?
         """,
-        (str(data.get("note", ""))[:500], order_id),
+        (user_note, order_id),
     )
 
     admins = connection.execute(
@@ -2549,6 +2670,7 @@ def submit_premium_payment(order_id):
     connection.close()
     return jsonify({
         "ok": True,
+        "activated": False,
         "message": "Đã gửi yêu cầu. Admin sẽ kiểm tra giao dịch và xác nhận."
     })
 
@@ -3538,38 +3660,16 @@ def chat():
                 ),
             })
 
+        # Đọc nhật ký diễn biến mới nhất của đúng hồ sơ đang chọn.
+        # Snapshot này sẽ được đặt lại sau history để dữ liệu vừa ghi không bị
+        # các tin nhắn cũ trong cuộc trò chuyện lấn át.
         symptom_timeline_context = load_recent_symptom_context(
             session.get("user_id"), effective_profile
         )
-        if symptom_timeline_context:
-            messages.append({
-                "role": "system",
-                "content": (
-                    "DIỄN BIẾN SỨC KHỎE GẦN ĐÂY CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
-                    + symptom_timeline_context
-                    + "\nQuy tắc: chỉ dùng như dữ liệu người dùng tự ghi để nhận biết xu hướng. "
-                      "Không coi nhật ký này là chẩn đoán; nếu diễn biến nặng lên hoặc có dấu hiệu nguy hiểm, "
-                      "ưu tiên khuyến nghị đi khám/cấp cứu phù hợp."
-                ),
-            })
 
         health_metric_context = load_recent_health_metric_context(
             session.get("user_id"), effective_profile
         )
-        if health_metric_context:
-            messages.append({
-                "role": "system",
-                "content": (
-                    "CHỈ SỐ SỨC KHỎE GẦN ĐÂY CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
-                    + health_metric_context
-                    + "\nQUY TẮC KHI DÙNG CHỈ SỐ:\n"
-                      "- Đây là số đo do người dùng nhập, không tự coi là kết quả chẩn đoán.\n"
-                      "- Khi câu hỏi liên quan, hãy đối chiếu nhiều lần đo để nhận xét xu hướng thay vì chỉ nhìn một số duy nhất.\n"
-                      "- Không tự kết luận bệnh chỉ dựa trên một chỉ số; xét cùng triệu chứng, hồ sơ và bối cảnh đo.\n"
-                      "- Nếu số đo có vẻ bất thường hoặc diễn biến xấu, nêu mức độ cần lưu ý bằng ngôn ngữ thận trọng và hướng dẫn đo lại/đi khám khi phù hợp.\n"
-                      "- Không bịa thêm chỉ số không có trong dữ liệu và không hiển thị tên trường kỹ thuật."
-                ),
-            })
 
         if selected_specialty:
             messages.append({
@@ -3635,6 +3735,42 @@ def chat():
                 )
 
         messages.extend(history)
+
+        # Đặt nhật ký diễn biến sau lịch sử hội thoại để AI luôn ưu tiên dữ liệu
+        # vừa được người dùng lưu ở mục "Diễn biến bệnh & triệu chứng".
+        if symptom_timeline_context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "SNAPSHOT NHẬT KÝ DIỄN BIẾN MỚI NHẤT CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
+                    + symptom_timeline_context
+                    + "\nQUY TẮC KHI DÙNG NHẬT KÝ DIỄN BIẾN:\n"
+                      "- Đây là thông tin người dùng tự ghi và vừa được đọc trực tiếp từ dữ liệu đã lưu.\n"
+                      "- Nếu lịch sử chat có triệu chứng, mức độ, nhiệt độ hoặc diễn biến cũ/mâu thuẫn, ưu tiên snapshot này.\n"
+                      "- Khi người dùng hỏi về triệu chứng gần đây, diễn biến, mức độ, nhiệt độ, số lần ghi hoặc xu hướng, phải sử dụng trực tiếp dữ liệu này nếu có.\n"
+                      "- Có thể đối chiếu nhiều lần ghi để mô tả xu hướng cải thiện, ổn định hay nặng hơn, nhưng không tự chẩn đoán bệnh.\n"
+                      "- Không bịa thêm dữ liệu không có và không hiển thị tên trường kỹ thuật.\n"
+                      "- Nếu diễn biến nặng lên hoặc có dấu hiệu nguy hiểm, ưu tiên hướng dẫn đi khám/cấp cứu phù hợp."
+                ),
+            })
+
+        # Đặt snapshot chỉ số mới nhất sau lịch sử để số đo vừa thêm luôn được ưu tiên
+        # hơn các con số cũ có thể đã xuất hiện trong cuộc trò chuyện trước đó.
+        if health_metric_context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "SNAPSHOT CHỈ SỐ SỨC KHỎE MỚI NHẤT CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
+                    + health_metric_context
+                    + "\nQUY TẮC KHI DÙNG CHỈ SỐ:\n"
+                      "- Đây là số đo do người dùng nhập và vừa được đọc trực tiếp từ dữ liệu đã lưu.\n"
+                      "- Nếu lịch sử chat có số đo cũ hoặc mâu thuẫn, ưu tiên snapshot chỉ số này.\n"
+                      "- Khi câu hỏi liên quan, hãy đối chiếu nhiều lần đo để nhận xét xu hướng thay vì chỉ nhìn một số duy nhất.\n"
+                      "- Không tự kết luận bệnh chỉ dựa trên một chỉ số; xét cùng triệu chứng, hồ sơ và bối cảnh đo.\n"
+                      "- Nếu số đo có vẻ bất thường hoặc diễn biến xấu, nêu mức độ cần lưu ý bằng ngôn ngữ thận trọng và hướng dẫn đo lại/đi khám khi phù hợp.\n"
+                      "- Không bịa thêm chỉ số không có trong dữ liệu và không hiển thị tên trường kỹ thuật."
+                ),
+            })
 
         # Nhắc lại snapshot hồ sơ sau lịch sử hội thoại.
         # System message này nằm gần câu hỏi hiện tại hơn, giúp loại bỏ số liệu
@@ -3738,9 +3874,43 @@ Yêu cầu bổ sung:
             })
 
         else:
+            # Đưa dữ liệu theo dõi đã lưu vào CHÍNH lượt hỏi hiện tại.
+            # Một số lớp tương thích Gemini/OpenAI có thể giảm ưu tiên system message
+            # nằm sau lịch sử hội thoại; ghép snapshot vào lượt user hiện tại giúp AI
+            # luôn nhìn thấy nhật ký triệu chứng và các lần đo (đặc biệt huyết áp).
+            current_user_content = user_message
+            tracking_sections = []
+
+            if symptom_timeline_context:
+                tracking_sections.append(
+                    "NHẬT KÝ DIỄN BIẾN/ TRIỆU CHỨNG ĐÃ LƯU CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
+                    + symptom_timeline_context
+                )
+
+            if health_metric_context:
+                tracking_sections.append(
+                    "CHỈ SỐ SỨC KHỎE ĐÃ LƯU CỦA ĐÚNG HỒ SƠ ĐANG CHỌN:\n"
+                    + health_metric_context
+                )
+
+            if tracking_sections:
+                current_user_content = (
+                    "DỮ LIỆU HỆ THỐNG VỪA ĐỌC TRỰC TIẾP TỪ DATABASE CỦA ĐÚNG HỒ SƠ:\n\n"
+                    + "\n\n".join(tracking_sections)
+                    + "\n\nQUY TẮC BẮT BUỘC:\n"
+                      "- Nếu câu hỏi liên quan đến triệu chứng, diễn biến, nhiệt độ, số lần ghi, "
+                      "huyết áp hoặc các chỉ số đã lưu, phải trả lời trực tiếp từ dữ liệu trên.\n"
+                      "- Nếu dữ liệu trên có bản ghi thì tuyệt đối không được nói rằng hệ thống chưa lưu "
+                      "hoặc không có thông tin.\n"
+                      "- Ưu tiên dữ liệu này hơn nội dung cũ trong lịch sử chat nếu có mâu thuẫn.\n"
+                      "- Không bịa dữ liệu và không tự chẩn đoán bệnh.\n\n"
+                    + "CÂU HỎI HIỆN TẠI CỦA NGƯỜI DÙNG:\n"
+                    + user_message
+                )
+
             messages.append({
                 "role": "user",
-                "content": user_message
+                "content": current_user_content
             })
 
         start_time = time.perf_counter()
@@ -4666,9 +4836,10 @@ def symptom_tracking_log_detail(log_id):
 
 
 def load_recent_symptom_context(user_id, profile):
-    """Lấy tối đa 7 diễn biến gần nhất của đúng hồ sơ để AI có ngữ cảnh theo thời gian."""
+    """Lấy các diễn biến gần nhất của đúng hồ sơ để AI biết số lượt và xu hướng theo thời gian."""
     if not user_id or not isinstance(profile, dict) or not profile:
         return ""
+
     profile_type = str(profile.get("profile_type") or "self").lower()
     profile_ref = "self" if profile_type == "self" else str(
         profile.get("canonical_id") or profile.get("id") or ""
@@ -4678,6 +4849,14 @@ def load_recent_symptom_context(user_id, profile):
 
     connection = get_database()
     try:
+        summary = connection.execute(
+            """
+            SELECT COUNT(*) AS total_symptom_logs
+            FROM symptom_logs
+            WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
+            """,
+            (user_id, profile_type, profile_ref),
+        ).fetchone()
         rows = connection.execute(
             """
             SELECT symptom_name, details, severity, progress_status,
@@ -4685,7 +4864,7 @@ def load_recent_symptom_context(user_id, profile):
             FROM symptom_logs
             WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
             ORDER BY occurred_at DESC, id DESC
-            LIMIT 7
+            LIMIT 20
             """,
             (user_id, profile_type, profile_ref),
         ).fetchall()
@@ -4694,34 +4873,47 @@ def load_recent_symptom_context(user_id, profile):
 
     if not rows:
         return ""
+
+    total_logs = int(summary["total_symptom_logs"] or 0) if summary else len(rows)
     status_labels = {
         "improving": "đang cải thiện",
         "stable": "ổn định/chưa đổi",
         "worsening": "đang nặng hơn",
         "recovered": "đã hồi phục",
     }
-    lines = []
+
+    lines = [
+        f"Tổng số lần ghi diễn biến đã lưu của hồ sơ này: {total_logs}.",
+        f"Dưới đây là {len(rows)} lần ghi gần nhất, theo thứ tự từ cũ đến mới:",
+    ]
     for row in reversed(rows):
         when = row["occurred_at"]
         if hasattr(when, "strftime"):
-            when = when.astimezone(VIETNAM_TZ).strftime("%d/%m/%Y %H:%M")
+            try:
+                when = when.astimezone(VIETNAM_TZ).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                when = when.strftime("%d/%m/%Y %H:%M")
+
         detail_parts = [
-            f"{row['symptom_name']}",
-            f"mức {row['severity']}/5",
-            status_labels.get(row["progress_status"], row["progress_status"]),
+            str(row["symptom_name"]),
+            f"mức độ {row['severity']}/5",
+            "diễn biến " + status_labels.get(
+                row["progress_status"], row["progress_status"] or "không rõ"
+            ),
         ]
         if row["temperature_c"] is not None:
             detail_parts.append(f"nhiệt độ {float(row['temperature_c']):.1f}°C")
         if row["details"]:
-            detail_parts.append(str(row["details"])[:300])
+            detail_parts.append("mô tả: " + str(row["details"])[:500])
         if row["note"]:
-            detail_parts.append("ghi chú: " + str(row["note"])[:250])
+            detail_parts.append("ghi chú thêm: " + str(row["note"])[:500])
         lines.append(f"- {when}: " + "; ".join(detail_parts))
+
     return "\n".join(lines)
 
 
 def load_recent_health_metric_context(user_id, profile):
-    """Lấy tối đa 7 lần đo gần nhất của đúng hồ sơ để AI nhận biết xu hướng chỉ số."""
+    """Lấy các lần đo gần nhất của đúng hồ sơ để AI nhận biết số lượt và xu hướng chỉ số."""
     if not user_id or not isinstance(profile, dict) or not profile:
         return ""
 
@@ -4734,6 +4926,20 @@ def load_recent_health_metric_context(user_id, profile):
 
     connection = get_database()
     try:
+        summary = connection.execute(
+            """
+            SELECT COUNT(*) AS total_metric_logs,
+                   COALESCE(SUM(
+                       CASE
+                           WHEN systolic_mmhg IS NOT NULL AND diastolic_mmhg IS NOT NULL
+                           THEN 1 ELSE 0
+                       END
+                   ), 0) AS blood_pressure_logs
+            FROM health_metric_logs
+            WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
+            """,
+            (user_id, profile_type, profile_ref),
+        ).fetchone()
         rows = connection.execute(
             """
             SELECT systolic_mmhg, diastolic_mmhg, heart_rate_bpm,
@@ -4742,7 +4948,7 @@ def load_recent_health_metric_context(user_id, profile):
             FROM health_metric_logs
             WHERE user_id = ? AND profile_type = ? AND profile_ref = ?
             ORDER BY measured_at DESC, id DESC
-            LIMIT 7
+            LIMIT 20
             """,
             (user_id, profile_type, profile_ref),
         ).fetchall()
@@ -4752,7 +4958,14 @@ def load_recent_health_metric_context(user_id, profile):
     if not rows:
         return ""
 
-    lines = []
+    total_metric_logs = int(summary["total_metric_logs"] or 0) if summary else len(rows)
+    blood_pressure_logs = int(summary["blood_pressure_logs"] or 0) if summary else 0
+    lines = [
+        f"- Tổng số bản ghi chỉ số đã lưu: {total_metric_logs}.",
+        f"- Số lần đo huyết áp đã lưu: {blood_pressure_logs}.",
+        "- Dưới đây là tối đa 20 lần đo gần nhất, sắp xếp từ cũ đến mới:",
+    ]
+
     for row in reversed(rows):
         when = row["measured_at"]
         if hasattr(when, "strftime"):

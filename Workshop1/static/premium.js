@@ -71,9 +71,11 @@
   }
 
   function renderBankInvoice(order, bank) {
-    // Dùng ảnh QR cố định của tài khoản ngân hàng đã đặt trong static/images.
-    // Người dùng vẫn cần chuyển đúng số tiền và đúng nội dung hóa đơn hiển thị bên cạnh.
-    const qrUrl = "/static/images/payment_qr.png";
+    // Tạo QR VietQR theo đúng ngân hàng, STK, số tiền và nội dung của từng hóa đơn.
+    // Nếu thiếu dữ liệu thì giao diện vẫn dừng thanh toán thay vì hiển thị QR sai.
+    const qrUrl = bank.configured
+      ? `https://img.vietqr.io/image/${encodeURIComponent(bank.bin)}-${encodeURIComponent(bank.account_number)}-compact2.png?amount=${encodeURIComponent(order.amount)}&addInfo=${encodeURIComponent(order.payment_note || order.invoice_code)}&accountName=${encodeURIComponent(bank.account_name || "")}`
+      : "";
 
     if (!bank.configured) {
       orderArea.innerHTML = `
@@ -119,7 +121,7 @@
         <div class="premium-payment-grid">
           <figure class="premium-qr-box">
             <img class="premium-qr" src="${escapeHTML(qrUrl)}" alt="Mã QR chuyển khoản Premium">
-            <figcaption>Quét mã QR để mở thông tin tài khoản</figcaption>
+            <figcaption>Quét QR: đã điền sẵn số tiền và nội dung hóa đơn</figcaption>
           </figure>
           <dl class="premium-bank-details">
             <div><dt>Ngân hàng</dt><dd>${escapeHTML(bank.name)}</dd></div>
@@ -131,7 +133,7 @@
         </div>
 
         <p class="premium-payment-note">
-          Mã QR là QR cố định của tài khoản. Hãy kiểm tra đúng số tiền và nhập đúng nội dung hóa đơn trước khi chuyển khoản.
+          Hãy kiểm tra đúng người nhận, số tiền và nội dung hóa đơn trước khi xác nhận chuyển khoản.
         </p>
       </section>
     `;
@@ -172,10 +174,13 @@
     const order = data.pending_order;
 
     if (!order) {
+      const paymentMessage = data.auto_approve
+        ? "Hệ thống sẽ tạo một hóa đơn riêng. Sau khi bạn xác nhận đã chuyển khoản, Premium sẽ được kích hoạt tự động."
+        : "Hệ thống sẽ tạo một hóa đơn riêng. Premium được kích hoạt sau khi Admin kiểm tra và xác nhận giao dịch.";
       orderArea.innerHTML = `
         <section class="premium-intro-note">
           <strong>Thanh toán chuyển khoản</strong>
-          <p>Hệ thống sẽ tạo một hóa đơn riêng. Premium chỉ được kích hoạt sau khi Admin kiểm tra và xác nhận giao dịch.</p>
+          <p>${escapeHTML(paymentMessage)}</p>
         </section>
       `;
       actionButton.textContent = `Tạo hóa đơn ${money(data.price)}`;
@@ -192,11 +197,11 @@
           <div>
             <small>MÃ HÓA ĐƠN</small>
             <strong>${escapeHTML(order.invoice_code)}</strong>
-            <p>Yêu cầu đã được gửi. Admin đang đối chiếu giao dịch ngân hàng.</p>
+            <p>${escapeHTML(data.auto_approve ? "Hệ thống đang xử lý xác nhận thanh toán." : "Yêu cầu đã được gửi. Admin đang đối chiếu giao dịch ngân hàng.")}</p>
           </div>
         </section>
       `;
-      actionButton.textContent = "Đang chờ Admin xác nhận";
+      actionButton.textContent = data.auto_approve ? "Đang xử lý" : "Đang chờ Admin xác nhận";
       actionButton.disabled = true;
       actionButton.dataset.mode = "disabled";
       return;
@@ -263,7 +268,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ note: "Người dùng xác nhận đã chuyển khoản." })
         });
-        showToast(result.message || "Đã gửi yêu cầu xác nhận.");
+        showToast(result.message || (result.activated ? "Premium đã được kích hoạt." : "Đã gửi yêu cầu xác nhận."));
         await loadSubscription();
       }
     } catch (error) {
