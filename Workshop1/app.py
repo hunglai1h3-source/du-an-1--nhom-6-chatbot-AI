@@ -11,6 +11,7 @@ import math
 from werkzeug.security import generate_password_hash, check_password_hash
 import base64
 import json
+import hmac
 import re
 import os
 import sqlite3
@@ -73,10 +74,12 @@ BANK_BIN = os.getenv("BANK_BIN", "970422").strip()
 if "BANK" in BANK_ACCOUNT_NAME.upper() and "BANK" not in BANK_NAME.upper():
     BANK_NAME, BANK_ACCOUNT_NAME = BANK_ACCOUNT_NAME, BANK_NAME
 
-# Chế độ tự động: sau khi người dùng xác nhận đã chuyển khoản,
-# Premium được kích hoạt ngay, không cần Admin duyệt.
-# Lưu ý: đây KHÔNG phải xác minh giao dịch ngân hàng bằng webhook.
-PREMIUM_AUTO_APPROVE = True
+# Xác minh thanh toán thật qua webhook SePay.
+# Người dùng bấm "Tôi đã chuyển khoản" KHÔNG được tự cấp Premium.
+# Premium chỉ được kích hoạt khi webhook báo có tiền vào và khớp:
+# tài khoản nhận + số tiền + mã hóa đơn/nội dung chuyển khoản.
+PREMIUM_AUTO_APPROVE = False
+SEPAY_WEBHOOK_API_KEY = os.getenv("SEPAY_WEBHOOK_API_KEY", "").strip()
 FREE_CHAT_DAILY_LIMIT = 20
 FREE_IMAGE_DAILY_LIMIT = 10
 FREE_FAMILY_PROFILE_LIMIT = 3
@@ -942,6 +945,25 @@ def initialize_database():
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT fk_order_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS payment_webhook_events (
+                id SERIAL PRIMARY KEY,
+                provider TEXT NOT NULL,
+                transaction_id TEXT NOT NULL,
+                invoice_code TEXT,
+                amount INTEGER,
+                account_number TEXT,
+                raw_payload TEXT,
+                received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(provider, transaction_id)
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_payment_webhook_invoice
+            ON payment_webhook_events(invoice_code, received_at DESC)
         """)
 
         connection.execute("""
@@ -2452,50 +2474,8 @@ def subscription_status():
         (session["user_id"],),
     ).fetchone()
 
-    # Nếu trước đây người dùng đã bấm "đã chuyển khoản" và hóa đơn đang
-    # kẹt ở awaiting_review, khi bật tự động thì kích hoạt ngay ở lần tải tiếp theo.
-    if PREMIUM_AUTO_APPROVE and pending and pending["status"] == "awaiting_review":
-        connection.execute(
-            """
-            INSERT INTO user_subscriptions (
-                user_id, plan_code, status, starts_at, expires_at, granted_by, updated_at
-            )
-            VALUES (
-                ?, 'premium', 'active', CURRENT_TIMESTAMP,
-                CURRENT_TIMESTAMP + (? * INTERVAL '1 day'), NULL, CURRENT_TIMESTAMP
-            )
-            ON CONFLICT (user_id) DO UPDATE SET
-                plan_code='premium',
-                status='active',
-                starts_at=CURRENT_TIMESTAMP,
-                expires_at=GREATEST(
-                    COALESCE(user_subscriptions.expires_at, CURRENT_TIMESTAMP),
-                    CURRENT_TIMESTAMP
-                ) + (? * INTERVAL '1 day'),
-                granted_by=NULL,
-                updated_at=CURRENT_TIMESTAMP
-            """,
-            (pending["user_id"], pending["duration_days"], pending["duration_days"]),
-        )
-        connection.execute(
-            """
-            UPDATE premium_orders
-            SET status='approved', reviewed_by=NULL, reviewed_at=CURRENT_TIMESTAMP,
-                updated_at=CURRENT_TIMESTAMP
-            WHERE id=?
-            """,
-            (pending["id"],),
-        )
-        create_notification(
-            connection, pending["user_id"],
-            "Premium đã được kích hoạt",
-            f"Hóa đơn {pending['invoice_code']} đã được kích hoạt tự động. "
-            f"Gói Premium có hiệu lực {pending['duration_days']} ngày.",
-            "success",
-        )
-        connection.commit()
-        entitlement = get_user_entitlement(connection, session["user_id"])
-        pending = None
+    # Không bao giờ cấp Premium chỉ vì người dùng bấm xác nhận.
+    # Trạng thái sẽ được chuyển sang approved bởi webhook thanh toán đã xác thực.
 
     usage = connection.execute(
         "SELECT COUNT(*) chats, COALESCE(SUM(CASE WHEN has_image=1 THEN 1 ELSE 0 END),0) images FROM chat_logs WHERE user_id=? AND created_at::date=CURRENT_DATE",
@@ -2513,7 +2493,9 @@ def subscription_status():
         "pending_order": dict(pending) if pending else None,
         "bank": {"configured": bool(BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME and BANK_BIN), "name": BANK_NAME, "account_number": BANK_ACCOUNT_NUMBER, "account_name": BANK_ACCOUNT_NAME, "bin": BANK_BIN},
         "price": PREMIUM_PRICE, "duration_days": PREMIUM_DURATION_DAYS,
-        "auto_approve": PREMIUM_AUTO_APPROVE,
+        "auto_approve": False,
+        "payment_verification": "sepay_webhook" if SEPAY_WEBHOOK_API_KEY else "manual_review",
+        "payment_webhook_configured": bool(SEPAY_WEBHOOK_API_KEY),
         "notifications": [dict(n) for n in notifications]
     })
 
@@ -2546,7 +2528,7 @@ def create_premium_order():
 @app.post("/api/premium/orders/<int:order_id>/submitted")
 @login_required
 def submit_premium_payment(order_id):
-    """Ghi nhận người dùng đã chuyển khoản; có thể tự kích hoạt nếu bật PREMIUM_AUTO_APPROVE."""
+    """Chỉ ghi nhận người dùng báo đã chuyển khoản; tuyệt đối không tự cấp Premium."""
     if not (BANK_NAME and BANK_ACCOUNT_NUMBER and BANK_ACCOUNT_NAME and BANK_BIN):
         return jsonify({
             "error": (
@@ -2581,98 +2563,198 @@ def submit_premium_payment(order_id):
         }), 400
 
     user_note = str(data.get("note", ""))[:500]
-
-    if PREMIUM_AUTO_APPROVE:
-        # Chế độ này chỉ dựa trên thao tác xác nhận của người dùng, không phải webhook ngân hàng.
-        connection.execute(
-            """
-            INSERT INTO user_subscriptions (
-                user_id, plan_code, status, starts_at, expires_at, granted_by, updated_at
-            )
-            VALUES (
-                ?, 'premium', 'active', CURRENT_TIMESTAMP,
-                CURRENT_TIMESTAMP + (? * INTERVAL '1 day'), NULL, CURRENT_TIMESTAMP
-            )
-            ON CONFLICT (user_id) DO UPDATE SET
-                plan_code='premium',
-                status='active',
-                starts_at=CURRENT_TIMESTAMP,
-                expires_at=GREATEST(
-                    COALESCE(user_subscriptions.expires_at, CURRENT_TIMESTAMP),
-                    CURRENT_TIMESTAMP
-                ) + (? * INTERVAL '1 day'),
-                granted_by=NULL,
-                updated_at=CURRENT_TIMESTAMP
-            """,
-            (order["user_id"], order["duration_days"], order["duration_days"]),
-        )
-        connection.execute(
-            """
-            UPDATE premium_orders
-            SET status='approved',
-                user_note=?,
-                reviewed_by=NULL,
-                reviewed_at=CURRENT_TIMESTAMP,
-                updated_at=CURRENT_TIMESTAMP
-            WHERE id=?
-            """,
-            (user_note, order_id),
-        )
-        create_notification(
-            connection,
-            order["user_id"],
-            "Premium đã được kích hoạt",
-            f"Hóa đơn {order['invoice_code']} đã được kích hoạt tự động. "
-            f"Gói Premium có hiệu lực {order['duration_days']} ngày.",
-            "success",
-        )
-        connection.commit()
-        connection.close()
-        return jsonify({
-            "ok": True,
-            "activated": True,
-            "message": "Premium đã được kích hoạt tự động."
-        })
-
-    if order["status"] == "awaiting_review":
-        connection.close()
-        return jsonify({
-            "ok": True,
-            "activated": False,
-            "message": "Hóa đơn này đã được gửi và đang chờ Admin xác nhận."
-        })
-
     connection.execute(
         """
         UPDATE premium_orders
-        SET status='awaiting_review',
-            user_note=?,
-            updated_at=CURRENT_TIMESTAMP
+        SET status='awaiting_review', user_note=?, updated_at=CURRENT_TIMESTAMP
         WHERE id=?
         """,
         (user_note, order_id),
     )
-
-    admins = connection.execute(
-        "SELECT id FROM users WHERE role='admin' AND is_active=1"
-    ).fetchall()
-
-    for admin in admins:
-        create_notification(
-            connection,
-            admin["id"],
-            "Yêu cầu Premium mới",
-            f"Hóa đơn {order['invoice_code']} đang chờ xác nhận thanh toán.",
-            "premium_order",
-        )
-
     connection.commit()
     connection.close()
+
+    if SEPAY_WEBHOOK_API_KEY:
+        return jsonify({
+            "ok": True,
+            "activated": False,
+            "message": (
+                "Đã ghi nhận. Hệ thống đang chờ xác nhận tiền vào từ ngân hàng; "
+                "Premium chỉ được kích hoạt khi giao dịch thực tế khớp hóa đơn."
+            )
+        })
+
     return jsonify({
         "ok": True,
         "activated": False,
-        "message": "Đã gửi yêu cầu. Admin sẽ kiểm tra giao dịch và xác nhận."
+        "message": (
+            "Đã ghi nhận. Chưa cấu hình webhook xác minh tiền vào nên hóa đơn "
+            "vẫn cần Admin đối chiếu trước khi kích hoạt Premium."
+        )
     })
+
+
+def _compact_payment_text(value):
+    """Chuẩn hóa nội dung chuyển khoản để đối chiếu mã hóa đơn."""
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+
+def _activate_premium_from_paid_order(connection, order, transaction_reference=""):
+    """Kích hoạt Premium một lần sau khi giao dịch ngân hàng đã được xác minh."""
+    if not order or order["status"] == "approved":
+        return False
+
+    connection.execute(
+        """
+        INSERT INTO user_subscriptions (
+            user_id, plan_code, status, starts_at, expires_at, granted_by, updated_at
+        )
+        VALUES (
+            ?, 'premium', 'active', CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP + (? * INTERVAL '1 day'), NULL, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (user_id) DO UPDATE SET
+            plan_code='premium',
+            status='active',
+            starts_at=CURRENT_TIMESTAMP,
+            expires_at=GREATEST(
+                COALESCE(user_subscriptions.expires_at, CURRENT_TIMESTAMP),
+                CURRENT_TIMESTAMP
+            ) + (? * INTERVAL '1 day'),
+            granted_by=NULL,
+            updated_at=CURRENT_TIMESTAMP
+        """,
+        (order["user_id"], order["duration_days"], order["duration_days"]),
+    )
+    connection.execute(
+        """
+        UPDATE premium_orders
+        SET status='approved', reviewed_by=NULL, reviewed_at=CURRENT_TIMESTAMP,
+            user_note=CASE
+                WHEN COALESCE(user_note, '') = '' THEN ?
+                ELSE user_note || ' | ' || ?
+            END,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=? AND status <> 'approved'
+        """,
+        (
+            f"Xác minh tự động từ SePay: {transaction_reference}"[:500],
+            f"Xác minh tự động từ SePay: {transaction_reference}"[:500],
+            order["id"],
+        ),
+    )
+    create_notification(
+        connection,
+        order["user_id"],
+        "Premium đã được kích hoạt",
+        f"Đã nhận thanh toán cho hóa đơn {order['invoice_code']}. "
+        f"Gói Premium có hiệu lực {order['duration_days']} ngày.",
+        "success",
+    )
+    return True
+
+
+@app.post("/api/payment/sepay/webhook")
+def sepay_payment_webhook():
+    """Nhận webhook SePay và chỉ cấp Premium khi giao dịch tiền vào khớp hóa đơn."""
+    if not SEPAY_WEBHOOK_API_KEY:
+        return jsonify({"success": False, "message": "Webhook chưa được cấu hình."}), 503
+
+    expected_auth = f"Apikey {SEPAY_WEBHOOK_API_KEY}"
+    received_auth = str(request.headers.get("Authorization") or "")
+    if not hmac.compare_digest(received_auth, expected_auth):
+        return jsonify({"success": False, "message": "Unauthorized."}), 401
+
+    data = request.get_json(silent=True) or {}
+    transaction_id = str(data.get("id") or "").strip()
+    transfer_type = str(data.get("transferType") or "").strip().lower()
+    account_number = re.sub(r"\D", "", str(data.get("accountNumber") or ""))
+    expected_account = re.sub(r"\D", "", BANK_ACCOUNT_NUMBER)
+
+    try:
+        transfer_amount = int(round(float(data.get("transferAmount") or 0)))
+    except (TypeError, ValueError):
+        transfer_amount = 0
+
+    # Webhook không hợp lệ hoặc không phải tiền vào đúng tài khoản: xác nhận đã nhận
+    # để SePay không retry vô hạn, nhưng tuyệt đối không kích hoạt Premium.
+    if not transaction_id or transfer_type != "in" or account_number != expected_account:
+        return jsonify({"success": True})
+
+    content_candidates = " ".join(str(data.get(key) or "") for key in (
+        "code", "content", "description", "referenceCode"
+    ))
+    compact_content = _compact_payment_text(content_candidates)
+
+    connection = get_database()
+    try:
+        # Chống xử lý trùng khi SePay retry cùng một giao dịch.
+        inserted = connection.execute(
+            """
+            INSERT INTO payment_webhook_events (
+                provider, transaction_id, amount, account_number, raw_payload
+            )
+            VALUES ('sepay', ?, ?, ?, ?)
+            ON CONFLICT (provider, transaction_id) DO NOTHING
+            RETURNING id
+            """,
+            (
+                transaction_id,
+                transfer_amount,
+                account_number,
+                json.dumps(data, ensure_ascii=False)[:12000],
+            ),
+        ).fetchone()
+
+        if not inserted:
+            connection.rollback()
+            return jsonify({"success": True})
+
+        # Chỉ xét các hóa đơn chưa thanh toán. Không dựa vào nút bấm của người dùng.
+        orders = connection.execute(
+            """
+            SELECT * FROM premium_orders
+            WHERE status IN ('pending_payment', 'awaiting_review')
+            ORDER BY id DESC
+            LIMIT 200
+            """
+        ).fetchall()
+
+        matched_order = None
+        for order in orders:
+            invoice_compact = _compact_payment_text(order["invoice_code"])
+            note_compact = _compact_payment_text(order["payment_note"])
+            code_matches = (
+                (invoice_compact and invoice_compact in compact_content)
+                or (note_compact and note_compact in compact_content)
+            )
+            amount_matches = transfer_amount == int(order["amount"])
+            if code_matches and amount_matches:
+                matched_order = order
+                break
+
+        if matched_order:
+            connection.execute(
+                """
+                UPDATE payment_webhook_events
+                SET invoice_code=?
+                WHERE provider='sepay' AND transaction_id=?
+                """,
+                (matched_order["invoice_code"], transaction_id),
+            )
+            _activate_premium_from_paid_order(
+                connection,
+                matched_order,
+                str(data.get("referenceCode") or transaction_id),
+            )
+
+        connection.commit()
+        return jsonify({"success": True})
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 @app.post("/transcribe")

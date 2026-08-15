@@ -15,6 +15,7 @@
 
   let state = null;
   let busy = false;
+  let paymentPollTimer = null;
 
   const escapeHTML = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -44,17 +45,38 @@
     window.setTimeout(() => toast.classList.remove("show"), 2600);
   }
 
+  function startPaymentPolling() {
+    window.clearInterval(paymentPollTimer);
+    paymentPollTimer = window.setInterval(async () => {
+      if (modal.classList.contains("hidden")) return;
+      if (!state?.payment_webhook_configured || state?.is_premium || state?.is_admin) return;
+      try {
+        const data = await requestJSON("/api/subscription");
+        renderState(data);
+      } catch (_) {
+        // Giữ nguyên giao diện hiện tại nếu lần kiểm tra nền tạm thời lỗi.
+      }
+    }, 5000);
+  }
+
+  function stopPaymentPolling() {
+    window.clearInterval(paymentPollTimer);
+    paymentPollTimer = null;
+  }
+
   function openModal() {
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
     document.body.classList.add("modal-open");
     loadSubscription();
+    startPaymentPolling();
   }
 
   function closeModal() {
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
     document.body.classList.remove("modal-open");
+    stopPaymentPolling();
   }
 
   function renderUsage(data) {
@@ -174,9 +196,9 @@
     const order = data.pending_order;
 
     if (!order) {
-      const paymentMessage = data.auto_approve
-        ? "Hệ thống sẽ tạo một hóa đơn riêng. Sau khi bạn xác nhận đã chuyển khoản, Premium sẽ được kích hoạt tự động."
-        : "Hệ thống sẽ tạo một hóa đơn riêng. Premium được kích hoạt sau khi Admin kiểm tra và xác nhận giao dịch.";
+      const paymentMessage = data.payment_webhook_configured
+        ? "Hệ thống sẽ tạo một hóa đơn riêng. Sau khi tiền thực sự vào tài khoản và khớp đúng số tiền + mã hóa đơn, Premium sẽ tự kích hoạt. Nút xác nhận không tự cấp Premium."
+        : "Hệ thống sẽ tạo một hóa đơn riêng. Hiện chưa cấu hình webhook ngân hàng nên Premium chỉ được kích hoạt sau khi Admin đối chiếu giao dịch.";
       orderArea.innerHTML = `
         <section class="premium-intro-note">
           <strong>Thanh toán chuyển khoản</strong>
@@ -191,17 +213,20 @@
     }
 
     if (order.status === "awaiting_review") {
+      const waitingText = data.payment_webhook_configured
+        ? "Đã ghi nhận bạn báo chuyển khoản. Hệ thống đang chờ webhook xác nhận tiền thực sự đã vào và khớp hóa đơn."
+        : "Đã ghi nhận bạn báo chuyển khoản. Admin đang đối chiếu giao dịch ngân hàng.";
       orderArea.innerHTML = `
         <section class="premium-awaiting-card">
           <span>⌛</span>
           <div>
             <small>MÃ HÓA ĐƠN</small>
             <strong>${escapeHTML(order.invoice_code)}</strong>
-            <p>${escapeHTML(data.auto_approve ? "Hệ thống đang xử lý xác nhận thanh toán." : "Yêu cầu đã được gửi. Admin đang đối chiếu giao dịch ngân hàng.")}</p>
+            <p>${escapeHTML(waitingText)}</p>
           </div>
         </section>
       `;
-      actionButton.textContent = data.auto_approve ? "Đang xử lý" : "Đang chờ Admin xác nhận";
+      actionButton.textContent = data.payment_webhook_configured ? "Đang chờ ngân hàng xác nhận" : "Đang chờ Admin xác nhận";
       actionButton.disabled = true;
       actionButton.dataset.mode = "disabled";
       return;
@@ -258,7 +283,7 @@
         const orderId = actionButton.dataset.orderId;
         if (!orderId) throw new Error("Không xác định được hóa đơn.");
 
-        if (!confirm("Bạn xác nhận đã hoàn tất chuyển khoản đúng số tiền và nội dung?")) {
+        if (!confirm("Bạn xác nhận đã thực hiện chuyển khoản? Nút này chỉ ghi nhận trạng thái; Premium chỉ được mở khi hệ thống xác minh tiền thực sự đã vào.")) {
           actionButton.disabled = false;
           return;
         }
@@ -268,7 +293,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ note: "Người dùng xác nhận đã chuyển khoản." })
         });
-        showToast(result.message || (result.activated ? "Premium đã được kích hoạt." : "Đã gửi yêu cầu xác nhận."));
+        showToast(result.message || (result.activated ? "Premium đã được kích hoạt." : "Đang chờ xác minh giao dịch thực tế."));
         await loadSubscription();
       }
     } catch (error) {
