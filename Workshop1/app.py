@@ -17,6 +17,16 @@ import os
 import sqlite3
 from psycopg.errors import UniqueViolation
 from database import get_connection
+from medical_safety import (
+    RiskLevel,
+    SafetyCategory,
+    SafetyResult,
+    SafetyState,
+    check_medical_safety,
+    lightweight_output_guard,
+    build_emergency_data_payload,
+    create_updated_safety_state,
+)
 import time
 import webbrowser
 import csv
@@ -3555,6 +3565,9 @@ def chat():
             selected_specialty = str(
                 request.form.get("specialty", "")
             ).strip()[:100]
+            safety_state_input = parse_optional_json_object(
+                request.form.get("safety_state", "")
+            )
 
         else:
             data = request.get_json(silent=True)
@@ -3580,6 +3593,9 @@ def chat():
             selected_specialty = str(
                 data.get("specialty", "")
             ).strip()[:100]
+            safety_state_input = parse_optional_json_object(
+                data.get("safety_state")
+            )
 
             image_file = None
 
@@ -3606,19 +3622,43 @@ def chat():
                 "error": "Nội dung quá dài. Vui lòng nhập dưới 4.000 ký tự."
             }), 400
 
-        # Ưu tiên tuyệt đối tình huống cấp cứu: không gọi database, không chờ AI.
-        if user_message and not has_image:
-            emergency = detect_emergency_message(user_message)
-            if emergency:
+        # ----------------------------------------------------------------------
+        # SAFETY GATE V2 (Deterministic + Context-Aware Safety)
+        # TEXT SAFETY LUÔN CHẠY KHI CÓ USER MESSAGE (BẤT KỂ has_image!)
+        # ----------------------------------------------------------------------
+        safety_result = check_medical_safety(
+            message=user_message,
+            recent_history=history,
+            previous_safety_state=safety_state_input,
+            has_image=has_image,
+        )
+
+        if safety_result.should_stop_normal_flow:
+            emergency_payload = safety_result.emergency_data or {}
+            emergency_reply = safety_result.reply or emergency_payload.get("reply", "")
+            chat_log_id = None
+            try:
                 chat_log_id = record_chat_log(
-                    user_message,
-                    emergency["reply"],
-                    "local-emergency-detector",
-                    False,
+                    user_message or "[Ảnh cấp cứu]",
+                    emergency_reply,
+                    f"safety-v2:{safety_result.category}",
+                    has_image,
                     0,
                     status="emergency",
+                    error_message=safety_result.reason_code,
                 )
-                return emergency_json_response(emergency, chat_log_id=chat_log_id)
+            except Exception:
+                pass
+
+            updated_state = create_updated_safety_state(safety_result, safety_state_input)
+            return jsonify({
+                "reply": emergency_reply,
+                "chat_log_id": chat_log_id,
+                "emergency": emergency_payload,
+                "fast_path": True,
+                "safety_result": safety_result.to_dict(),
+                "safety_state": updated_state.to_dict(),
+            })
 
         # Yêu cầu xem hồ sơ được xử lý trực tiếp từ hồ sơ đã được server xác minh.
         # Nhờ vậy câu "hồ sơ của tôi" luôn trả dữ liệu thật thay vì để AI suy diễn.
@@ -4164,6 +4204,7 @@ Yêu cầu bổ sung:
                 "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
                 "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
             }
+        reply = lightweight_output_guard(reply)
         chat_log_id = record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data, profile=effective_profile)
         response_profile = dict(effective_profile or {})
         if response_profile:
@@ -4174,10 +4215,13 @@ Yêu cầu bổ sung:
                 response_profile.get("id"),
             )
 
+        updated_state = create_updated_safety_state(safety_result, safety_state_input)
         return jsonify({
             "reply": reply,
             "profile_used": response_profile or None,
             "chat_log_id": chat_log_id,
+            "safety_result": safety_result.to_dict(),
+            "safety_state": updated_state.to_dict(),
         })
 
     except ValueError as error:

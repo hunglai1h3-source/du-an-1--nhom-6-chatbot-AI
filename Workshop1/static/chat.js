@@ -79,6 +79,8 @@ function createSession({ keepExisting = false, profile = null } = {}) {
 
     favorite: false,
 
+    safetyState: { highest_risk_level: "normal", active_flags: [], safety_unknown: false },
+
     updatedAt: new Date().toISOString(),
 
     messages: [{
@@ -1288,6 +1290,8 @@ async function sendMessage(event) {
 
   formData.append("conversation_id", String(session.id));
 
+  if (session.safetyState) formData.append("safety_state", JSON.stringify(session.safetyState));
+
  
 
   const environment = M.readJSON(M.KEYS.locationContext, null);
@@ -1319,6 +1323,14 @@ async function sendMessage(event) {
     if (returnedProfileId != null && String(returnedProfileId) !== String(activeProfile.id)) {
 
       throw new Error("Máy chủ trả về sai hồ sơ tư vấn. Vui lòng tải lại trang.");
+
+    }
+
+ 
+
+    if (data.safety_state) {
+
+      session.safetyState = data.safety_state;
 
     }
 
@@ -1595,6 +1607,8 @@ function bindChatActions() {
     if (action === "clear") {
 
       session.messages = [];
+
+      session.safetyState = { highest_risk_level: "normal", active_flags: [], safety_unknown: false };
 
       session.updatedAt = new Date().toISOString();
 
