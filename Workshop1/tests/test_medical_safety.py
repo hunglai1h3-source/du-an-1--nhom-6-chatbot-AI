@@ -231,6 +231,13 @@ class TestMedicalSafetyV2(unittest.TestCase):
         self.assertEqual(clean_state.highest_risk_level, "normal")
         self.assertEqual(clean_state.active_flags, [])
 
+    def test_22_urgent_risk_level_activation(self):
+        """22. Tình trạng cấp thiết (sốt cao 40 độ, đau bụng dữ dội) -> URGENT, không ngắt luồng AI."""
+        result = check_medical_safety("Tôi bị sốt cao 40 độ từ đêm qua")
+        self.assertEqual(result.risk_level, RiskLevel.URGENT)
+        self.assertFalse(result.should_stop_normal_flow)
+        self.assertEqual(result.reason_code, "URGENT_EVALUATION_NEEDED")
+
 
 if __name__ == "__main__":
     unittest.main()

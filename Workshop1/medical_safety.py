@@ -395,7 +395,23 @@ def evaluate_deterministic_safety(message: str) -> SafetyResult:
                 res.emergency_data = build_emergency_data_payload(res)
                 return res
 
-    # 5. Kiểm tra tình trạng đau/khó chịu thông thường (CAUTION)
+    # 5. Kiểm tra tình trạng cấp thiết cần khám trong ngày (URGENT)
+    urgent_patterns = [
+        r"\bsot cao\b", r"\bsot (?:39|40|41)\b", r"\bsot li bi\b",
+        r"\bdau bung du doi\b", r"\bdau bung quan quai\b",
+        r"\bnon lien tuc\b", r"\bnon khong dung\b",
+        r"\bvet thuong sau\b", r"\brach da chay mau\b",
+    ]
+    if any(re.search(p, normalized) for p in urgent_patterns):
+        return SafetyResult(
+            risk_level=RiskLevel.URGENT,
+            category=SafetyCategory.GENERAL_CAUTION.value,
+            reason_code="URGENT_EVALUATION_NEEDED",
+            confidence=0.88,
+            should_stop_normal_flow=False,
+        )
+
+    # 6. Kiểm tra tình trạng đau/khó chịu thông thường (CAUTION)
     caution_patterns = [
         r"\bdau bung\b", r"\bchong mat\b", r"\bbuon non\b", r"\bsot\b",
         r"\bdi ngoai\b", r"\bho keo dai\b", r"\bphat ban\b"
