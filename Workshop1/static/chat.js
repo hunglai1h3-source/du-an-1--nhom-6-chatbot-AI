@@ -1605,25 +1605,30 @@ function bindChatActions() {
     if (action === "export") exportCurrentChat();
 
     if (action === "clear") {
+      const resetConvId = String(session.id);
+      fetch("/chat/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: resetConvId })
+      }).catch(() => {});
 
       session.messages = [];
-
       session.safetyState = { highest_risk_level: "normal", active_flags: [], safety_unknown: false };
-
       session.updatedAt = new Date().toISOString();
-
       persistSessions(); renderMessages(); renderHistory();
-
     }
 
     if (action === "delete") {
+      const deleteConvId = String(session.id);
+      fetch("/chat/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: deleteConvId })
+      }).catch(() => {});
 
       sessions = sessions.filter((item) => item.id !== session.id);
-
       currentChatId = "";
-
       createSession(); renderMessages(); renderHistory();
-
     }
 
     closeMenus();

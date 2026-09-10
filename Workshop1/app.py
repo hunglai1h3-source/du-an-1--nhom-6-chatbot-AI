@@ -27,6 +27,15 @@ from medical_safety import (
     build_emergency_data_payload,
     create_updated_safety_state,
 )
+from conversation_engine import (
+    ConversationStage,
+    NextAction,
+    MedicalSlots,
+    MedicalConversationState,
+    process_conversation_turn,
+    format_conversation_state_for_prompt,
+    enforce_single_question_output,
+)
 import time
 import webbrowser
 import csv
@@ -1136,6 +1145,22 @@ def initialize_database():
             ON chat_logs(user_id)
         """)
 
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_states (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
+                conversation_id TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_conversation_states_lookup
+            ON conversation_states(conversation_id, user_id)
+        """)
+
         connection.commit()
         print("✅ Đã khởi tạo các bảng PostgreSQL.")
 
@@ -1147,6 +1172,62 @@ def initialize_database():
         connection.close()
 
 initialize_database()
+
+
+def load_conversation_state_from_db(connection, conversation_id, user_id=None):
+    """Nạp trạng thái hội thoại y tế từ database an toàn; fallback sang state mặc định nếu lỗi."""
+    if not conversation_id:
+        return MedicalConversationState(user_id=user_id)
+    try:
+        if user_id:
+            row = connection.execute(
+                "SELECT state_json FROM conversation_states WHERE conversation_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
+                (conversation_id, user_id),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                "SELECT state_json FROM conversation_states WHERE conversation_id = ? ORDER BY id DESC LIMIT 1",
+                (conversation_id,),
+            ).fetchone()
+
+        if row and row["state_json"]:
+            data = json.loads(row["state_json"])
+            return MedicalConversationState.from_dict(data)
+    except Exception:
+        pass
+    return MedicalConversationState(conversation_id=conversation_id, user_id=user_id)
+
+
+def save_conversation_state_to_db(connection, state):
+    """Lưu hoặc cập nhật trạng thái hội thoại y tế có cấu trúc."""
+    if not state or not state.conversation_id:
+        return
+    try:
+        state_json = json.dumps(state.to_dict(), ensure_ascii=False)
+        if state.user_id:
+            existing = connection.execute(
+                "SELECT id FROM conversation_states WHERE conversation_id = ? AND user_id = ?",
+                (state.conversation_id, state.user_id),
+            ).fetchone()
+        else:
+            existing = connection.execute(
+                "SELECT id FROM conversation_states WHERE conversation_id = ? AND user_id IS NULL",
+                (state.conversation_id,),
+            ).fetchone()
+
+        if existing:
+            connection.execute(
+                "UPDATE conversation_states SET state_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (state_json, existing["id"]),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO conversation_states (user_id, conversation_id, state_json) VALUES (?, ?, ?)",
+                (state.user_id, state.conversation_id, state_json),
+            )
+        connection.commit()
+    except Exception:
+        connection.rollback()
 
 
 def get_setting(key, default=""):
@@ -3537,6 +3618,42 @@ def parse_optional_json_object(value):
     return parsed if isinstance(parsed, dict) else {}
 
 
+@app.post("/chat/reset")
+def reset_chat_state():
+    """Xóa structured conversation state của một conversation_id cụ thể."""
+    try:
+        content_type = request.content_type or ""
+        if content_type.startswith("multipart/form-data"):
+            conv_id = str(request.form.get("conversation_id", "")).strip()[:120]
+        else:
+            data = request.get_json(silent=True) or {}
+            conv_id = str(data.get("conversation_id", "")).strip()[:120]
+
+        if not conv_id:
+            return jsonify({"status": "ok", "message": "No conversation_id provided"}), 200
+
+        user_id = session.get("user_id")
+        connection = get_database()
+        try:
+            if user_id:
+                connection.execute(
+                    "DELETE FROM conversation_states WHERE conversation_id = ? AND user_id = ?",
+                    (conv_id, user_id),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM conversation_states WHERE conversation_id = ?",
+                    (conv_id,),
+                )
+            connection.commit()
+        finally:
+            connection.close()
+
+        return jsonify({"status": "success", "message": f"Reset state for {conv_id}"}), 200
+    except Exception as err:
+        return jsonify({"status": "error", "message": str(err)}), 500
+
+
 @app.post("/chat")
 def chat():
     try:
@@ -3546,6 +3663,10 @@ def chat():
             user_message = str(
                 request.form.get("message", "")
             ).strip()
+
+            conversation_id = str(
+                request.form.get("conversation_id", "")
+            ).strip()[:120]
 
             history_raw = request.form.get("history", "[]")
 
@@ -3580,6 +3701,10 @@ def chat():
             user_message = str(
                 data.get("message", "")
             ).strip()
+
+            conversation_id = str(
+                data.get("conversation_id", "")
+            ).strip()[:120]
 
             history = clean_history(
                 data.get("history", [])
@@ -3822,6 +3947,33 @@ def chat():
                         "phòng ngừa tổng quát."
                     ),
                 })
+
+        # ----------------------------------------------------------------------
+        # CONVERSATION STATE ENGINE (PHASE 2)
+        # ----------------------------------------------------------------------
+        effective_conv_id = conversation_id or f"conv_{session.get('user_id', 'anon')}"
+        conv_state = MedicalConversationState(conversation_id=effective_conv_id, user_id=session.get("user_id"))
+        conv_connection = None
+        try:
+            conv_connection = get_database()
+            if not history:
+                conv_state = MedicalConversationState(conversation_id=effective_conv_id, user_id=session.get("user_id"))
+            else:
+                conv_state = load_conversation_state_from_db(conv_connection, effective_conv_id, session.get("user_id"))
+        except Exception:
+            pass
+
+        conv_state = process_conversation_turn(
+            user_message=user_message,
+            state=conv_state,
+            history=history,
+            profile=effective_profile,
+        )
+
+        messages.append({
+            "role": "system",
+            "content": format_conversation_state_for_prompt(conv_state),
+        })
 
         # Chỉ truy xuất kho kiến thức cho câu hỏi văn bản.
         # Không dùng database để suy đoán nội dung của ảnh.
@@ -4204,6 +4356,7 @@ Yêu cầu bổ sung:
                 "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
                 "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
             }
+        reply = enforce_single_question_output(reply, conv_state.next_action)
         reply = lightweight_output_guard(reply)
         chat_log_id = record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data, profile=effective_profile)
         response_profile = dict(effective_profile or {})
@@ -4215,6 +4368,14 @@ Yêu cầu bổ sung:
                 response_profile.get("id"),
             )
 
+        if conv_connection:
+            try:
+                save_conversation_state_to_db(conv_connection, conv_state)
+            except Exception:
+                pass
+            finally:
+                conv_connection.close()
+
         updated_state = create_updated_safety_state(safety_result, safety_state_input)
         return jsonify({
             "reply": reply,
@@ -4222,6 +4383,9 @@ Yêu cầu bổ sung:
             "chat_log_id": chat_log_id,
             "safety_result": safety_result.to_dict(),
             "safety_state": updated_state.to_dict(),
+            "conversation_stage": conv_state.stage,
+            "next_action": conv_state.next_action,
+            "conversation_id": effective_conv_id,
         })
 
     except ValueError as error:
