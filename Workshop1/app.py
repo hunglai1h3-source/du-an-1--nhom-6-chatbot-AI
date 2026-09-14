@@ -57,6 +57,7 @@ from conversation_memory import (
     build_conversation_context,
     MAX_RECENT_MESSAGES_FOR_PROMPT,
 )
+import rag_service
 import time
 import webbrowser
 import csv
@@ -606,130 +607,27 @@ def normalize_search_text(value):
 
 def search_medical_database(user_question, limit=3):
     """
-    Tìm các câu hỏi liên quan trong medical.db.
-
-    Đây là tìm kiếm từ khóa có chấm điểm, phù hợp để chạy thử RAG
-    với SQLite mà chưa cần FAISS hoặc ChromaDB.
+    Tìm các tài liệu y tế liên quan trong medical.db qua rag_service.
+    Tự động chuẩn hóa, xếp hạng BM25 và lọc ngưỡng liên quan.
     """
-    normalized_question = normalize_search_text(user_question)
-
-    keywords = [
-        word for word in normalized_question.split()
-        if len(word) >= 2 and word not in MEDICAL_SEARCH_STOPWORDS
-    ]
-
-    # Loại từ lặp nhưng vẫn giữ đúng thứ tự.
-    keywords = list(dict.fromkeys(keywords))[:10]
-
-    if not keywords or not MEDICAL_DATABASE_PATH.is_file():
-        return []
-
-    connection = None
-
     try:
-        connection = sqlite3.connect(MEDICAL_DATABASE_PATH)
-        connection.row_factory = sqlite3.Row
-
-        columns = {
-            row["name"]
-            for row in connection.execute(
-                "PRAGMA table_info(medical_qa)"
-            ).fetchall()
-        }
-
-        if not {"question", "answer"}.issubset(columns):
-            print("Bảng medical_qa thiếu cột question hoặc answer.")
-            return []
-
-        source_select = "source" if "source" in columns else "'' AS source"
-
-        conditions = []
-        parameters = []
-
-        for keyword in keywords:
-            conditions.append(
-                "(LOWER(question) LIKE ? OR LOWER(answer) LIKE ?)"
-            )
-            pattern = f"%{keyword}%"
-            parameters.extend([pattern, pattern])
-
-        sql = f"""
-            SELECT question, answer, {source_select}
-            FROM medical_qa
-            WHERE {" OR ".join(conditions)}
-            LIMIT 60
-        """
-
-        rows = connection.execute(sql, parameters).fetchall()
-
-        scored_results = []
-
-        for row in rows:
-            database_question = normalize_search_text(row["question"])
-            database_answer = normalize_search_text(row["answer"])
-
-            question_words = set(database_question.split())
-            answer_words = set(database_answer.split())
-
-            score = 0
-
-            for keyword in keywords:
-                if keyword in question_words:
-                    score += 4
-                elif keyword in database_question:
-                    score += 2
-
-                if keyword in answer_words:
-                    score += 1
-
-            # Ưu tiên mạnh khi câu người dùng gần giống câu hỏi trong database.
-            if normalized_question == database_question:
-                score += 20
-            elif normalized_question in database_question:
-                score += 8
-
-            if score > 0:
-                scored_results.append({
-                    "question": row["question"],
-                    "answer": row["answer"],
-                    "source": row["source"] or "medical_qa",
-                    "score": score,
-                })
-
-        scored_results.sort(
-            key=lambda item: item["score"],
-            reverse=True
-        )
-
-        return scored_results[:max(1, min(int(limit), 5))]
-
-    except (sqlite3.Error, OSError, ValueError) as error:
-        print("Lỗi tìm kiếm medical.db:", error)
+        return rag_service.search_medical_knowledge(user_question, limit=limit)
+    except Exception as error:
+        print("Lỗi tìm kiếm medical.db qua rag_service:", error)
         return []
-
-    finally:
-        if connection is not None:
-            connection.close()
 
 
 def build_medical_context(user_question, limit=3):
-    """Định dạng kết quả tìm kiếm để đưa vào system message."""
-    results = search_medical_database(user_question, limit=limit)
-
-    if not results:
+    """
+    Định dạng kết quả tìm kiếm để đưa vào system message qua rag_service.
+    Gắn mã trích dẫn [MED-XXXXX] và quy tắc grounding.
+    """
+    try:
+        results = search_medical_database(user_question, limit=limit)
+        return rag_service.format_rag_context(results)
+    except Exception as error:
+        print("Lỗi tạo medical context qua rag_service:", error)
         return ""
-
-    sections = []
-
-    for index, item in enumerate(results, start=1):
-        sections.append(
-            f"Tài liệu {index}:\n"
-            f"Câu hỏi tham khảo: {item['question']}\n"
-            f"Nội dung tham khảo: {item['answer']}\n"
-            f"Nguồn: {item['source']}"
-        )
-
-    return "\n\n".join(sections)
 
 
 def initialize_database():
@@ -4029,6 +3927,7 @@ def chat():
             updated_state = create_updated_safety_state(safety_result, safety_state_input)
             return jsonify({
                 "reply": emergency_reply,
+                "sources": [],
                 "chat_log_id": chat_log_id,
                 "emergency": emergency_payload,
                 "fast_path": True,
@@ -4279,38 +4178,39 @@ def chat():
                 ),
             })
 
-        # Chỉ truy xuất kho kiến thức cho câu hỏi văn bản.
-        # Không dùng database để suy đoán nội dung của ảnh.
+        # RAG - Medical Knowledge Base & Grounding (Phase 4)
+        retrieved_medical_docs = []
         if user_message and not has_image:
-            medical_context = build_medical_context(
-                user_message,
-                limit=2
-            )
-
-            if medical_context:
-                messages.append({
-                    "role": "system",
-                    "content": (
-                        "DỮ LIỆU THAM KHẢO TRUY XUẤT TỪ KHO Y TẾ:\n"
-                        f"{medical_context}\n\n"
-                        "Quy tắc sử dụng:\n"
-                        "- Chỉ dùng khi thực sự liên quan đến câu hỏi hiện tại.\n"
-                        "- Không sao chép máy móc và không coi đây là chẩn đoán.\n"
-                        "- Nếu dữ liệu mâu thuẫn hoặc không đủ, ưu tiên trả lời "
-                        "thận trọng và khuyên người dùng đi khám khi cần.\n"
-                        "- Không nói với người dùng về điểm tìm kiếm nội bộ."
-                    ),
-                })
-
-                print(
-                    "Đã tìm thấy dữ liệu y tế tham khảo cho:",
-                    user_message[:100]
-                )
+            slots_obj = getattr(conv_state, "slots", None)
+            state_dict = {
+                "stage": getattr(conv_state, "stage", "INITIAL"),
+                "next_action": getattr(conv_state, "next_action", "ASK_QUESTION"),
+                "chief_complaint": getattr(slots_obj, "chief_complaint", None) if slots_obj else None,
+                "symptom_location": getattr(slots_obj, "symptom_location", None) if slots_obj else None,
+                "symptom_character": getattr(slots_obj, "severity", None) if slots_obj else None,
+            }
+            if rag_service.should_activate_rag(user_message, state_dict, safety_result.risk_level.value):
+                try:
+                    retrieved_medical_docs = rag_service.search_medical_knowledge(
+                        user_message,
+                        limit=3,
+                        medical_state=state_dict,
+                    )
+                    rag_context = rag_service.format_rag_context(retrieved_medical_docs)
+                    if rag_context:
+                        messages.append({
+                            "role": "system",
+                            "content": rag_context,
+                        })
+                        print(
+                            "Đã tìm thấy dữ liệu y tế tham khảo cho:",
+                            user_message[:100],
+                            f"({len(retrieved_medical_docs)} tài liệu)"
+                        )
+                except Exception as rag_err:
+                    print("Lỗi truy xuất RAG:", rag_err)
             else:
-                print(
-                    "Không tìm thấy dữ liệu y tế phù hợp cho:",
-                    user_message[:100]
-                )
+                print("RAG không kích hoạt cho lượt này (theo RAG Activation Policy).")
 
         messages.extend(effective_history[-MAX_RECENT_MESSAGES_FOR_PROMPT:])
 
@@ -4661,6 +4561,9 @@ Yêu cầu bổ sung:
                 "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
             }
         reply = enforce_single_question_output(reply, conv_state.next_action)
+        reply, used_sources = rag_service.validate_and_extract_citations(
+            reply, locals().get("retrieved_medical_docs", [])
+        )
         reply = lightweight_output_guard(reply)
         chat_log_id = record_chat_log(user_message or "[Ảnh được tải lên]", reply, selected_model, has_image, elapsed_ms, usage=usage_data, profile=effective_profile)
         response_profile = dict(effective_profile or {})
@@ -4683,6 +4586,7 @@ Yêu cầu bổ sung:
                         "usage": usage_data,
                         "stage": conv_state.stage,
                         "next_action": conv_state.next_action,
+                        "sources_count": len(used_sources),
                     },
                 )
                 save_conversation_state_to_db(conv_connection, conv_state)
@@ -4712,6 +4616,7 @@ Yêu cầu bổ sung:
         updated_state = create_updated_safety_state(safety_result, safety_state_input)
         return jsonify({
             "reply": reply,
+            "sources": used_sources,
             "profile_used": response_profile or None,
             "chat_log_id": chat_log_id,
             "safety_result": safety_result.to_dict(),

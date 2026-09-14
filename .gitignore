@@ -52,6 +52,7 @@ data/raw/
 
 # Database của project
 Workshop1/users.db
+!Workshop1/database/medical.db
 
 
 # ==========================================
