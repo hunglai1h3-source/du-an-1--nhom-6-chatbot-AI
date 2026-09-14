@@ -1,5 +1,5 @@
 from flask import (Flask, jsonify, render_template, request, session,
-                redirect, url_for, send_file)
+                redirect, url_for, send_file, g)
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
@@ -58,6 +58,12 @@ from conversation_memory import (
     MAX_RECENT_MESSAGES_FOR_PROMPT,
 )
 import rag_service
+from security_guard import (
+    RateLimiter,
+    BruteForceProtector,
+    validate_image_magic_bytes,
+    validate_audio_magic_bytes,
+)
 import time
 import webbrowser
 import csv
@@ -80,12 +86,19 @@ VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
-app.config["SECRET_KEY"] = os.getenv(
-    "SECRET_KEY",
-    "change-this-secret-key-before-deploy"
-)
+
+_secret_key = os.getenv("SECRET_KEY", "change-this-secret-key-before-deploy").strip()
+if not _secret_key or _secret_key in ("nghia_dep_trai", "change-this-secret-key-before-deploy", "default"):
+    print("⚠️ CẢNH BÁO BẢO MẬT: SECRET_KEY đang sử dụng giá trị mặc định hoặc yếu. Hãy đổi thành chuỗi ngẫu nhiên dài khi triển khai production!")
+app.config["SECRET_KEY"] = _secret_key
+
+# Module bảo vệ tần suất và chống brute-force
+rate_limiter = RateLimiter()
+brute_force_protector = BruteForceProtector()
+
 # Giữ phiên đăng nhập tối đa 30 ngày.
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
 
 # Cấu hình cookie đăng nhập.
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -100,7 +113,35 @@ app.config["SESSION_COOKIE_SECURE"] = (
 # Làm mới thời hạn cookie khi người dùng tiếp tục sử dụng website.
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
+
+@app.before_request
+def app_before_request():
+    request_id = request.headers.get("X-Request-ID") or f"req_{uuid4().hex[:12]}"
+    g.request_id = request_id
+    g.request_start_time = time.time()
+
+
+@app.after_request
+def app_after_request(response):
+    request_id = getattr(g, "request_id", None)
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    if request.path.startswith(("/chat", "/api/", "/transcribe", "/login", "/register")):
+        duration_ms = round((time.time() - getattr(g, "request_start_time", time.time())) * 1000, 1)
+        print(f"[API_LOG] {request_id} | {request.method} {request.path} | {response.status_code} | {duration_ms}ms")
+
+    return response
+
+
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+
 
 PREMIUM_PRICE = max(1000, int(os.getenv("PREMIUM_PRICE", "20000")))
 PREMIUM_DURATION_DAYS = max(1, int(os.getenv("PREMIUM_DURATION_DAYS", "30")))
@@ -1583,8 +1624,13 @@ def image_to_data_url(image_file):
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise ValueError("Ảnh vượt quá dung lượng tối đa 5 MB.")
 
+    is_valid, detected_mime = validate_image_magic_bytes(image_bytes)
+    if not is_valid:
+        raise ValueError("Định dạng file ảnh không hợp lệ hoặc bị giả mạo.")
+
+    actual_mime = detected_mime or mime_type
     encoded = base64.b64encode(image_bytes).decode("utf-8")
-    return f"data:{mime_type};base64,{encoded}"
+    return f"data:{actual_mime};base64,{encoded}"
 
 
 def get_error_status(error):
@@ -1602,9 +1648,9 @@ def get_error_status(error):
 def build_error_response(error):
     status_code = get_error_status(error)
     error_text = str(error).lower()
+    req_id = getattr(g, "request_id", None)
 
-    print("CHI TIẾT LỖI GEMINI:", repr(error))
-    print("STATUS CODE:", status_code)
+    print(f"[GEMINI_ERROR] req_id={req_id} status={status_code} error={repr(error)}")
 
     if (
             status_code == 429
@@ -1613,12 +1659,13 @@ def build_error_response(error):
             or "rate limit" in error_text
             or "resource_exhausted" in error_text
         ):
-            return jsonify({
-                "error": (
-                    "Gemini đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
-                    "Vui lòng chờ hạn mức được đặt lại."
-                )
-            }), 429
+        return jsonify({
+            "error": (
+                "Gemini đã hết lượt sử dụng hoặc vượt giới hạn hiện tại. "
+                "Vui lòng chờ hạn mức được đặt lại."
+            ),
+            "request_id": req_id,
+        }), 429
 
     if (
         status_code in {401, 403}
@@ -1631,7 +1678,8 @@ def build_error_response(error):
         return jsonify({
             "error": (
                 "API key không hợp lệ hoặc chưa được cấp quyền truy cập."
-            )
+            ),
+            "request_id": req_id,
         }), 401
 
     if (
@@ -1648,7 +1696,8 @@ def build_error_response(error):
             "error": (
                 "Hệ thống Gemini đang quá tải hoặc tạm thời không khả dụng. "
                 "Vui lòng đợi một lúc rồi thử lại."
-            )
+            ),
+            "request_id": req_id,
         }), 503
 
     if (
@@ -1663,7 +1712,8 @@ def build_error_response(error):
                 f"Text model: {MODEL_NAME}; vision model: {VISION_MODEL_NAME}. "
                 "Hãy dùng API key tạo trực tiếp tại Google AI Studio, kiểm tra thanh toán/quyền truy cập, "
                 "hoặc đặt MODEL_NAME=gemini-3.5-flash trong file .env."
-            )
+            ),
+            "request_id": req_id,
         }), 404
 
     if (
@@ -1673,7 +1723,8 @@ def build_error_response(error):
         return jsonify({
             "error": (
                 "Gemini phản hồi quá lâu. Vui lòng gửi lại câu hỏi."
-            )
+            ),
+            "request_id": req_id,
         }), 504
 
     if (
@@ -1684,15 +1735,18 @@ def build_error_response(error):
             "error": (
                 "Không thể kết nối tới máy chủ Gemini. "
                 "Hãy kiểm tra mạng Internet rồi thử lại."
-            )
+            ),
+            "request_id": req_id,
         }), 503
 
     return jsonify({
         "error": (
-            "Hệ thống AI đang gặp lỗi tạm thời. "
-            "Hãy xem Terminal để biết chi tiết."
-        )
+            "Hệ thống AI đang gặp sự cố tạm thời. "
+            "Vui lòng thử lại sau giây lát."
+        ),
+        "request_id": req_id,
     }), 500
+
 
 
 def clamp_number(value, field_name, minimum, maximum):
@@ -2113,15 +2167,29 @@ def pharmacy_page():
 
 @app.get("/health")
 def health():
+    from database import get_pool_stats
+    pool_stats = get_pool_stats()
+    rag_ready = rag_service.is_rag_available()
     return jsonify({
         "status": "ok",
+        "environment": os.getenv("FLASK_ENV", "production" if not app.debug else "development"),
         "text_model": MODEL_NAME,
         "vision_model": VISION_MODEL_NAME,
+        "database_pool": pool_stats,
+        "rag_available": rag_ready,
+        "version": "Phase 5 Hardened",
     })
 
 
 @app.post("/register")
 def register():
+    ip = request.remote_addr or "unknown"
+    allowed, retry_after = rate_limiter.is_allowed(f"register_rate:{ip}", limit=10, window_seconds=60)
+    if not allowed:
+        return jsonify({
+            "error": f"Quá nhiều yêu cầu đăng ký từ địa chỉ của bạn. Vui lòng thử lại sau {retry_after} giây."
+        }), 429
+
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
@@ -2196,6 +2264,13 @@ def register():
 
 @app.post("/login")
 def login():
+    ip = request.remote_addr or "unknown"
+    allowed, retry_after = rate_limiter.is_allowed(f"login_rate:{ip}", limit=15, window_seconds=60)
+    if not allowed:
+        return jsonify({
+            "error": f"Bạn đang thử đăng nhập quá nhanh. Vui lòng chờ {retry_after} giây."
+        }), 429
+
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
@@ -2209,6 +2284,14 @@ def login():
             "error": "Vui lòng nhập đầy đủ tài khoản và mật khẩu."
         }), 400
 
+    lock_key = f"{account}:{ip}"
+    is_locked, remaining = brute_force_protector.is_locked(lock_key)
+    if is_locked:
+        minutes = max(1, remaining // 60)
+        return jsonify({
+            "error": f"Tài khoản đã bị tạm khóa do thử sai quá nhiều lần. Vui lòng thử lại sau {minutes} phút."
+        }), 429
+
     connection = get_database()
     user = connection.execute(
         """
@@ -2220,16 +2303,21 @@ def login():
     ).fetchone()
     connection.close()
 
-    if user is None:
-        return jsonify({"error": "Tài khoản không tồn tại."}), 401
-
-    if not check_password_hash(user["password_hash"], password):
-        return jsonify({"error": "Mật khẩu không chính xác."}), 401
+    if user is None or not check_password_hash(user["password_hash"], password):
+        locked_now, lock_time = brute_force_protector.record_failure(lock_key)
+        if locked_now:
+            return jsonify({
+                "error": "Bạn đã nhập sai quá 5 lần. Tài khoản bị tạm khóa 15 phút để bảo đảm an toàn."
+            }), 429
+        return jsonify({"error": "Tài khoản hoặc mật khẩu không chính xác."}), 401
 
     if not bool(user["is_active"]):
         return jsonify({
             "error": "Tài khoản này đã bị quản trị viên tạm khóa."
         }), 403
+
+    # Đăng nhập thành công -> xóa lịch sử thất bại
+    brute_force_protector.record_success(lock_key)
 
     session.clear()
 
@@ -2251,6 +2339,7 @@ def login():
             "role": user["role"]
         }
     })
+
 
 
 @app.get("/current-user")
@@ -2818,6 +2907,15 @@ def sepay_payment_webhook():
 @app.post("/transcribe")
 def transcribe_audio():
     """Nhận bản ghi âm và chuyển lời nói tiếng Việt thành văn bản bằng Gemini native API."""
+    ip = request.remote_addr or "unknown"
+    user_id = session.get("user_id")
+    client_key = f"transcribe:{user_id or ip}"
+    allowed, retry_after = rate_limiter.is_allowed(client_key, limit=20, window_seconds=60)
+    if not allowed:
+        return jsonify({
+            "error": f"Bạn đang gửi yêu cầu ghi âm quá nhanh. Vui lòng chờ {retry_after} giây."
+        }), 429
+
     if not API_KEY:
         return jsonify({
             "error": "Chưa cấu hình GEMINI_API_KEY trong file .env."
@@ -2838,6 +2936,12 @@ def transcribe_audio():
         return jsonify({"error": "File âm thanh đang trống."}), 400
     if len(audio_bytes) > MAX_AUDIO_BYTES:
         return jsonify({"error": "File âm thanh vượt quá dung lượng tối đa 5 MB."}), 400
+
+    is_valid_audio, detected_format = validate_audio_magic_bytes(audio_bytes, extension)
+    if not is_valid_audio:
+        return jsonify({
+            "error": "File âm thanh không hợp lệ hoặc bị lỗi định dạng."
+        }), 400
 
     # Gemini hỗ trợ trực tiếp WAV, MP3, AIFF, AAC, OGG và FLAC.
     # Trình duyệt thường ghi WEBM/M4A nên chuyển sang WAV bằng ffmpeg trước khi gửi.
@@ -2901,7 +3005,7 @@ def transcribe_audio():
         model_name = AUDIO_TRANSCRIPTION_MODEL.removeprefix("models/")
         endpoint = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model_name}:generateContent?key={API_KEY}"
+            f"{model_name}:generateContent"
         )
         payload = {
             "contents": [{
@@ -2932,9 +3036,13 @@ def transcribe_audio():
         request_object = Request(
             endpoint,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": API_KEY,
+            },
             method="POST",
         )
+
         with urlopen(request_object, timeout=60) as response:
             result = json.loads(response.read().decode("utf-8"))
 
@@ -3438,14 +3546,14 @@ GEMINI_FALLBACK_MODELS = [
     name.strip().removeprefix("models/")
     for name in os.getenv(
         "GEMINI_FALLBACK_MODELS",
-        "gemini-3.5-flash,gemini-3.5-flash-lite"
+        "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
     ).split(",")
     if name.strip()
 ]
 
 
 def gemini_model_candidates(preferred_model):
-    """Trả về danh sách model không trùng để tự chuyển khi model cấu hình bị 404."""
+    """Trả về danh sách model không trùng để tự chuyển khi model cấu hình bị 404 hoặc lỗi."""
     candidates = [str(preferred_model or "").strip().removeprefix("models/")]
     candidates.extend(GEMINI_FALLBACK_MODELS)
     return list(dict.fromkeys(name for name in candidates if name))
@@ -3465,7 +3573,7 @@ def is_model_not_found_error(error):
 
 
 def is_transient_gemini_error(error):
-    """Lỗi tạm thời có thể thử model Gemini 3.5 dự phòng."""
+    """Lỗi tạm thời có thể thử model Gemini dự phòng."""
     status = get_error_status(error)
     text = str(error).lower()
     return (
@@ -3486,9 +3594,8 @@ def is_transient_gemini_error(error):
 
 def create_gemini_completion_with_fallback(**kwargs):
     """
-    Ưu tiên Gemini 3.5 Flash.
-    Nếu 3.5 Flash không khả dụng hoặc tạm quá tải, thử 3.5 Flash-Lite.
-    Không hạ xuống Gemini 2.5.
+    Ưu tiên model cấu hình.
+    Nếu model không khả dụng (404) hoặc tạm quá tải, tự chuyển sang model dự phòng tiếp theo.
     """
     preferred_model = str(
         kwargs.get("model", MODEL_NAME) or MODEL_NAME
@@ -3504,7 +3611,7 @@ def create_gemini_completion_with_fallback(**kwargs):
             response = client.chat.completions.create(**request_kwargs)
             if model_name != preferred_model:
                 print(
-                    f"✅ GEMINI 3.5 FALLBACK: "
+                    f"✅ GEMINI MODEL FALLBACK THÀNH CÔNG: "
                     f"{preferred_model} -> {model_name}"
                 )
             print(
@@ -3530,7 +3637,7 @@ def create_gemini_completion_with_fallback(**kwargs):
 
             print(f"↪ Thử model dự phòng: {candidates[index + 1]}")
 
-    raise last_error or RuntimeError("Không tìm thấy model Gemini 3.5 khả dụng.")
+    raise last_error or RuntimeError("Không tìm thấy model Gemini khả dụng.")
 
 
 AI_CONCURRENCY = max(1, int(os.getenv("AI_CONCURRENCY", "4")))
@@ -3538,38 +3645,53 @@ AI_REQUEST_SEMAPHORE = __import__("threading").BoundedSemaphore(AI_CONCURRENCY)
 
 
 def create_chat_completion_with_retry(**kwargs):
-    """Giới hạn tải cục bộ; mặc định không lặp lại request chậm nhiều lần."""
-    # Mặc định 1 lần để tránh một câu hỏi bị treo hàng phút.
-    # Nếu thực sự cần retry khi deploy, có thể đặt AI_RETRY_ATTEMPTS=2 trong .env.
+    """
+    Thực hiện gọi AI với cơ chế retry có kiểm soát và giải phóng semaphore khi backoff.
+    Tuyệt đối không retry các lỗi do phía client (400, 401, 403, 404).
+    """
     try:
         attempts = int(os.getenv("AI_RETRY_ATTEMPTS", "2"))
     except (TypeError, ValueError):
-        attempts = 1
-    attempts = max(1, min(attempts, 2))
+        attempts = 2
+    attempts = max(1, min(attempts, 3))
     last_error = None
-    acquired = AI_REQUEST_SEMAPHORE.acquire(timeout=10)
-    if not acquired:
-        raise TimeoutError("Máy chủ đang xử lý quá nhiều yêu cầu cùng lúc")
-    try:
-        for attempt in range(attempts):
-            try:
-                return create_gemini_completion_with_fallback(**kwargs)
-            except Exception as error:
-                last_error = error
-                status = get_error_status(error)
-                text = str(error).lower()
-                retryable = status in {408, 409, 429, 500, 502, 503, 504} or any(
+
+    for attempt in range(attempts):
+        acquired = AI_REQUEST_SEMAPHORE.acquire(timeout=10)
+        if not acquired:
+            raise TimeoutError("Máy chủ đang xử lý quá nhiều yêu cầu AI cùng lúc. Vui lòng thử lại sau.")
+        try:
+            return create_gemini_completion_with_fallback(**kwargs)
+        except Exception as error:
+            last_error = error
+            status = get_error_status(error)
+            text = str(error).lower()
+
+            # Lỗi client (400, 401, 403, 404) -> KHÔNG retry
+            if status in {400, 401, 403, 404}:
+                raise
+
+            retryable = (
+                status in {408, 409, 429, 500, 502, 503, 504}
+                or any(
                     token in text for token in (
                         "timeout", "timed out", "rate limit", "overloaded",
-                        "connection reset", "temporarily unavailable"
+                        "connection reset", "temporarily unavailable", "bad gateway"
                     )
                 )
-                if not retryable or attempt >= attempts - 1:
-                    raise
-                time.sleep(min(6.0, 0.8 * (2 ** attempt)))
+            )
+            if not retryable or attempt >= attempts - 1:
+                raise
+        finally:
+            AI_REQUEST_SEMAPHORE.release()
+
+        # Nghỉ ngoài semaphore để không chiếm giữ slot của request khác
+        backoff_seconds = min(4.0, 0.5 * (2 ** attempt))
+        time.sleep(backoff_seconds)
+
+    if last_error:
         raise last_error
-    finally:
-        AI_REQUEST_SEMAPHORE.release()
+
 
 
 def parse_optional_json_object(value):
@@ -3735,8 +3857,20 @@ def reset_chat_state():
 
 @app.post("/chat")
 def chat():
+    # Kiểm tra giới hạn tần suất gửi tin nhắn (Sliding window rate limit)
+    user_id = session.get("user_id")
+    ip = request.remote_addr or "unknown"
+    client_key = f"chat:{user_id or ip}"
+    chat_limit = int(os.getenv("CHAT_RATE_LIMIT", "40"))
+    allowed, retry_after = rate_limiter.is_allowed(client_key, limit=chat_limit, window_seconds=60)
+    if not allowed:
+        return jsonify({
+            "error": f"Bạn đang gửi tin nhắn quá nhanh. Vui lòng thử lại sau {retry_after} giây."
+        }), 429
+
     try:
         content_type = request.content_type or ""
+
 
         if content_type.startswith("multipart/form-data"):
             user_message = str(
@@ -7375,50 +7509,25 @@ def admin_api_chats():
         ),
         "server_time": datetime.now().strftime("%H:%M:%S"),
     })
-    q = request.args.get("q", "").strip()
-    model = request.args.get("model", "").strip()
-    page = max(request.args.get("page", 1, type=int), 1)
-    per_page = 25
-    where, params = [], []
-    if q:
-        where.append("(c.question LIKE ? OR c.answer LIKE ? OR COALESCE(u.full_name,'') LIKE ?)")
-        params.extend([f"%{q}%"] * 3)
-    if model:
-        where.append("c.model = ?")
-        params.append(model)
-    clause = ("WHERE " + " AND ".join(where)) if where else ""
-    connection = get_database()
-    total = connection.execute(
-        f"SELECT COUNT(*) FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id {clause}",
-        params,
-    ).fetchone()[0]
-    rows = connection.execute(f"""
-        SELECT c.id, c.question, c.answer, c.model, c.has_image, c.latency_ms,
-               c.prompt_tokens, c.completion_tokens, c.status, c.created_at,
-               COALESCE(u.full_name,'Khách') AS full_name, u.email
-        FROM chat_logs c LEFT JOIN users u ON u.id=c.user_id
-        {clause} ORDER BY c.id DESC LIMIT ? OFFSET ?
-    """, params + [per_page, (page - 1) * per_page]).fetchall()
-    connection.close()
-    return jsonify({
-        "items": [dict(row) for row in rows],
-        "total": total,
-        "page": page,
-        "pages": max(1, (total + per_page - 1) // per_page),
-        "server_time": datetime.now().strftime("%H:%M:%S"),
-    })
+
 
 def open_browser():
+
     webbrowser.open_new("http://127.0.0.1:5000/")
 
 
 if __name__ == "__main__":
-    print(app.url_map)
-    Timer(1.2, open_browser).start()
+    is_debug = os.getenv("FLASK_DEBUG", "false").strip().lower() in ("true", "1", "yes")
+    port = int(os.getenv("PORT", "5000"))
+    host = os.getenv("HOST", "127.0.0.1" if is_debug else "0.0.0.0")
+
+    if is_debug:
+        print(app.url_map)
+        Timer(1.2, open_browser).start()
 
     app.run(
-        host="127.0.0.1",
-        port=5000,
-        debug=True,
-        use_reloader=False
-    )
+        host=host,
+        port=port,
+        debug=is_debug,
+        use_reloader=False,
+    )
