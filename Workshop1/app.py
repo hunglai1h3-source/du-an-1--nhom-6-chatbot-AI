@@ -96,8 +96,17 @@ app.config["SECRET_KEY"] = _secret_key
 rate_limiter = RateLimiter()
 brute_force_protector = BruteForceProtector()
 
+
+def get_client_ip():
+    """Lấy IP thực tế của client, hỗ trợ reverse proxy (Render/Cloudflare/Nginx)."""
+    if request.access_route:
+        return request.access_route[0]
+    return request.remote_addr or "unknown"
+
+
 # Giữ phiên đăng nhập tối đa 30 ngày.
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
 
 
 # Cấu hình cookie đăng nhập.
@@ -672,7 +681,11 @@ def build_medical_context(user_question, limit=3):
 
 
 def initialize_database():
-    connection = get_database()
+    try:
+        connection = get_database()
+    except Exception as error:
+        print(f"⚠️ [DB INIT WARNING] Chưa thể kết nối PostgreSQL khi khởi động ({error}). Ứng dụng vẫn chạy; kết nối sẽ được thử lại tự động khi CSDL sẵn sàng.")
+        return
 
     try:
         connection.execute("""
@@ -1179,7 +1192,10 @@ def initialize_database():
     finally:
         connection.close()
 
-initialize_database()
+try:
+    initialize_database()
+except Exception as error:
+    print(f"⚠️ [DB INIT WARNING] Lỗi khởi tạo bảng CSDL: {error}")
 
 
 def load_conversation_state_from_db(connection, conversation_id, user_id=None):
@@ -1239,13 +1255,17 @@ def save_conversation_state_to_db(connection, state):
 
 
 def get_setting(key, default=""):
-    connection = get_database()
-    row = connection.execute(
-        "SELECT setting_value FROM system_settings WHERE setting_key = ?",
-        (key,),
-    ).fetchone()
-    connection.close()
-    return row["setting_value"] if row else default
+    try:
+        connection = get_database()
+        row = connection.execute(
+            "SELECT setting_value FROM system_settings WHERE setting_key = ?",
+            (key,),
+        ).fetchone()
+        connection.close()
+        return row["setting_value"] if row else default
+    except Exception:
+        return default
+
 
 
 def get_user_entitlement(connection, user_id):
@@ -2183,8 +2203,9 @@ def health():
 
 @app.post("/register")
 def register():
-    ip = request.remote_addr or "unknown"
+    ip = get_client_ip()
     allowed, retry_after = rate_limiter.is_allowed(f"register_rate:{ip}", limit=10, window_seconds=60)
+
     if not allowed:
         return jsonify({
             "error": f"Quá nhiều yêu cầu đăng ký từ địa chỉ của bạn. Vui lòng thử lại sau {retry_after} giây."
@@ -2264,8 +2285,9 @@ def register():
 
 @app.post("/login")
 def login():
-    ip = request.remote_addr or "unknown"
+    ip = get_client_ip()
     allowed, retry_after = rate_limiter.is_allowed(f"login_rate:{ip}", limit=15, window_seconds=60)
+
     if not allowed:
         return jsonify({
             "error": f"Bạn đang thử đăng nhập quá nhanh. Vui lòng chờ {retry_after} giây."
@@ -2907,8 +2929,9 @@ def sepay_payment_webhook():
 @app.post("/transcribe")
 def transcribe_audio():
     """Nhận bản ghi âm và chuyển lời nói tiếng Việt thành văn bản bằng Gemini native API."""
-    ip = request.remote_addr or "unknown"
+    ip = get_client_ip()
     user_id = session.get("user_id")
+
     client_key = f"transcribe:{user_id or ip}"
     allowed, retry_after = rate_limiter.is_allowed(client_key, limit=20, window_seconds=60)
     if not allowed:
@@ -3859,8 +3882,9 @@ def reset_chat_state():
 def chat():
     # Kiểm tra giới hạn tần suất gửi tin nhắn (Sliding window rate limit)
     user_id = session.get("user_id")
-    ip = request.remote_addr or "unknown"
+    ip = get_client_ip()
     client_key = f"chat:{user_id or ip}"
+
     chat_limit = int(os.getenv("CHAT_RATE_LIMIT", "40"))
     allowed, retry_after = rate_limiter.is_allowed(client_key, limit=chat_limit, window_seconds=60)
     if not allowed:

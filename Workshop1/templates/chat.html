@@ -9,6 +9,7 @@
 </head>
 <body>
   <header class="topbar">
+    <button class="icon-button mobile-nav-btn" id="mobileMenuButton" type="button" aria-label="Mở lịch sử chat" title="Lịch sử chat">☰</button>
     <a class="brand" href="/" aria-label="MediCare AI">
       <span class="brand-mark">+</span>
       <span><strong>MediCare <em>AI</em></strong><small>AI đồng hành cùng sức khỏe</small></span>
@@ -25,6 +26,7 @@
     <div class="top-actions">
       <a class="back-overview" href="/">← Tổng quan</a>
       <button class="icon-button" data-action="toggle-theme" type="button" title="Đổi giao diện">☾</button>
+      <button class="icon-button mobile-nav-btn" id="mobileContextButton" type="button" aria-label="Mở hồ sơ & tiện ích" title="Hồ sơ & Tiện ích">ℹ</button>
       <button class="icon-button" id="notificationButton" type="button" title="Thông báo">♢<b>3</b></button>
       <button class="account-button" id="accountButton" type="button">
         <span class="account-avatar" id="accountAvatar">K</span>
@@ -33,8 +35,12 @@
     </div>
   </header>
 
-  <main class="consultation-shell">
-    <aside class="history-sidebar" aria-label="Lịch sử trò chuyện">
+  <main class="consultation-shell" id="consultationShell">
+    <aside class="history-sidebar" id="historySidebar" aria-label="Lịch sử trò chuyện">
+      <div class="sidebar-mobile-header mobile-only">
+        <span>Lịch sử trò chuyện</span>
+        <button class="icon-button" id="closeHistorySidebar" type="button" aria-label="Đóng lịch sử">✕</button>
+      </div>
       <button class="new-chat-button" id="newChatButton" type="button">＋ Cuộc trò chuyện mới</button>
 
       <div class="history-search-row">
@@ -91,6 +97,8 @@
               <button class="danger" type="button" data-chat-action="delete">Xóa cuộc trò chuyện</button>
             </div>
           </div>
+
+          <button class="icon-button toggle-context-btn" id="toggleContextButton" type="button" title="Ẩn/Hiện tiện ích" aria-label="Ẩn/Hiện tiện ích">🗂</button>
         </header>
 
         <div class="profile-context-strip" id="profileContextStrip"></div>
@@ -134,7 +142,10 @@
         <form class="composer" id="chatForm">
           <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
           <button class="composer-tool" id="attachImageButton" type="button" title="Gửi ảnh" aria-label="Gửi ảnh">🖼</button>
-          <textarea id="chatInput" rows="1" maxlength="4000" placeholder="Nhập câu hỏi sức khỏe của bạn..."></textarea>
+          <div class="composer-input-wrap">
+            <textarea id="chatInput" rows="1" maxlength="4000" placeholder="Nhập câu hỏi sức khỏe của bạn..."></textarea>
+            <span class="char-counter hidden" id="charCounter">0/4000</span>
+          </div>
           <button class="composer-tool" id="voiceButton" type="button" title="Ghi âm" aria-label="Ghi âm">🎙</button>
           <button class="send-button" id="sendButton" type="submit" title="Gửi" aria-label="Gửi câu hỏi">➤</button>
         </form>
@@ -143,7 +154,11 @@
       </article>
     </section>
 
-    <aside class="context-sidebar">
+    <aside class="context-sidebar" id="contextSidebar">
+      <div class="sidebar-mobile-header mobile-only">
+        <span>Hồ sơ & Tiện ích</span>
+        <button class="icon-button" id="closeContextSidebar" type="button" aria-label="Đóng tiện ích">✕</button>
+      </div>
       <section class="context-card profile-detail-card">
         <div class="context-heading"><h2>Hồ sơ sức khỏe</h2><div><button id="editSelfHealthButton" type="button">Cập nhật</button><button id="contextChangeProfileButton" type="button">Chọn hồ sơ</button></div></div>
         <div class="profile-detail-head">
@@ -193,7 +208,21 @@
         <a href="tel:115">☎ 115</a>
       </section>
     </aside>
+    <div class="sidebar-backdrop hidden" id="sidebarBackdrop"></div>
   </main>
+
+  <div class="shared-modal hidden" id="confirmDeleteModal" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle">
+    <section class="shared-modal-card confirm-modal-card">
+      <button class="shared-modal-close" id="closeConfirmDeleteModal" type="button" aria-label="Đóng">×</button>
+      <div class="confirm-modal-icon">🗑️</div>
+      <h2 id="confirmDeleteTitle">Xác nhận xóa</h2>
+      <p id="confirmDeleteMessage">Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.</p>
+      <div class="confirm-modal-actions">
+        <button class="confirm-cancel" id="cancelConfirmDeleteButton" type="button">Hủy</button>
+        <button class="confirm-danger" id="actionConfirmDeleteButton" type="button">Xóa</button>
+      </div>
+    </section>
+  </div>
 
   <div class="shared-modal hidden" id="specialtyModal" role="dialog" aria-modal="true" aria-labelledby="specialtyTitle">
     <section class="shared-modal-card specialty-modal-card">

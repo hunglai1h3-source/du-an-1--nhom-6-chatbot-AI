@@ -312,273 +312,334 @@ function renderProfiles() {
  
 
 function formatText(value, isAssistant = false) {
-
   const raw = String(value || "").replace(/\r\n?/g, "\n").trim();
 
- 
-
   // Tin nhắn người dùng: chỉ escape HTML và giữ xuống dòng đơn giản.
-
   if (!isAssistant) {
-
     return M.escapeHTML(raw).replace(/\n/g, "<br>");
-
   }
 
- 
+  // Nội dung AI: render Markdown V2 với bảng biểu, code block, trích dẫn, v.v.
+  const escaped = M.escapeHTML(raw);
 
-  // Nội dung AI: render Markdown cơ bản theo kiểu ChatGPT,
+  const inline = (text) => {
+    return text
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/__(.+?)__/g, "<strong>$1</strong>")
+      // Italic
+      .replace(/\*([^\*\n]+)\*/g, "<em>$1</em>")
+      .replace(/_([^_\n]+)_/g, "<em>$1</em>")
+      // Inline code
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      // Safe markdown links: [text](url) - only http/https/tel/mailto
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)\"\']+|tel:[^\s\)\"\']+|mailto:[^\s\)\"\']+)\)/g, (match, label, url) => {
+        return `<a class="chat-link" href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      });
+  };
 
-  // đồng thời tránh việc mỗi ký tự xuống dòng bị nhân đôi khoảng cách.
-
-  const source = M.escapeHTML(raw)
-
-    .replace(/\n{3,}/g, "\n\n")
-
-    .split("\n");
-
- 
-
-  const inline = (line) => line
-
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-
-    .replace(/__(.+?)__/g, "<strong>$1</strong>")
-
-    .replace(/`([^`]+)`/g, "<code>$1</code>");
-
- 
-
+  const lines = escaped.split("\n");
   const html = [];
-
   let paragraph = [];
-
   let inList = false;
-
   let listType = "ul";
-
- 
+  let inCodeBlock = false;
+  let codeBlockLines = [];
+  let codeBlockLang = "";
+  let inTable = false;
+  let tableRows = [];
 
   const flushParagraph = () => {
-
     if (!paragraph.length) return;
-
     html.push(`<p>${paragraph.map(inline).join("<br>")}</p>`);
-
     paragraph = [];
-
   };
-
- 
 
   const closeList = () => {
-
     if (!inList) return;
-
     html.push(`</${listType}>`);
-
     inList = false;
-
   };
 
- 
+  const closeTable = () => {
+    if (!inTable) return;
+    if (tableRows.length > 0) {
+      let tableHtml = '<div class="table-wrap"><table>';
+      const hasHeader = tableRows.length >= 2;
+      const headerRow = tableRows[0];
+      tableHtml += '<thead><tr>' + headerRow.map(cell => `<th>${inline(cell)}</th>`).join('') + '</tr></thead>';
+      tableHtml += '<tbody>';
+      for (let i = (hasHeader ? 1 : 0); i < tableRows.length; i++) {
+        tableHtml += '<tr>' + tableRows[i].map(cell => `<td>${inline(cell)}</td>`).join('') + '</tr>';
+      }
+      tableHtml += '</tbody></table></div>';
+      html.push(tableHtml);
+    }
+    tableRows = [];
+    inTable = false;
+  };
 
-  source.forEach((originalLine) => {
-
+  for (let i = 0; i < lines.length; i++) {
+    const originalLine = lines[i];
     const line = originalLine.trim();
 
- 
+    // Check fenced code block ```
+    if (line.startsWith("```")) {
+      flushParagraph();
+      closeList();
+      closeTable();
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeBlockLang = line.slice(3).trim();
+        codeBlockLines = [];
+      } else {
+        inCodeBlock = false;
+        const codeContent = codeBlockLines.join("\n");
+        const langAttr = codeBlockLang ? ` class="language-${M.escapeHTML(codeBlockLang)}"` : "";
+        html.push(`<pre><code${langAttr}>${codeContent}</code></pre>`);
+        codeBlockLines = [];
+        codeBlockLang = "";
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(originalLine);
+      continue;
+    }
 
     if (!line) {
-
       flushParagraph();
-
       closeList();
-
-      return;
-
+      closeTable();
+      continue;
     }
 
- 
+    // Markdown Table Row: | Col 1 | Col 2 |
+    if (line.startsWith("|") && line.endsWith("|")) {
+      const isSeparator = /^\|(\s*:?-+:?\s*\|)+$/.test(line);
+      if (isSeparator) {
+        continue;
+      }
+      flushParagraph();
+      closeList();
+      inTable = true;
+      const cells = line.slice(1, -1).split("|").map(c => c.trim());
+      tableRows.push(cells);
+      continue;
+    } else if (inTable) {
+      closeTable();
+    }
 
+    // Blockquote: > text or &gt; text
+    const bqMatch = line.match(/^(&gt;|>)\s*(.*)$/);
+    if (bqMatch) {
+      flushParagraph();
+      closeList();
+      html.push(`<blockquote><p>${inline(bqMatch[2])}</p></blockquote>`);
+      continue;
+    }
+
+    // Heading: #, ##, ###, ####
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
-
     if (heading) {
-
       flushParagraph();
-
       closeList();
-
-      const level = heading[1].length <= 2 ? 2 : 3;
-
+      const level = heading[1].length <= 2 ? 2 : (heading[1].length === 3 ? 3 : 4);
       html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
-
-      return;
-
+      continue;
     }
 
- 
-
+    // Horizontal Rule: ---, ***, ___
     if (/^(-{3,}|_{3,}|\*{3,})$/.test(line)) {
-
       flushParagraph();
-
       closeList();
-
       html.push("<hr>");
-
-      return;
-
+      continue;
     }
 
- 
-
-    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
-
+    // Ordered List: 1. Item
+    const ordered = line.match(/^(\d+)[.)]\s+(.+)$/);
     if (ordered) {
-
       flushParagraph();
-
       if (!inList || listType !== "ol") {
-
         closeList();
-
         listType = "ol";
-
         html.push("<ol>");
-
         inList = true;
-
       }
-
-      html.push(`<li>${inline(ordered[1])}</li>`);
-
-      return;
-
+      html.push(`<li>${inline(ordered[2])}</li>`);
+      continue;
     }
 
- 
-
+    // Bullet List: - Item, * Item, + Item, • Item
     const bullet = line.match(/^[-*+•]\s+(.+)$/);
-
     if (bullet) {
-
       flushParagraph();
-
       if (!inList || listType !== "ul") {
-
         closeList();
-
         listType = "ul";
-
         html.push("<ul>");
-
         inList = true;
-
       }
-
       html.push(`<li>${inline(bullet[1])}</li>`);
-
-      return;
-
+      continue;
     }
-
- 
 
     closeList();
-
     paragraph.push(line);
-
-  });
-
- 
+  }
 
   flushParagraph();
-
   closeList();
+  closeTable();
 
- 
+  if (inCodeBlock && codeBlockLines.length) {
+    const codeContent = codeBlockLines.join("\n");
+    html.push(`<pre><code>${codeContent}</code></pre>`);
+  }
 
   return html.join("");
-
 }
 
- 
-
- 
-
 function renderEmergencyPanel(message) {
-
   const emergency = message?.emergency;
-
   if (!emergency?.active) return "";
 
- 
-
   const phone = String(emergency.phone || "115").replace(/[^\d+]/g, "") || "115";
-
   const phoneUri = String(emergency.phone_uri || emergency.call || `tel:${phone}`);
-
   const title = emergency.title || "DẤU HIỆU CÓ THỂ CẦN CẤP CỨU";
-
   const primaryAction = emergency.primary_action || `Gọi ${phone} ngay`;
 
- 
-
   return `
-
     <section class="chat-emergency-panel" role="alert" aria-live="assertive">
-
       <div class="chat-emergency-heading">
-
         <span class="chat-emergency-icon" aria-hidden="true">🚨</span>
-
         <div>
-
           <strong>${M.escapeHTML(title)}</strong>
-
           <small>Ưu tiên liên hệ cấp cứu thay vì tiếp tục chờ tư vấn trực tuyến.</small>
-
         </div>
-
       </div>
 
- 
-
       <a
-
         class="chat-emergency-call"
-
         href="${M.escapeHTML(phoneUri)}"
-
         aria-label="${M.escapeHTML(primaryAction)}"
-
       >
-
         <span aria-hidden="true">☎</span>
-
         <span>
-
           <b>${M.escapeHTML(primaryAction)}</b>
-
           <small>Chạm để mở cuộc gọi đến ${M.escapeHTML(phone)}</small>
-
         </span>
-
       </a>
 
- 
-
       <p class="chat-emergency-note">
-
         Không tự lái xe nếu đang khó thở, choáng hoặc có nguy cơ mất ý thức.
-
         Hãy nhờ người ở gần hỗ trợ.
-
       </p>
-
     </section>`;
+}
 
+function renderRiskNotice(riskLevel) {
+  if (riskLevel === "urgent") {
+    return `
+      <div class="risk-notice urgent" role="alert">
+        <span aria-hidden="true">⚠️</span>
+        <div>
+          <strong>Khuyến nghị thăm khám y tế sớm</strong>
+          <p>Triệu chứng của bạn có dấu hiệu cần được bác sĩ chuyên khoa thăm khám trực tiếp để chẩn đoán chính xác.</p>
+        </div>
+      </div>`;
+  }
+  if (riskLevel === "caution") {
+    return `
+      <div class="risk-notice caution" role="status">
+        <span aria-hidden="true">ℹ️</span>
+        <div>
+          <strong>Lưu ý theo dõi triệu chứng</strong>
+          <p>Hãy theo dõi sát diễn biến sức khỏe. Đến ngay cơ sở y tế nếu triệu chứng tăng nặng hoặc không đỡ sau 24-48 giờ.</p>
+        </div>
+      </div>`;
+  }
+  return "";
+}
+
+function renderSources(sources) {
+  if (!Array.isArray(sources) || sources.length === 0) return "";
+
+  const cardsHtml = sources.map((item) => {
+    const title = item.title || "Tài liệu y khoa tham khảo";
+    let sourceName = item.source || "Kho tri thức Y tế";
+    if (/vinmec/i.test(sourceName)) sourceName = "Bệnh viện ĐKQT Vinmec";
+    else if (/vnexpress/i.test(sourceName)) sourceName = "VnExpress Sức Khỏe";
+    else if (/vihealthqa/i.test(sourceName)) sourceName = "ViHealthQA Y Khoa";
+
+    const trustBadge = (item.trust_level === "verified" || item.trust_level === "authoritative")
+      ? '<span class="source-trust-badge">✓ Đã đối chiếu</span>'
+      : '<span class="source-trust-badge">Tham khảo</span>';
+
+    const url = item.source_url && /^https?:\/\//i.test(item.source_url) ? item.source_url : "";
+    const linkHtml = url
+      ? `<a class="source-link" href="${M.escapeHTML(url)}" target="_blank" rel="noopener noreferrer">Đọc bài gốc ↗</a>`
+      : "";
+
+    return `
+      <div class="rag-source-card">
+        <div class="rag-source-header">
+          <span class="rag-source-icon">📚</span>
+          <span class="rag-source-publisher">${M.escapeHTML(sourceName)}</span>
+          ${trustBadge}
+        </div>
+        <p class="rag-source-title">${M.escapeHTML(title)}</p>
+        ${linkHtml}
+      </div>`;
+  }).join("");
+
+  return `
+    <section class="rag-sources-panel" aria-label="Nguồn tham khảo y khoa">
+      <div class="rag-sources-title">
+        <span>📖 Nguồn tham khảo y khoa đã đối chiếu</span>
+        <small>${sources.length} tài liệu liên quan</small>
+      </div>
+      <div class="rag-sources-list">
+        ${cardsHtml}
+      </div>
+    </section>`;
+}
+
+function renderWelcomeHero(profile) {
+  const profileName = profile?.name || "bạn";
+  return `
+    <div class="welcome-hero" id="welcomeHero">
+      <div class="welcome-badge">
+        <span class="welcome-icon">🏥</span>
+        <span>Trợ lý y tế thông minh</span>
+      </div>
+      <h2 class="welcome-title">Xin chào, tôi là MediCare AI</h2>
+      <p class="welcome-subtitle">Đang sẵn sàng đồng hành và tư vấn sức khỏe cho <strong>${M.escapeHTML(profileName)}</strong>. Bạn có thể chọn gợi ý nhanh bên dưới hoặc đặt câu hỏi bất kỳ.</p>
+      <div class="starter-cards">
+        <button class="starter-card" type="button" data-starter-prompt="Tôi bị sốt nhẹ và đau họng từ hôm qua, cần theo dõi những gì?">
+          <span class="starter-icon">🩺</span>
+          <strong>Tư vấn triệu chứng</strong>
+          <small>Sốt nhẹ, đau đầu, ho dai dẳng, đau bụng...</small>
+        </button>
+        <button class="starter-card" type="button" data-starter-prompt="Thuốc Paracetamol nên uống cách nhau mấy tiếng và có lưu ý gì khi dùng?">
+          <span class="starter-icon">💊</span>
+          <strong>Hướng dẫn dùng thuốc</strong>
+          <small>Liều lượng, khoảng cách uống, tương tác thuốc...</small>
+        </button>
+        <button class="starter-card" type="button" data-starter-prompt="Tìm nhà thuốc hoặc phòng khám đa khoa uy tín gần tôi nhất">
+          <span class="starter-icon">📍</span>
+          <strong>Cơ sở y tế gần bạn</strong>
+          <small>Tìm nhà thuốc, trung tâm y tế, bệnh viện gần nhất...</small>
+        </button>
+        <button class="starter-card" type="button" data-starter-prompt="Chỉ số bụi mịn AQI hôm nay thế nào, người có bệnh hô hấp cần lưu ý gì?">
+          <span class="starter-icon">🍃</span>
+          <strong>Môi trường & Thời tiết</strong>
+          <small>Khuyến cáo bụi mịn PM2.5, dị ứng thời tiết...</small>
+        </button>
+      </div>
+    </div>`;
 }
 
  
@@ -685,51 +746,66 @@ function openDislikeFeedback(index) {
 }
 
 function renderMessages() {
-
   const session = ensureSession();
-
   const list = $("#messageList");
-
   const profile = profileForSession(session);
 
-  list.innerHTML = session.messages.map((message, index) => {
+  const hasUserMessage = session.messages.some((m) => m.role === "user");
+  const heroHtml = !hasUserMessage ? renderWelcomeHero(profile) : "";
 
+  const messagesHtml = session.messages.map((message, index) => {
     const isUser = message.role === "user";
-
     const avatar = isUser ? M.initials(profile.name) : "🤖";
 
+    const riskLevel = message.safetyState?.highest_risk_level?.toLowerCase() || (message.emergency?.active ? "emergency" : "normal");
+    let safetyHtml = "";
+    if (message.emergency?.active) {
+      safetyHtml = renderEmergencyPanel(message);
+    } else if (riskLevel === "urgent") {
+      safetyHtml = renderRiskNotice("urgent");
+    } else if (riskLevel === "caution") {
+      safetyHtml = renderRiskNotice("caution");
+    }
+
+    const sourcesHtml = !isUser && message.sources ? renderSources(message.sources) : "";
+
     return `
-
       <article class="message-row ${isUser ? "user" : "assistant"}" data-message-index="${index}">
-
         ${isUser ? "" : `<span class="message-avatar">${avatar}</span>`}
-
         <div class="message-bubble">
-
           ${message.imagePreview ? `<img src="${message.imagePreview}" alt="Ảnh người dùng gửi" style="display:block;max-width:240px;max-height:190px;object-fit:cover;border-radius:11px;margin-bottom:9px">` : ""}
-
           <div class="${isUser ? "user-content" : "ai-content"}">${formatText(message.content, !isUser)}</div>
-
-          ${isUser ? "" : renderEmergencyPanel(message)}
-
+          ${safetyHtml}
+          ${sourcesHtml}
           <div class="message-meta"><time>${M.escapeHTML(message.time || "")}</time>${isUser ? "<span>✓✓</span>" : ""}</div>
-
           ${isUser ? "" : `<div class="message-actions">
             <button type="button" data-copy-index="${index}" title="Sao chép">⧉ <span>Sao chép</span></button>
             <button type="button" class="feedback-action ${message.feedback === "like" ? "active" : ""}" data-feedback-like="${index}" title="Câu trả lời hữu ích" aria-label="Hữu ích">👍</button>
             <button type="button" class="feedback-action ${message.feedback === "dislike" ? "active" : ""}" data-feedback-dislike="${index}" title="Câu trả lời chưa tốt" aria-label="Chưa tốt">👎</button>
             <button type="button" data-like-index="${index}">${message.liked ? "♥ Đã lưu" : "♡ Lưu"}</button>
           </div>`}
-
         </div>
-
         ${isUser ? `<span class="message-avatar">${avatar}</span>` : ""}
-
       </article>`;
-
   }).join("");
 
-  list.scrollTop = list.scrollHeight;
+  const isNearBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 140;
+  list.innerHTML = heroHtml + messagesHtml;
+  if (isNearBottom || isSending || !hasUserMessage) {
+    list.scrollTop = list.scrollHeight;
+  }
+
+  $$('[data-starter-prompt]').forEach((card) => {
+    card.addEventListener("click", () => {
+      const prompt = card.dataset.starterPrompt;
+      const input = $("#chatInput");
+      if (input && prompt) {
+        input.value = prompt;
+        autoResizeInput();
+        input.focus();
+      }
+    });
+  });
 
  
 
@@ -1238,6 +1314,11 @@ async function sendMessage(event) {
   isSending = true;
 
   $("#sendButton").disabled = true;
+  $("#chatInput").disabled = true;
+  const attachBtnStart = $("#attachImageButton");
+  if (attachBtnStart) attachBtnStart.disabled = true;
+  const voiceBtnStart = $("#voiceButton");
+  if (voiceBtnStart) voiceBtnStart.disabled = true;
 
   const previousHistory = session.messages.map(({ role, content }) => ({ role, content })).slice(-12);
 
@@ -1360,16 +1441,13 @@ async function sendMessage(event) {
  
 
     session.messages.push({
-
       role: "assistant",
-
       content: data.reply,
-
       time: nowTime(),
-
       emergency: data.emergency?.active ? data.emergency : null,
+      safetyState: data.safety_state || null,
+      sources: Array.isArray(data.sources) && data.sources.length > 0 ? data.sources : null,
       chatLogId: data.chat_log_id || null
-
     });
 
   } catch (error) {
@@ -1391,6 +1469,12 @@ async function sendMessage(event) {
     isSending = false;
 
     $("#sendButton").disabled = false;
+    $("#chatInput").disabled = false;
+    const attachBtn = $("#attachImageButton");
+    if (attachBtn) attachBtn.disabled = false;
+    const voiceBtn = $("#voiceButton");
+    if (voiceBtn) voiceBtn.disabled = false;
+    $("#chatInput")?.focus();
 
   }
 
@@ -1617,59 +1701,101 @@ function exportCurrentChat() {
 
  
 
+function openConfirmModal({ title, message, confirmText = "Xóa", onConfirm }) {
+  const modal = $("#confirmDeleteModal");
+  if (!modal) {
+    if (confirm(message)) onConfirm?.();
+    return;
+  }
+  $("#confirmDeleteTitle").textContent = title || "Xác nhận";
+  $("#confirmDeleteMessage").textContent = message || "Bạn có chắc chắn muốn thực hiện?";
+  const actionBtn = $("#actionConfirmDeleteButton");
+  actionBtn.textContent = confirmText;
+
+  modal.classList.remove("hidden");
+
+  const close = () => {
+    modal.classList.add("hidden");
+    actionBtn.onclick = null;
+  };
+
+  $("#closeConfirmDeleteModal").onclick = close;
+  $("#cancelConfirmDeleteButton").onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+
+  actionBtn.onclick = () => {
+    close();
+    onConfirm?.();
+  };
+}
+
 function bindChatActions() {
-
   $$('[data-chat-action]').forEach((button) => button.addEventListener("click", () => {
-
     const action = button.dataset.chatAction;
-
     const session = ensureSession();
 
     if (action === "export") exportCurrentChat();
 
     if (action === "clear") {
-      const resetConvId = String(session.id);
-      fetch(`/api/conversations/${encodeURIComponent(resetConvId)}/clear`, {
-        method: "POST",
-        credentials: "same-origin"
-      }).catch(() => {
-        fetch("/chat/reset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversation_id: resetConvId })
-        }).catch(() => {});
-      });
+      openConfirmModal({
+        title: "Xóa nội dung cuộc trò chuyện",
+        message: "Toàn bộ tin nhắn trong cuộc trò chuyện này sẽ bị xóa. Bạn có chắc chắn?",
+        confirmText: "Xóa nội dung",
+        onConfirm: () => {
+          const resetConvId = String(session.id);
+          fetch(`/api/conversations/${encodeURIComponent(resetConvId)}/clear`, {
+            method: "POST",
+            credentials: "same-origin"
+          }).catch(() => {
+            fetch("/chat/reset", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ conversation_id: resetConvId })
+            }).catch(() => {});
+          });
 
-      session.messages = [];
-      session.safetyState = { highest_risk_level: "normal", active_flags: [], safety_unknown: false };
-      session.updatedAt = new Date().toISOString();
-      persistSessions(); renderMessages(); renderHistory();
+          session.messages = [];
+          session.safetyState = { highest_risk_level: "normal", active_flags: [], safety_unknown: false };
+          session.updatedAt = new Date().toISOString();
+          persistSessions();
+          renderMessages();
+          renderHistory();
+          M.showToast("Đã xóa nội dung cuộc trò chuyện.", "success");
+        }
+      });
     }
 
     if (action === "delete") {
-      const deleteConvId = String(session.id);
-      fetch(`/api/conversations/${encodeURIComponent(deleteConvId)}`, {
-        method: "DELETE",
-        credentials: "same-origin"
-      }).catch(() => {
-        fetch("/chat/reset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversation_id: deleteConvId })
-        }).catch(() => {});
-      });
+      openConfirmModal({
+        title: "Xóa cuộc trò chuyện",
+        message: "Cuộc trò chuyện này sẽ bị xóa vĩnh viễn khỏi thiết bị và tài khoản. Bạn có chắc chắn?",
+        confirmText: "Xóa vĩnh viễn",
+        onConfirm: () => {
+          const deleteConvId = String(session.id);
+          fetch(`/api/conversations/${encodeURIComponent(deleteConvId)}`, {
+            method: "DELETE",
+            credentials: "same-origin"
+          }).catch(() => {
+            fetch("/chat/reset", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ conversation_id: deleteConvId })
+            }).catch(() => {});
+          });
 
-      sessions = sessions.filter((item) => item.id !== session.id);
-      currentChatId = "";
-      createSession(); renderMessages(); renderHistory();
+          sessions = sessions.filter((item) => item.id !== session.id);
+          currentChatId = "";
+          createSession();
+          renderMessages();
+          renderHistory();
+          M.showToast("Đã xóa cuộc trò chuyện.", "success");
+        }
+      });
     }
 
     closeMenus();
-
   }));
-
 }
-
 
 
 
@@ -1907,6 +2033,8 @@ async function loadSessionMessages(sessionId) {
           content: m.content,
           time: timeStr,
           emergency: m.metadata?.emergency || null,
+          safetyState: m.metadata?.safety_state || null,
+          sources: m.metadata?.sources || null,
           chatLogId: m.metadata?.chat_log_id || null,
           imagePreview: m.metadata?.imagePreview || null,
         };
@@ -1923,6 +2051,17 @@ async function syncConversationsFromBackend() {
   try {
     const userStatus = await M.currentUser();
     if (!userStatus || !userStatus.logged_in) return;
+
+    if (!sessions.length) {
+      const historyList = $("#historyList");
+      if (historyList) {
+        historyList.innerHTML = `
+          <div class="history-skeleton"><div class="skeleton-line" style="width:75%;height:14px;margin-bottom:8px"></div><div class="skeleton-line" style="width:50%;height:10px"></div></div>
+          <div class="history-skeleton"><div class="skeleton-line" style="width:80%;height:14px;margin-bottom:8px"></div><div class="skeleton-line" style="width:40%;height:10px"></div></div>
+          <div class="history-skeleton"><div class="skeleton-line" style="width:65%;height:14px;margin-bottom:8px"></div><div class="skeleton-line" style="width:55%;height:10px"></div></div>
+        `;
+      }
+    }
 
     const response = await fetch("/api/conversations", { credentials: "same-origin" });
     if (!response.ok) return;
@@ -2014,7 +2153,71 @@ async function initialize() {
 
   $("#favoriteFilterButton").addEventListener("click", (event) => { favoriteOnly = !favoriteOnly; event.currentTarget.classList.toggle("active", favoriteOnly); event.currentTarget.textContent = favoriteOnly ? "★" : "☆"; renderHistory(); });
 
-  $("#clearAllHistoryButton").addEventListener("click", () => { if (!confirm("Xóa toàn bộ lịch sử chat trên thiết bị?")) return; sessions = []; currentChatId = ""; createSession(); renderHistory(); renderMessages(); });
+  $("#clearAllHistoryButton").addEventListener("click", () => {
+    openConfirmModal({
+      title: "Xóa toàn bộ lịch sử",
+      message: "Toàn bộ lịch sử trò chuyện trên thiết bị này sẽ bị xóa. Bạn có chắc chắn?",
+      confirmText: "Xóa tất cả",
+      onConfirm: () => {
+        sessions = [];
+        currentChatId = "";
+        createSession();
+        renderHistory();
+        renderMessages();
+        M.showToast("Đã xóa toàn bộ lịch sử.", "success");
+      }
+    });
+  });
+
+  // Toggle Context Sidebar (Desktop)
+  const shell = $("#consultationShell");
+  const toggleContextBtn = $("#toggleContextButton");
+  toggleContextBtn?.addEventListener("click", () => {
+    shell?.classList.toggle("context-collapsed");
+  });
+
+  // Mobile Drawers
+  const mobileMenuBtn = $("#mobileMenuButton");
+  const mobileContextBtn = $("#mobileContextButton");
+  const historySidebar = $("#historySidebar");
+  const contextSidebar = $("#contextSidebar");
+  const backdrop = $("#sidebarBackdrop");
+  const closeHistoryBtn = $("#closeHistorySidebar");
+  const closeContextBtn = $("#closeContextSidebar");
+
+  const closeDrawers = () => {
+    historySidebar?.classList.remove("mobile-open");
+    contextSidebar?.classList.remove("mobile-open");
+    backdrop?.classList.add("hidden");
+  };
+
+  mobileMenuBtn?.addEventListener("click", () => {
+    contextSidebar?.classList.remove("mobile-open");
+    historySidebar?.classList.toggle("mobile-open");
+    backdrop?.classList.toggle("hidden", !historySidebar?.classList.contains("mobile-open"));
+  });
+
+  mobileContextBtn?.addEventListener("click", () => {
+    historySidebar?.classList.remove("mobile-open");
+    contextSidebar?.classList.toggle("mobile-open");
+    backdrop?.classList.toggle("hidden", !contextSidebar?.classList.contains("mobile-open"));
+  });
+
+  closeHistoryBtn?.addEventListener("click", closeDrawers);
+  closeContextBtn?.addEventListener("click", closeDrawers);
+  backdrop?.addEventListener("click", closeDrawers);
+
+  // Character counter for composer
+  const chatInputEl = $("#chatInput");
+  const charCounterEl = $("#charCounter");
+  if (chatInputEl && charCounterEl) {
+    chatInputEl.addEventListener("input", () => {
+      const len = chatInputEl.value.length;
+      charCounterEl.textContent = `${len}/4000`;
+      charCounterEl.classList.toggle("hidden", len < 3000);
+      charCounterEl.classList.toggle("warning", len >= 3800);
+    });
+  }
 
   $("#profileControl").addEventListener("click", (event) => { event.stopPropagation(); const menu = $("#profileMenu"); menu.classList.toggle("hidden"); $("#moreMenu").classList.add("hidden"); event.currentTarget.setAttribute("aria-expanded", String(!menu.classList.contains("hidden"))); });
 
@@ -2027,6 +2230,16 @@ async function initialize() {
   $("#moreButton").addEventListener("click", (event) => { event.stopPropagation(); $("#moreMenu").classList.toggle("hidden"); $("#profileMenu").classList.add("hidden"); });
 
   document.addEventListener("click", closeMenus);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeMenus();
+      $("#confirmDeleteModal")?.classList.add("hidden");
+      $("#specialtyModal")?.classList.add("hidden");
+      $("#healthProfileModal")?.classList.add("hidden");
+      $("#feedbackModal")?.classList.add("hidden");
+      closeDrawers();
+    }
+  });
 
   bindChatActions();
 
