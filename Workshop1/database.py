@@ -116,6 +116,7 @@ TABLES_WITH_AUTO_ID = {
     "health_news",
     "symptom_logs",
     "health_metric_logs",
+    "conversation_messages",
 }
 
 

@@ -36,6 +36,27 @@ from conversation_engine import (
     format_conversation_state_for_prompt,
     enforce_single_question_output,
 )
+from conversation_repository import (
+    create_conversation,
+    get_conversation,
+    list_conversations,
+    update_conversation_title,
+    update_conversation_summary,
+    get_conversation_summary,
+    update_conversation_activity,
+    delete_conversation,
+    clear_conversation_messages,
+    save_message,
+    get_conversation_messages,
+    get_recent_messages,
+    verify_conversation_ownership,
+)
+from conversation_memory import (
+    should_update_summary,
+    generate_structured_summary,
+    build_conversation_context,
+    MAX_RECENT_MESSAGES_FOR_PROMPT,
+)
 import time
 import webbrowser
 import csv
@@ -1159,6 +1180,54 @@ def initialize_database():
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_conversation_states_lookup
             ON conversation_states(conversation_id, user_id)
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                title TEXT NOT NULL DEFAULT 'Cuộc trò chuyện mới',
+                profile_id TEXT,
+                summary TEXT,
+                turn_count INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_conversations_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
+            ON conversations(user_id, updated_at DESC)
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id SERIAL PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                client_message_id TEXT,
+                metadata_json TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_conv_messages_conv
+                    FOREIGN KEY (conversation_id)
+                    REFERENCES conversations(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_conv_messages_conv_created
+            ON conversation_messages(conversation_id, created_at ASC)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_conv_messages_client_dedup
+            ON conversation_messages(conversation_id, client_message_id)
         """)
 
         connection.commit()
@@ -3618,9 +3687,120 @@ def parse_optional_json_object(value):
     return parsed if isinstance(parsed, dict) else {}
 
 
+@app.get("/api/conversations")
+def get_conversations_api():
+    """Lấy danh sách các cuộc trò chuyện của người dùng hiện tại."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"conversations": []}), 200
+    connection = get_database()
+    try:
+        conversations = list_conversations(connection, user_id, limit=50)
+        return jsonify({"conversations": conversations}), 200
+    finally:
+        connection.close()
+
+
+@app.post("/api/conversations")
+def create_conversation_api():
+    """Tạo mới một cuộc trò chuyện gắn với người dùng hiện tại."""
+    data = request.get_json(silent=True) or {}
+    user_id = session.get("user_id")
+    title = data.get("title") or "Cuộc trò chuyện mới"
+    profile_id = data.get("profile_id") or ""
+    conversation_id = data.get("conversation_id") or f"conv_{uuid4().hex[:16]}"
+
+    connection = get_database()
+    try:
+        conv = create_conversation(
+            connection,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            title=title,
+            profile_id=profile_id,
+        )
+        connection.commit()
+        return jsonify({"status": "success", "conversation": conv}), 201
+    except Exception as err:
+        connection.rollback()
+        return jsonify({"status": "error", "message": str(err)}), 500
+    finally:
+        connection.close()
+
+
+@app.get("/api/conversations/<conversation_id>/messages")
+def get_conversation_messages_api(conversation_id):
+    """Lấy danh sách tin nhắn của một cuộc trò chuyện với xác thực quyền sở hữu."""
+    user_id = session.get("user_id")
+    connection = get_database()
+    try:
+        conv = get_conversation(connection, conversation_id)
+        if not conv:
+            return jsonify({"error": "Không tìm thấy cuộc trò chuyện."}), 404
+        if conv.get("user_id") is not None and conv.get("user_id") != user_id:
+            return jsonify({"error": "Không có quyền truy cập cuộc trò chuyện này."}), 403
+
+        messages = get_conversation_messages(connection, conversation_id, limit=100)
+        return jsonify({
+            "status": "success",
+            "conversation": conv,
+            "messages": messages,
+        }), 200
+    finally:
+        connection.close()
+
+
+@app.delete("/api/conversations/<conversation_id>")
+def delete_conversation_api(conversation_id):
+    """Xóa cuộc trò chuyện và toàn bộ tin nhắn liên quan."""
+    user_id = session.get("user_id")
+    connection = get_database()
+    try:
+        conv = get_conversation(connection, conversation_id)
+        if not conv:
+            return jsonify({"error": "Không tìm thấy cuộc trò chuyện."}), 404
+        if conv.get("user_id") is not None and conv.get("user_id") != user_id:
+            return jsonify({"error": "Không có quyền xóa cuộc trò chuyện này."}), 403
+
+        deleted = delete_conversation(connection, conversation_id, user_id=user_id if conv.get("user_id") is not None else None)
+        connection.commit()
+        if deleted:
+            return jsonify({"status": "success", "message": "Đã xóa cuộc trò chuyện."}), 200
+        return jsonify({"error": "Không thể xóa cuộc trò chuyện."}), 400
+    except Exception as err:
+        connection.rollback()
+        return jsonify({"status": "error", "message": str(err)}), 500
+    finally:
+        connection.close()
+
+
+@app.post("/api/conversations/<conversation_id>/clear")
+def clear_conversation_api(conversation_id):
+    """Xóa toàn bộ tin nhắn và reset state của cuộc trò chuyện."""
+    user_id = session.get("user_id")
+    connection = get_database()
+    try:
+        conv = get_conversation(connection, conversation_id)
+        if not conv:
+            return jsonify({"error": "Không tìm thấy cuộc trò chuyện."}), 404
+        if conv.get("user_id") is not None and conv.get("user_id") != user_id:
+            return jsonify({"error": "Không có quyền thao tác trên cuộc trò chuyện này."}), 403
+
+        cleared = clear_conversation_messages(connection, conversation_id, user_id=user_id if conv.get("user_id") is not None else None)
+        connection.commit()
+        if cleared:
+            return jsonify({"status": "success", "message": "Đã xóa nội dung cuộc trò chuyện."}), 200
+        return jsonify({"error": "Không thể xóa nội dung cuộc trò chuyện."}), 400
+    except Exception as err:
+        connection.rollback()
+        return jsonify({"status": "error", "message": str(err)}), 500
+    finally:
+        connection.close()
+
+
 @app.post("/chat/reset")
 def reset_chat_state():
-    """Xóa structured conversation state của một conversation_id cụ thể."""
+    """Xóa structured conversation state và tin nhắn của một conversation_id cụ thể."""
     try:
         content_type = request.content_type or ""
         if content_type.startswith("multipart/form-data"):
@@ -3635,6 +3815,7 @@ def reset_chat_state():
         user_id = session.get("user_id")
         connection = get_database()
         try:
+            clear_conversation_messages(connection, conv_id, user_id=user_id)
             if user_id:
                 connection.execute(
                     "DELETE FROM conversation_states WHERE conversation_id = ? AND user_id = ?",
@@ -3666,6 +3847,10 @@ def chat():
 
             conversation_id = str(
                 request.form.get("conversation_id", "")
+            ).strip()[:120]
+
+            client_message_id = str(
+                request.form.get("client_message_id", "")
             ).strip()[:120]
 
             history_raw = request.form.get("history", "[]")
@@ -3704,6 +3889,10 @@ def chat():
 
             conversation_id = str(
                 data.get("conversation_id", "")
+            ).strip()[:120]
+
+            client_message_id = str(
+                data.get("client_message_id", "")
             ).strip()[:120]
 
             history = clean_history(
@@ -3748,6 +3937,49 @@ def chat():
             }), 400
 
         # ----------------------------------------------------------------------
+        # KHỞI TẠO HOẶC XÁC THỰC QUYỀN SỞ HỮU CONVERSATION (PHASE 3)
+        # ----------------------------------------------------------------------
+        effective_conv_id = conversation_id or f"conv_{uuid4().hex[:16]}"
+        user_id = session.get("user_id")
+        conv_connection = None
+        existing_conv = None
+        try:
+            conv_connection = get_database()
+            existing_conv = get_conversation(conv_connection, effective_conv_id)
+            if existing_conv:
+                # Kiểm tra quyền sở hữu: nếu cuộc trò chuyện thuộc user khác -> 403 Forbidden
+                if existing_conv.get("user_id") is not None and user_id is not None and int(existing_conv.get("user_id")) != int(user_id):
+                    conv_connection.close()
+                    return jsonify({"error": "Không có quyền truy cập cuộc trò chuyện này."}), 403
+            else:
+                init_title = (user_message[:50] if user_message else "Cuộc trò chuyện mới").strip()
+                prof_id_str = str((selected_profile or {}).get("id") or "")
+                existing_conv = create_conversation(
+                    conv_connection,
+                    conversation_id=effective_conv_id,
+                    user_id=user_id,
+                    title=init_title,
+                    profile_id=prof_id_str,
+                )
+                conv_connection.commit()
+
+            # Lưu tin nhắn người dùng vào PostgreSQL (chống trùng lặp qua client_message_id)
+            save_message(
+                conv_connection,
+                conversation_id=effective_conv_id,
+                role="user",
+                content=user_message or "[Ảnh được tải lên]",
+                client_message_id=client_message_id or None,
+                metadata={
+                    "has_image": has_image,
+                    "profile_id": (selected_profile or {}).get("id"),
+                },
+            )
+            conv_connection.commit()
+        except Exception as conv_init_err:
+            print("Lỗi khởi tạo conversation/message trong /chat:", conv_init_err)
+
+        # ----------------------------------------------------------------------
         # SAFETY GATE V2 (Deterministic + Context-Aware Safety)
         # TEXT SAFETY LUÔN CHẠY KHI CÓ USER MESSAGE (BẤT KỂ has_image!)
         # ----------------------------------------------------------------------
@@ -3775,6 +4007,25 @@ def chat():
             except Exception:
                 pass
 
+            if conv_connection:
+                try:
+                    save_message(
+                        conv_connection,
+                        conversation_id=effective_conv_id,
+                        role="assistant",
+                        content=emergency_reply,
+                        metadata={
+                            "emergency": emergency_payload,
+                            "category": safety_result.category,
+                        },
+                    )
+                    update_conversation_activity(conv_connection, effective_conv_id, turn_increment=1)
+                    conv_connection.commit()
+                except Exception:
+                    pass
+                finally:
+                    conv_connection.close()
+
             updated_state = create_updated_safety_state(safety_result, safety_state_input)
             return jsonify({
                 "reply": emergency_reply,
@@ -3783,6 +4034,7 @@ def chat():
                 "fast_path": True,
                 "safety_result": safety_result.to_dict(),
                 "safety_state": updated_state.to_dict(),
+                "conversation_id": effective_conv_id,
             })
 
         # Yêu cầu xem hồ sơ được xử lý trực tiếp từ hồ sơ đã được server xác minh.
@@ -3812,11 +4064,28 @@ def chat():
             except Exception:
                 pass
 
+            if conv_connection:
+                try:
+                    save_message(
+                        conv_connection,
+                        conversation_id=effective_conv_id,
+                        role="assistant",
+                        content=reply,
+                        metadata={"profile_lookup": True},
+                    )
+                    update_conversation_activity(conv_connection, effective_conv_id, turn_increment=1)
+                    conv_connection.commit()
+                except Exception:
+                    pass
+                finally:
+                    conv_connection.close()
+
             return jsonify({
                 "reply": reply,
                 "profile_used": response_profile or None,
                 "profile_lookup": True,
                 "chat_log_id": chat_log_id,
+                "conversation_id": effective_conv_id,
             })
 
         if client is None:
@@ -3949,24 +4218,47 @@ def chat():
                 })
 
         # ----------------------------------------------------------------------
-        # CONVERSATION STATE ENGINE (PHASE 2)
+        # CONVERSATION STATE ENGINE (PHASE 2) & LONG-TERM CONTEXT MEMORY (PHASE 3)
         # ----------------------------------------------------------------------
-        effective_conv_id = conversation_id or f"conv_{session.get('user_id', 'anon')}"
+        if not conv_connection:
+            try:
+                conv_connection = get_database()
+            except Exception:
+                pass
+
+        db_recent_messages = []
+        db_summary = ""
+        if conv_connection:
+            try:
+                db_recent_messages = get_recent_messages(conv_connection, effective_conv_id, limit=MAX_RECENT_MESSAGES_FOR_PROMPT)
+                db_summary = get_conversation_summary(conv_connection, effective_conv_id) or ""
+            except Exception:
+                pass
+
+        # Lấy lịch sử hội thoại thực tế (ưu tiên từ DB nếu có các lượt trước đó)
+        if len(db_recent_messages) > 1:
+            effective_history = [
+                {"role": m["role"], "content": m["content"]}
+                for m in db_recent_messages[:-1]
+                if m.get("content")
+            ]
+        else:
+            effective_history = history
+
         conv_state = MedicalConversationState(conversation_id=effective_conv_id, user_id=session.get("user_id"))
-        conv_connection = None
-        try:
-            conv_connection = get_database()
-            if not history:
-                conv_state = MedicalConversationState(conversation_id=effective_conv_id, user_id=session.get("user_id"))
-            else:
-                conv_state = load_conversation_state_from_db(conv_connection, effective_conv_id, session.get("user_id"))
-        except Exception:
-            pass
+        if conv_connection:
+            try:
+                if not effective_history:
+                    conv_state = MedicalConversationState(conversation_id=effective_conv_id, user_id=session.get("user_id"))
+                else:
+                    conv_state = load_conversation_state_from_db(conv_connection, effective_conv_id, session.get("user_id"))
+            except Exception:
+                pass
 
         conv_state = process_conversation_turn(
             user_message=user_message,
             state=conv_state,
-            history=history,
+            history=effective_history,
             profile=effective_profile,
         )
 
@@ -3974,6 +4266,18 @@ def chat():
             "role": "system",
             "content": format_conversation_state_for_prompt(conv_state),
         })
+
+        if db_summary:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "TÓM TẮT DIỄN BIẾN TRƯỚC ĐÓ CỦA CUỘC TRÒ CHUYỆN (CÁC LƯỢT TRƯỚC):\n"
+                    f"{db_summary.strip()}\n\n"
+                    "QUY TẮC:\n"
+                    "- Đã nắm rõ các thông tin trên, không hỏi lại những gì đã được ghi nhận trong tóm tắt.\n"
+                    "- Duy trì tính liền mạch với các lời khuyên trước đó."
+                ),
+            })
 
         # Chỉ truy xuất kho kiến thức cho câu hỏi văn bản.
         # Không dùng database để suy đoán nội dung của ảnh.
@@ -4008,7 +4312,7 @@ def chat():
                     user_message[:100]
                 )
 
-        messages.extend(history)
+        messages.extend(effective_history[-MAX_RECENT_MESSAGES_FOR_PROMPT:])
 
         # Đặt nhật ký diễn biến sau lịch sử hội thoại để AI luôn ưu tiên dữ liệu
         # vừa được người dùng lưu ở mục "Diễn biến bệnh & triệu chứng".
@@ -4370,9 +4674,38 @@ Yêu cầu bổ sung:
 
         if conv_connection:
             try:
+                save_message(
+                    conv_connection,
+                    conversation_id=effective_conv_id,
+                    role="assistant",
+                    content=reply,
+                    metadata={
+                        "usage": usage_data,
+                        "stage": conv_state.stage,
+                        "next_action": conv_state.next_action,
+                    },
+                )
                 save_conversation_state_to_db(conv_connection, conv_state)
-            except Exception:
-                pass
+
+                # Cập nhật tiêu đề từ câu hỏi đầu tiên nếu còn là mặc định
+                if existing_conv and (not existing_conv.get("title") or existing_conv.get("title") == "Cuộc trò chuyện mới"):
+                    first_title = (user_message[:50] if user_message else "Tư vấn sức khỏe").strip()
+                    update_conversation_title(conv_connection, effective_conv_id, first_title)
+
+                # Kiểm tra và cập nhật rolling summary
+                all_msgs = get_conversation_messages(conv_connection, effective_conv_id, limit=60)
+                conv_info = get_conversation(conv_connection, effective_conv_id)
+                cur_turns = (conv_info.get("turn_count", 0) if conv_info else 0) + 1
+                if should_update_summary(cur_turns, len(all_msgs), has_summary=bool(db_summary)):
+                    msgs_to_summarize = all_msgs[:-6] if len(all_msgs) > 6 else all_msgs
+                    new_summary = generate_structured_summary(msgs_to_summarize, existing_summary=db_summary)
+                    if new_summary:
+                        update_conversation_summary(conv_connection, effective_conv_id, new_summary)
+
+                update_conversation_activity(conv_connection, effective_conv_id, turn_increment=1)
+                conv_connection.commit()
+            except Exception as save_err:
+                print("Lỗi lưu assistant message / summary:", save_err)
             finally:
                 conv_connection.close()
 
@@ -4389,11 +4722,21 @@ Yêu cầu bổ sung:
         })
 
     except ValueError as error:
+        if "conv_connection" in locals() and conv_connection:
+            try:
+                conv_connection.close()
+            except Exception:
+                pass
         return jsonify({
             "error": str(error)
         }), 400
 
     except Exception as error:
+        if "conv_connection" in locals() and conv_connection:
+            try:
+                conv_connection.close()
+            except Exception:
+                pass
         print(
             f"Gemini API error: "
             f"{type(error).__name__}: {error}"

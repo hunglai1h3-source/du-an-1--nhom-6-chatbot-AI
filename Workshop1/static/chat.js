@@ -69,9 +69,11 @@ function createSession({ keepExisting = false, profile = null } = {}) {
 
   profile = profile || M.getSelectedProfile();
 
+  const newId = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
   const session = {
 
-    id: `chat-${Date.now()}`,
+    id: newId,
 
     title: `Tư vấn cho ${profile.name}`,
 
@@ -100,6 +102,21 @@ function createSession({ keepExisting = false, profile = null } = {}) {
   currentChatId = session.id;
 
   persistSessions();
+
+  M.currentUser().then((userStatus) => {
+    if (userStatus && userStatus.logged_in) {
+      fetch("/api/conversations", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: session.id,
+          title: session.title,
+          profile_id: String(profile.id),
+        }),
+      }).catch(() => {});
+    }
+  }).catch(() => {});
 
   return session;
 
@@ -800,7 +817,7 @@ function renderHistory() {
 
  
 
-  $$('[data-session-id]').forEach((button) => button.addEventListener("click", () => {
+  $$('[data-session-id]').forEach((button) => button.addEventListener("click", async () => {
 
     currentChatId = button.dataset.sessionId;
 
@@ -817,6 +834,8 @@ function renderHistory() {
     renderHistory();
 
     renderMessages();
+
+    await loadSessionMessages(currentChatId);
 
   }));
 
@@ -1290,6 +1309,10 @@ async function sendMessage(event) {
 
   formData.append("conversation_id", String(session.id));
 
+  const clientMessageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+  formData.append("client_message_id", clientMessageId);
+
   if (session.safetyState) formData.append("safety_state", JSON.stringify(session.safetyState));
 
  
@@ -1606,11 +1629,16 @@ function bindChatActions() {
 
     if (action === "clear") {
       const resetConvId = String(session.id);
-      fetch("/chat/reset", {
+      fetch(`/api/conversations/${encodeURIComponent(resetConvId)}/clear`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversation_id: resetConvId })
-      }).catch(() => {});
+        credentials: "same-origin"
+      }).catch(() => {
+        fetch("/chat/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversation_id: resetConvId })
+        }).catch(() => {});
+      });
 
       session.messages = [];
       session.safetyState = { highest_risk_level: "normal", active_flags: [], safety_unknown: false };
@@ -1620,11 +1648,16 @@ function bindChatActions() {
 
     if (action === "delete") {
       const deleteConvId = String(session.id);
-      fetch("/chat/reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversation_id: deleteConvId })
-      }).catch(() => {});
+      fetch(`/api/conversations/${encodeURIComponent(deleteConvId)}`, {
+        method: "DELETE",
+        credentials: "same-origin"
+      }).catch(() => {
+        fetch("/chat/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversation_id: deleteConvId })
+        }).catch(() => {});
+      });
 
       sessions = sessions.filter((item) => item.id !== session.id);
       currentChatId = "";
@@ -1856,6 +1889,71 @@ async function initializeAccount() {
 
 
 
+async function loadSessionMessages(sessionId) {
+  if (!sessionId) return;
+  const session = sessions.find((s) => String(s.id) === String(sessionId));
+  if (!session) return;
+  if (session.messages && session.messages.some((m) => m.role === "user")) return;
+
+  try {
+    const res = await fetch(`/api/conversations/${encodeURIComponent(sessionId)}/messages`, { credentials: "same-origin" });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data.messages) && data.messages.length > 0) {
+      session.messages = data.messages.map((m) => {
+        const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : nowTime();
+        return {
+          role: m.role,
+          content: m.content,
+          time: timeStr,
+          emergency: m.metadata?.emergency || null,
+          chatLogId: m.metadata?.chat_log_id || null,
+          imagePreview: m.metadata?.imagePreview || null,
+        };
+      });
+      persistSessions();
+      renderMessages();
+    }
+  } catch (err) {
+    console.warn("Lỗi loadSessionMessages:", err);
+  }
+}
+
+async function syncConversationsFromBackend() {
+  try {
+    const userStatus = await M.currentUser();
+    if (!userStatus || !userStatus.logged_in) return;
+
+    const response = await fetch("/api/conversations", { credentials: "same-origin" });
+    if (!response.ok) return;
+
+    const data = await response.json();
+    if (Array.isArray(data.conversations) && data.conversations.length > 0) {
+      const serverSessions = data.conversations.map((c) => {
+        const existing = sessions.find((s) => String(s.id) === String(c.id));
+        return {
+          id: c.id,
+          title: c.title || "Cuộc trò chuyện",
+          profileId: c.profile_id || null,
+          favorite: existing ? existing.favorite : false,
+          summary: c.summary || "",
+          updatedAt: c.updated_at,
+          messages: existing?.messages?.length ? existing.messages : [],
+        };
+      });
+
+      sessions = serverSessions;
+      if (!currentChatId || !sessions.some((s) => String(s.id) === String(currentChatId))) {
+        currentChatId = sessions[0].id;
+      }
+      persistSessions();
+      await loadSessionMessages(currentChatId);
+    }
+  } catch (err) {
+    console.warn("Không thể đồng bộ danh sách cuộc trò chuyện từ backend:", err);
+  }
+}
+
 async function initialize() {
 
   bindHealthProfileModal();
@@ -1865,6 +1963,8 @@ async function initialize() {
   sessions = M.readJSON(M.KEYS.chats, []);
 
   currentChatId = localStorage.getItem(M.KEYS.currentChat) || "";
+
+  await syncConversationsFromBackend();
 
   ensureSession();
 
