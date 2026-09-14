@@ -220,17 +220,26 @@ class MedicalConversationState:
 # ==============================================================================
 
 COMMON_SYMPTOM_COMPLAINTS = [
-    ("đau bụng dưới bên phải", "đau bụng dưới bên phải"),
-    ("đau bụng dưới bên trái", "đau bụng dưới bên trái"),
-    ("đau bụng dưới", "đau bụng dưới"),
-    ("đau bụng trên", "đau bụng trên"),
+    ("đau bụng dưới bên phải", "đau bụng"),
+    ("đau bụng dưới bên trái", "đau bụng"),
+    ("đau bụng dưới", "đau bụng"),
+    ("đau bụng trên", "đau bụng"),
     ("đau dạ dày", "đau dạ dày"),
     ("đau bụng", "đau bụng"),
+    ("ê ẩm cả người", "đau nhức người"),
+    ("ê ẩm người", "đau nhức người"),
+    ("ê ẩm", "đau nhức người"),
+    ("bồn chồn", "bồn chồn"),
     ("đau đầu nửa đầu", "đau nửa đầu"),
     ("đau đầu", "đau đầu"),
     ("đau ngực", "đau ngực"),
+    ("tức ngực", "đau ngực"),
+    ("đau thắt lưng", "đau lưng"),
     ("đau lưng", "đau lưng"),
     ("đau vai gáy", "đau vai gáy"),
+    ("đau khớp gối", "đau khớp gối"),
+    ("đau khớp", "đau khớp"),
+    ("viêm khớp", "đau khớp"),
     ("đau họng", "đau họng"),
     ("chóng mặt", "chóng mặt"),
     ("buồn nôn", "buồn nôn"),
@@ -240,20 +249,42 @@ COMMON_SYMPTOM_COMPLAINTS = [
     ("ho có đờm", "ho"),
     ("ho khan", "ho"),
     ("ho", "ho"),
+    ("bỏng nước sôi", "bỏng"),
+    ("bỏng", "bỏng"),
+    ("ngạt mũi", "ngạt mũi"),
+    ("nghẹt mũi", "ngạt mũi"),
+    ("sổ mũi", "sổ mũi"),
+    ("chảy nước mũi", "sổ mũi"),
     ("khó ngủ", "mất ngủ"),
     ("mất ngủ", "mất ngủ"),
     ("mệt mỏi", "mệt mỏi"),
     ("phát ban", "phát ban"),
     ("nổi mề đay", "dị ứng da"),
+    ("táo bón", "táo bón"),
+    ("khó tiêu", "khó tiêu"),
+    ("đầy bụng", "đầy bụng"),
+    ("ợ chua", "ợ chua"),
+    ("trào ngược", "trào ngược"),
 ]
 
 COMMON_LOCATIONS = [
     ("bung duoi ben phai", "bụng dưới bên phải"),
     ("bung duoi ben trai", "bụng dưới bên trái"),
+    ("duoi ben phai", "bụng dưới bên phải"),
+    ("duoi ben trai", "bụng dưới bên trái"),
     ("bung duoi", "bụng dưới"),
     ("bung tren", "bụng trên"),
     ("vung thuong vi", "thượng vị"),
+    ("ben phai ron", "bên phải rốn"),
+    ("ben trai ron", "bên trái rốn"),
+    ("phai ron", "bên phải rốn"),
+    ("trai ron", "bên trái rốn"),
+    ("duoi ron", "dưới rốn"),
+    ("tren ron", "trên rốn"),
     ("quanh ron", "quanh rốn"),
+    ("ha vi", "hạ vị"),
+    ("man suon phai", "mạn sườn phải"),
+    ("man suon trai", "mạn sườn trái"),
     ("man suon", "mạn sườn"),
     ("nua dau ben phai", "nửa đầu bên phải"),
     ("nua dau ben trai", "nửa đầu bên trái"),
@@ -324,17 +355,77 @@ def extract_fever(text: str) -> Optional[bool]:
         return False
 
     # Khẳng định: có sốt, hơi sốt, sốt cao, sốt 39 độ
-    if re.search(r"\b(?:co sot|bi sot|hoi sot|sot cao|nong sot|sot (?:3[7-9]|4[0-1]))\b", norm):
+    if re.search(r"\b(?:co sot|bi sot|hoi sot|sot cao|nong sot|sot)\b", norm):
+        return True
+
+    # Đo nhiệt độ: 37.5 - 41 độ
+    if re.search(r"\b(?:do duoc|nhiet do|than nhiet|cap nhiet do)?\s*(?:la\s*)?(?:3[7-9]|4[0-1])(?:\.[0-9])?\s*(?:do|c)\b", norm):
         return True
 
     return None
+
+
+def extract_severity(text: str) -> Optional[str]:
+    """Trích xuất mức độ đau hoặc cảm giác khó chịu (dữ dội, âm ỉ, nhẹ, vừa, v.v.)."""
+    norm = normalize_vietnamese_advanced(text)
+
+    pain = extract_pain_scale(text)
+    if pain is not None:
+        return f"{pain}/10"
+
+    if re.search(r"\b(?:du doi|quan quai|du lam|rat dau|kinh khung|khong chiu noi)\b", norm):
+        return "dữ dội"
+    if re.search(r"\b(?:am i|nhe|hoi dau|chut it|e am)\b", norm):
+        return "âm ỉ"
+    if re.search(r"\b(?:vua|vua phai|trung binh)\b", norm):
+        return "vừa"
+    if re.search(r"\b(?:nhoi|buot|nhuc|tuc)\b", norm):
+        return "nhói buốt"
+    return None
+
+
+ASSOCIATED_SYMPTOM_CANDIDATES = [
+    ("buon non", "buồn nôn"),
+    ("non oi", "buồn nôn"),
+    ("non mua", "buồn nôn"),
+    ("tieu chay", "tiêu chảy"),
+    ("di ngoai", "tiêu chảy"),
+    ("chong mat", "chóng mặt"),
+    ("dau dau", "đau đầu"),
+    ("phat ban", "phát ban"),
+    ("cham do", "chấm xuất huyết"),
+    ("xuat huyet", "xuất huyết"),
+    ("kho tho", "khó thở"),
+    ("ho", "ho"),
+    ("sot", "sốt"),
+    ("met moi", "mệt mỏi"),
+    ("o chua", "ợ chua"),
+    ("kho tieu", "khó tiêu"),
+    ("tao bon", "táo bón"),
+    ("mat ngu", "mất ngủ"),
+]
+
+
+def extract_associated_symptoms(text: str, current_complaint: Optional[str] = None) -> List[str]:
+    """Trích xuất các triệu chứng đi kèm (không trùng với triệu chứng chính)."""
+    norm = normalize_vietnamese_advanced(text)
+    found: List[str] = []
+    curr_norm = normalize_vietnamese_advanced(current_complaint or "")
+
+    for s_norm, s_vi in ASSOCIATED_SYMPTOM_CANDIDATES:
+        if curr_norm and s_norm in curr_norm:
+            continue
+        if re.search(r"\b" + re.escape(s_norm) + r"\b", norm):
+            if s_vi not in found:
+                found.append(s_vi)
+    return found
 
 
 def extract_location(text: str) -> Optional[str]:
     """Trích xuất vị trí triệu chứng cụ thể."""
     norm = normalize_vietnamese_advanced(text)
     for p_norm, p_vi in COMMON_LOCATIONS:
-        if p_norm in norm:
+        if re.search(r"\b" + re.escape(p_norm) + r"\b", norm):
             return p_vi
     return None
 
@@ -342,9 +433,29 @@ def extract_location(text: str) -> Optional[str]:
 def extract_chief_complaint(text: str) -> Optional[str]:
     """Trích xuất triệu chứng chính từ câu nói."""
     norm = normalize_vietnamese_advanced(text)
+
+    # Dạng đảo ngữ: 'đầu tôi đau' -> 'đau đầu', 'bụng tôi đau' -> 'đau bụng', 'lưng em đau' -> 'đau lưng'
+    inv_match = re.search(r"\b(dau|bung|lung|hong|nguc|vai|co|rang|mat|khop)\s+(?:toi|em|minh|no|nhe)?\s*(?:rat\s+|hoi\s+)?dau\b", norm)
+    if inv_match:
+        organ = inv_match.group(1)
+        organ_map = {
+            "dau": "đau đầu",
+            "bung": "đau bụng",
+            "lung": "đau lưng",
+            "hong": "đau họng",
+            "nguc": "đau ngực",
+            "vai": "đau vai gáy",
+            "co": "đau vai gáy",
+            "rang": "đau răng",
+            "mat": "đau mắt",
+            "khop": "đau khớp",
+        }
+        if organ in organ_map:
+            return organ_map[organ]
+
     for c_vi, c_label in COMMON_SYMPTOM_COMPLAINTS:
         c_norm = normalize_vietnamese_advanced(c_vi)
-        if c_norm in norm:
+        if re.search(r"\b" + re.escape(c_norm) + r"\b", norm):
             return c_label
     return None
 
@@ -354,18 +465,22 @@ def detect_explicit_topic_change(text: str) -> Optional[str]:
     Phát hiện người dùng chuyển đổi chủ đề khám bệnh rõ ràng:
     Ví dụ: 'Thôi bỏ chuyện đau bụng đi, giờ tôi muốn hỏi về đau đầu'
     'Bỏ qua đau lưng đi, tôi bị đau họng'
+    'Chuyển sang tư vấn đau khớp gối'
+    'Quay lại chuyện đau bụng lúc nãy nhé'
     """
     norm = normalize_vietnamese_advanced(text)
-    # Bắt cụm 'thoi bo ... di/nhe ... gio toi muon hoi/bi ...'
     patterns = [
         r"(?:thoi bo|bo qua|khong ban ve|khong hoi ve)\s+([^,.;!?]+?)\s+(?:di|nhe|nua)?.*?(?:chuyen sang|muon hoi|toi muon hoi|hoi ve|bi|dau)\s+([^,.;!?]+)",
         r"(?:khong phai|thoi khong hoi)\s+([^,.;!?]+?)\s+(?:nua|nhe).*?(?:ma la|chuyen qua|sang)\s+([^,.;!?]+)",
+        r"(?:chuyen sang|chuyen qua|doi chu de sang|tu van ve|muon hoi ve)\s+([^,.;!?]+)",
+        r"(?:quay lai|tro lai)\s+(?:chuyen|van de|chu de)?\s*([^,.;!?]+)",
+        r"(?:vua bi|moi bi|dot nhien bi)\s+([^,.;!?]+)",
+        r"(?:gio toi bi|bay gio bi|gio lai bi|chuyen thanh)\s+([^,.;!?]+)",
     ]
     for pattern in patterns:
         m = re.search(pattern, norm)
         if m:
-            target_phrase = m.group(2).strip()
-            # Tìm xem target_phrase có chứa triệu chứng nào hợp lệ
+            target_phrase = m.group(m.lastindex).strip()
             found = extract_chief_complaint(target_phrase)
             if found:
                 return found
@@ -384,6 +499,45 @@ def detect_user_correction(text: str, current_slots: MedicalSlots) -> Dict[str, 
     is_correction_intent = bool(
         re.search(r"\b(?:a khong|khong phai|nham|dung hon la|chinh xac la|that ra la|thuc ra)\b", norm)
     )
+
+    # Đính chính thuốc trực tiếp: "Tôi không uống Paracetamol mà uống Ibuprofen"
+    med_match = re.search(
+        r"(?:khong|ko)\s+(?:uong|dung|su dung)\s+([a-z0-9_\-\s]+?)\s+ma\s+(?:uong|dung|la)?\s*([a-z0-9_\-\s]+)",
+        norm,
+    )
+    if med_match:
+        old_med_norm = med_match.group(1).strip()
+        new_med_norm = re.sub(r"[.,;!?].*$", "", med_match.group(2)).strip()
+        if new_med_norm:
+            new_med_word = new_med_norm.title()
+            for word in text.split():
+                clean_w = re.sub(r"[.,;!?]", "", word)
+                if normalize_vietnamese_advanced(clean_w) == new_med_norm:
+                    new_med_word = clean_w
+                    break
+            updated_meds = [m for m in current_slots.current_medications if normalize_vietnamese_advanced(m) != old_med_norm]
+            if new_med_word not in updated_meds:
+                updated_meds.append(new_med_word)
+            corrections["current_medications"] = updated_meds
+
+    med_alt_match = re.search(
+        r"(?:uong|dung)\s+([a-z0-9_\-\s]+?)\s+chu\s+khong\s+phai\s+([a-z0-9_\-\s]+)",
+        norm,
+    )
+    if med_alt_match:
+        new_med_norm = med_alt_match.group(1).strip()
+        old_med_norm = re.sub(r"[.,;!?].*$", "", med_alt_match.group(2)).strip()
+        if new_med_norm:
+            new_med_word = new_med_norm.title()
+            for word in text.split():
+                clean_w = re.sub(r"[.,;!?]", "", word)
+                if normalize_vietnamese_advanced(clean_w) == new_med_norm:
+                    new_med_word = clean_w
+                    break
+            updated_meds = [m for m in current_slots.current_medications if normalize_vietnamese_advanced(m) != old_med_norm]
+            if new_med_word not in updated_meds:
+                updated_meds.append(new_med_word)
+            corrections["current_medications"] = updated_meds
 
     if is_correction_intent:
         # Kiểm tra đính chính duration
@@ -405,6 +559,16 @@ def detect_user_correction(text: str, current_slots: MedicalSlots) -> Dict[str, 
         new_loc = extract_location(text)
         if new_loc and new_loc != current_slots.symptom_location:
             corrections["symptom_location"] = new_loc
+
+        # Kiểm tra đính chính age
+        age_match = re.search(r"\b([1-9][0-9]?)\s*tuoi\b", norm)
+        if age_match:
+            try:
+                new_age = int(age_match.group(1))
+                if new_age != current_slots.age:
+                    corrections["age"] = new_age
+            except ValueError:
+                pass
 
     return corrections
 
@@ -574,11 +738,7 @@ def process_conversation_turn(
         update_collected_and_missing_slots(state)
         target = select_next_question_slot(state)
         state.last_question_slot = target
-        if target:
-            state.asked_slots.append(target)
-            state.next_action = NextAction.ASK_QUESTION.value
-        else:
-            state.next_action = NextAction.ASSESS.value
+        state.next_action = NextAction.TOPIC_CHANGE.value
         return state
 
     # 3. Kiểm tra đính chính từ người dùng
@@ -606,7 +766,10 @@ def process_conversation_turn(
     if dur and not state.slots.duration:
         state.slots.duration = dur
 
-    # 4d. Thang điểm đau / Mức độ
+    # 4d. Mức độ đau / Cảm giác
+    sev = extract_severity(user_message)
+    if sev and not state.slots.severity:
+        state.slots.severity = sev
     pain = extract_pain_scale(user_message)
     if pain is not None:
         state.slots.pain_scale = pain
@@ -616,6 +779,12 @@ def process_conversation_turn(
     fever_val = extract_fever(user_message)
     if fever_val is not None:
         state.slots.fever = fever_val
+
+    # 4f. Triệu chứng đi kèm
+    assoc = extract_associated_symptoms(user_message, state.slots.chief_complaint)
+    for a in assoc:
+        if a not in state.slots.associated_symptoms:
+            state.slots.associated_symptoms.append(a)
 
     # 5. Cập nhật danh sách slots
     update_collected_and_missing_slots(state)
@@ -656,10 +825,18 @@ def format_conversation_state_for_prompt(state: MedicalConversationState) -> str
         f"- Thời gian kéo dài: {s.duration or 'Chưa rõ'}",
         f"- Mức độ đau: {s.pain_scale or s.severity or 'Chưa rõ'}",
         f"- Sốt: {'Có sốt' if s.fever is True else 'Không sốt' if s.fever is False else 'Chưa rõ'}",
+        f"- Triệu chứng đi kèm: {', '.join(s.associated_symptoms) if s.associated_symptoms else 'Chưa có'}",
         f"- Giai đoạn hiện tại: {state.stage}",
         f"- Hành động tiếp theo: {state.next_action}",
         f"- Đã thu thập: {', '.join(state.collected_slots) if state.collected_slots else 'Chưa có'}",
     ]
+
+    if s.pregnancy_status:
+        lines.append(f"- Tình trạng thai kỳ: {s.pregnancy_status}")
+    if s.medical_conditions:
+        lines.append(f"- Tiền sử bệnh nền: {', '.join(s.medical_conditions)}")
+    if s.allergies:
+        lines.append(f"- Dị ứng: {', '.join(s.allergies)}")
 
     if state.next_action == NextAction.ASK_QUESTION.value and state.last_question_slot:
         slot_desc = SLOT_DESCRIPTIONS.get(state.last_question_slot, state.last_question_slot)

@@ -98,7 +98,7 @@ class SafetyState:
 # ==============================================================================
 
 VIETNAMESE_SLANG_MAP: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r"\b(?:ko|k|hem|hong|khg|kh)\b", re.IGNORECASE), "khong"),
+    (re.compile(r"\b(?:ko|k|hem|khg|kh)\b", re.IGNORECASE), "khong"),
     (re.compile(r"\btui\b", re.IGNORECASE), "toi"),
     (re.compile(r"\bmk\b", re.IGNORECASE), "minh"),
     (re.compile(r"\bng\b", re.IGNORECASE), "nguoi"),
@@ -106,6 +106,12 @@ VIETNAMESE_SLANG_MAP: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\bbs\b", re.IGNORECASE), "bac si"),
     (re.compile(r"\bdc\b", re.IGNORECASE), "duoc"),
     (re.compile(r"\bnhiu\b", re.IGNORECASE), "nhieu"),
+    (re.compile(r"\bbao tu\b", re.IGNORECASE), "da day"),
+    (re.compile(r"\bbuon oi\b", re.IGNORECASE), "buon non"),
+    (re.compile(r"\bnon oi\b", re.IGNORECASE), "buon non"),
+    (re.compile(r"\bnhuc dau\b", re.IGNORECASE), "dau dau"),
+    (re.compile(r"\bmet muon xiu\b", re.IGNORECASE), "met moi choang vang"),
+    (re.compile(r"\bdau quay quay\b", re.IGNORECASE), "chong mat"),
     (re.compile(r"\btho (?:ko|k) noi\b", re.IGNORECASE), "tho khong noi"),
     (re.compile(r"\bko tho (?:dc|duoc)\b", re.IGNORECASE), "khong tho duoc"),
     (re.compile(r"\bko danh thuc dc\b", re.IGNORECASE), "khong danh thuc duoc"),
@@ -125,17 +131,19 @@ def normalize_vietnamese_advanced(value: str) -> str:
     if not value:
         return ""
 
-    # Thay các từ viết tắt trước khi chuẩn hóa NFD
-    for pattern, replacement in VIETNAMESE_SLANG_MAP:
-        value = pattern.sub(replacement, value)
-
-    # NFD normalization
+    # NFD normalization & bo dau truoc
     value = unicodedata.normalize("NFD", value)
     value = "".join(char for char in value if unicodedata.category(char) != "Mn")
     value = value.replace("đ", "d").replace("Đ", "d")
 
     # Xóa ký tự lạ
     value = re.sub(r"[^a-z0-9\s]", " ", value)
+    value = re.sub(r"\s+", " ", value).strip()
+
+    # Thay các từ viết tắt / tiếng lóng trên chuỗi đã bỏ dấu
+    for pattern, replacement in VIETNAMESE_SLANG_MAP:
+        value = pattern.sub(replacement, value)
+
     return re.sub(r"\s+", " ", value).strip()
 
 
@@ -162,6 +170,8 @@ EMERGENCY_NEGATIONS = (
 
 MILD_OR_NON_EMERGENCY_QUALIFIERS = [
     re.compile(r"\bdau nguc nhe\b"),
+    re.compile(r"\btuc nguc nhe\b"),
+    re.compile(r"\bhoi tuc nguc\b"),
     re.compile(r"\bhoi dau nguc\b"),
     re.compile(r"\bdau nguc.*(?:khi ho|moi khi ho|khi hat hoi|luc ho)\b"),
     re.compile(r"\bdau co nguc\b"),
@@ -181,8 +191,9 @@ DETERMINISTIC_EMERGENCY_PATTERNS: Dict[str, Tuple[str, ...]] = {
         r"\bsung luoi\b",
         r"\bsung hong.*kho tho\b",
         r"\bsung hong\b",
-        r"\bdi ung.*kho tho\b",
-        r"\bnoi me day.*kho tho\b",
+        r"\bnghen co hong\b",
+        r"\b(?:noi me day|di ung).*kho tho\b",
+        r"\bkho tho.*(?:noi me day|di ung)\b",
     ),
     SafetyCategory.POISONING_OVERDOSE.value: (
         r"\buong qua lieu\b",
@@ -204,7 +215,10 @@ DETERMINISTIC_EMERGENCY_PATTERNS: Dict[str, Tuple[str, ...]] = {
         r"\blu lan nghiem trong\b",
         r"\bmat y thuc\b",
         r"\bco giat\b",
-        r"\bdau dau du doi dot ngot\b",
+        r"\bcung gay\b",
+        r"\bdau dau.*cung gay\b",
+        r"\bcung gay.*so anh sang\b",
+        r"\bdau dau du doi\b",
         r"\bdau dau set danh\b",
     ),
     SafetyCategory.CHEST_CARDIAC.value: (
@@ -212,9 +226,12 @@ DETERMINISTIC_EMERGENCY_PATTERNS: Dict[str, Tuple[str, ...]] = {
         r"\bdau that nguc\b",
         r"\bdau nguc lan\b",
         r"\bbop nghet nguc\b",
+        r"\btuc nguc.*gang suc\b",
         r"\bdau nguc.*(?:khong tho|kho tho|va mo hoi|ngat|bat tinh)\b",
     ),
     SafetyCategory.SEVERE_BLEEDING.value: (
+        r"\bchay mau.*?(?:khong cam|xoi xa|du doi|nghiem trong|nhieu)\b",
+        r"\bchay mau xoi xa\b",
         r"\bchay mau nhieu\b",
         r"\bchay mau khong cam\b",
         r"\bmat mau nhieu\b",
@@ -269,8 +286,16 @@ SELF_HARM_PATTERNS = (
     r"\buong thuoc tu tu\b",
     r"\buong thuoc tu sat\b",
     r"\buong thuoc de chet\b",
-    r"\bcat co tay\b",
+    r"\b(?:cat|rach)\s+co\s+tay\b",
+    r"\brach tay\b",
     r"\bkhong muon song nua\b",
+    r"\bket thuc cuoc song\b",
+    r"\btu huy hoai\b",
+    r"\btu hai\b",
+    r"\buong bao nhieu.*(?:chet|tu tu)\b",
+    r"\bbao nhieu vien.*(?:chet|tu tu)\b",
+    r"\blam sao de chet\b",
+    r"\bcach de chet\b",
 )
 
 
@@ -294,6 +319,7 @@ SELF_HARM_EMERGENCY_REPLY = (
     "HÃY LIÊN HỆ HỖ TRỢ KHẨN CẤP NGAY BÂY GIỜ:\n\n"
     "- Gọi cấp cứu 115 hoặc đến ngay cơ sở y tế gần nhất nếu bạn đã uống thuốc hoặc tự làm tổn thương mình.\n"
     "- Hãy ở cạnh một người bạn, người thân trong gia đình hoặc người đáng tin cậy.\n"
+    "- Tổng đài Quốc gia Bảo vệ Trẻ em & Hỗ trợ Khủng hoảng: 1900 636 558\n"
     "- Tổng đài hỗ trợ tâm lý & phòng ngừa khủng hoảng (Đường dây nóng Ngày Mai): 096 306 1414\n"
     "- Viện Sức khỏe Tâm thần - Bệnh viện Bạch Mai: 024 3869 3731\n\n"
     "Xin hãy giữ an toàn cho bản thân và để những người xung quanh cũng như chuyên gia hỗ trợ bạn vượt qua thời khắc này."
@@ -351,19 +377,37 @@ def evaluate_deterministic_safety(message: str) -> SafetyResult:
             should_stop_normal_flow=False,
         )
 
-    # 2. Kiểm tra Self-Harm / Suicide (Ưu tiên số 1)
-    for pattern in SELF_HARM_PATTERNS:
-        if re.search(pattern, normalized):
-            res = SafetyResult(
-                risk_level=RiskLevel.EMERGENCY,
-                category=SafetyCategory.SELF_HARM_IMMEDIATE.value,
-                reason_code="SELF_HARM_TRIGGER",
-                confidence=0.99,
-                should_stop_normal_flow=True,
-                reply=SELF_HARM_EMERGENCY_REPLY,
-            )
-            res.emergency_data = build_emergency_data_payload(res)
-            return res
+    # 2. Kiểm tra Self-Harm / Suicide / Mental Health Distress (Ưu tiên số 1)
+    is_informational_self_harm = bool(
+        re.search(r"\b(?:doc bai bao|bai bao|doc sach|tin tuc|nghien cuu|thong ke|tim hieu)\s+.*?(?:tu tu|tu sat)\b", normalized)
+    )
+
+    if not is_informational_self_harm:
+        for pattern in SELF_HARM_PATTERNS:
+            if re.search(pattern, normalized):
+                res = SafetyResult(
+                    risk_level=RiskLevel.EMERGENCY,
+                    category=SafetyCategory.SELF_HARM_IMMEDIATE.value,
+                    reason_code="SELF_HARM_TRIGGER",
+                    confidence=0.99,
+                    should_stop_normal_flow=True,
+                    reply=SELF_HARM_EMERGENCY_REPLY,
+                )
+                res.emergency_data = build_emergency_data_payload(res)
+                return res
+
+    # Kiểm tra tâm trạng khủng hoảng / buồn chán / muốn biến mất
+    if re.search(r"\b(?:cuoc doi vo nghia|muon bien mat|bien mat mai mai)\b", normalized):
+        res = SafetyResult(
+            risk_level=RiskLevel.EMERGENCY,
+            category=SafetyCategory.MENTAL_HEALTH_DISTRESS.value,
+            reason_code="MENTAL_HEALTH_DISTRESS_TRIGGER",
+            confidence=0.95,
+            should_stop_normal_flow=True,
+            reply=SELF_HARM_EMERGENCY_REPLY,
+        )
+        res.emergency_data = build_emergency_data_payload(res)
+        return res
 
     # 3. Kiểm tra các điều kiện nhẹ / không cấp cứu (ví dụ "đau ngực nhẹ khi ho")
     is_mild = any(p.search(normalized) for p in MILD_OR_NON_EMERGENCY_QUALIFIERS)
@@ -414,7 +458,8 @@ def evaluate_deterministic_safety(message: str) -> SafetyResult:
     # 6. Kiểm tra tình trạng đau/khó chịu thông thường (CAUTION)
     caution_patterns = [
         r"\bdau bung\b", r"\bchong mat\b", r"\bbuon non\b", r"\bsot\b",
-        r"\bdi ngoai\b", r"\bho keo dai\b", r"\bphat ban\b"
+        r"\bdi ngoai\b", r"\bho keo dai\b", r"\bphat ban\b",
+        r"\btuc nguc\b", r"\bdau nguc\b"
     ]
     if any(re.search(p, normalized) for p in caution_patterns):
         return SafetyResult(

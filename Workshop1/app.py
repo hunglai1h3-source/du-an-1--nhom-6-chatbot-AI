@@ -3615,6 +3615,23 @@ def is_transient_gemini_error(error):
     )
 
 
+def is_retryable_ai_error(error):
+    """Xác định các lỗi có thể retry (429, 500, 502, 503, 504, timeout); loại trừ lỗi client 400, 401, 403, 404."""
+    status = get_error_status(error)
+    text = str(error).lower()
+    if status in {400, 401, 403, 404}:
+        return False
+    return (
+        status in {408, 409, 429, 500, 502, 503, 504}
+        or any(
+            token in text for token in (
+                "timeout", "timed out", "rate limit", "overloaded",
+                "connection reset", "temporarily unavailable", "bad gateway"
+            )
+        )
+    )
+
+
 def create_gemini_completion_with_fallback(**kwargs):
     """
     Ưu tiên model cấu hình.

@@ -95,6 +95,19 @@ def generate_structured_summary(
     return "\n".join(summary_parts) if summary_parts else (existing_summary or "")
 
 
+def format_summary_for_prompt(summary: str) -> str:
+    """Định dạng tóm tắt hội thoại để tiêm vào system prompt của Gemini."""
+    if not summary or not summary.strip():
+        return ""
+    return (
+        "TÓM TẮT DIỄN BIẾN TRƯỚC ĐÓ CỦA CUỘC TRÒ CHUYỆN (CÁC LƯỢT TRƯỚC):\n"
+        f"{summary.strip()}\n\n"
+        "QUY TẮC:\n"
+        "- Đã nắm rõ các thông tin trên, không hỏi lại những gì đã được ghi nhận trong tóm tắt.\n"
+        "- Duy trì tính liền mạch với các lời khuyên trước đó."
+    )
+
+
 def build_conversation_context(
     state: Optional[Any] = None,
     summary: Optional[str] = None,
@@ -122,13 +135,7 @@ def build_conversation_context(
     if summary and summary.strip():
         context_prompts.append({
             "role": "system",
-            "content": (
-                "TÓM TẮT DIỄN BIẾN TRƯỚC ĐÓ CỦA CUỘC TRÒ CHUYỆN (CÁC LƯỢT TRƯỚC):\n"
-                f"{summary.strip()}\n\n"
-                "QUY TẮC:\n"
-                "- Đã nắm rõ các thông tin trên, không hỏi lại những gì đã được ghi nhận trong tóm tắt.\n"
-                "- Duy trì tính liền mạch với các lời khuyên trước đó."
-            ),
+            "content": format_summary_for_prompt(summary),
         })
 
     # 3. Các tin nhắn gần nhất (Recent verbatim messages)

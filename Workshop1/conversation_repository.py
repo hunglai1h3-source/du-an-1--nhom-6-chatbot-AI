@@ -31,8 +31,16 @@ def _format_conversation_row(row) -> Dict[str, Any]:
 def _format_message_row(row) -> Dict[str, Any]:
     if not row:
         return {}
-    created_at = row["created_at"]
-    metadata_json = row["metadata_json"]
+
+    def _get(col, default=None):
+        try:
+            val = row[col]
+            return val if val is not None else default
+        except (KeyError, IndexError, TypeError):
+            return default
+
+    created_at = _get("created_at")
+    metadata_json = _get("metadata_json")
     metadata = {}
     if metadata_json:
         try:
@@ -41,11 +49,11 @@ def _format_message_row(row) -> Dict[str, Any]:
             metadata = {}
 
     return {
-        "id": row["id"],
-        "conversation_id": str(row["conversation_id"]),
-        "role": str(row["role"]),
-        "content": str(row["content"]),
-        "client_message_id": row["client_message_id"],
+        "id": _get("id"),
+        "conversation_id": str(_get("conversation_id", "")),
+        "role": str(_get("role", "")),
+        "content": str(_get("content", "")),
+        "client_message_id": _get("client_message_id"),
         "metadata": metadata,
         "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at or ""),
     }
