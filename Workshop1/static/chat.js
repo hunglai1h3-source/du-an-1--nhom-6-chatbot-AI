@@ -1242,19 +1242,21 @@ function askAboutCurrentEnvironment() {
  
 
 function addTyping() {
-
   const row = document.createElement("article");
-
   row.className = "message-row assistant";
-
   row.id = "typingRow";
-
-  row.innerHTML = '<span class="message-avatar">🤖</span><div class="message-bubble"><div class="typing-dots"><i></i><i></i><i></i></div></div>';
-
+  row.innerHTML = `
+    <span class="message-avatar">🤖</span>
+    <div class="message-bubble ai-thinking-bubble">
+      <div class="ai-thinking-indicator">
+        <span class="medical-pulse-dot" aria-hidden="true"></span>
+        <span class="ai-thinking-text">MediCare AI đang phân tích dữ liệu y tế...</span>
+        <div class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
+    </div>
+  `;
   $("#messageList").appendChild(row);
-
   $("#messageList").scrollTop = $("#messageList").scrollHeight;
-
 }
 
  

@@ -2201,6 +2201,17 @@ def health():
     })
 
 
+
+@app.get("/login")
+def login_page():
+    return render_template("auth.html", active_tab="login")
+
+
+@app.get("/register")
+def register_page():
+    return render_template("auth.html", active_tab="register")
+
+
 @app.post("/register")
 def register():
     ip = get_client_ip()

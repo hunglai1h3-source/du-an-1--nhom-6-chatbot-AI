@@ -5948,3 +5948,77 @@ html[data-theme="dark"] .ai-content tr:nth-child(even) td {
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   PHASE 7.5: MEDICARE AI ULTIMATE UI V3 UPGRADE
+   ========================================================================== */
+
+/* Centered layout on ultra-wide & 4K monitors */
+.consultation-shell {
+  max-width: 1920px;
+  margin: 0 auto;
+}
+
+/* Ambient Medical Glow */
+.chat-workspace {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(13, 148, 136, 0.05), transparent 45%),
+    radial-gradient(circle at 90% 80%, rgba(14, 165, 233, 0.03), transparent 35%),
+    var(--page) !important;
+}
+
+/* AI Thinking Indicator V3 */
+.ai-thinking-bubble {
+  background: var(--med-bg-card, #ffffff) !important;
+  border: 1px solid var(--med-border, #e2e8f0) !important;
+  border-radius: var(--med-radius-md, 14px) !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04) !important;
+}
+
+.ai-thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.medical-pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--med-primary, #0d9488);
+  box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.4);
+  animation: medicalPulse 1.6s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes medicalPulse {
+  to {
+    box-shadow: 0 0 0 10px rgba(13, 148, 136, 0);
+  }
+}
+
+.ai-thinking-text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--med-text-muted, #64748b);
+  letter-spacing: -0.01em;
+}
+
+/* Mobile Sticky Composer & Safe Area */
+@media (max-width: 768px) {
+  .chat-workspace {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .composer {
+    position: sticky;
+    bottom: 0;
+    margin: 0 8px 8px 8px !important;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px !important;
+    background: var(--card, #ffffff) !important;
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06) !important;
+    z-index: 30;
+  }
+}

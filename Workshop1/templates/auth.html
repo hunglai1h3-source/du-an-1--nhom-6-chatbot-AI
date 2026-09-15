@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Đăng nhập hoặc tạo tài khoản MediCare AI - Nền tảng chăm sóc sức khỏe thông minh">
+  <title>MediCare AI | Đăng nhập &amp; Đăng ký</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+</head>
+<body class="auth-page">
+  <header class="auth-topbar">
+    <a href="/" class="auth-back-link" title="Quay lại trang chủ">
+      <span aria-hidden="true">←</span> Quay lại Trang chủ
+    </a>
+    <div class="auth-top-actions">
+      <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện sáng/tối">
+        <span class="theme-icon" aria-hidden="true">☾</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="auth-shell">
+    <!-- Cột Cinematic Visual & Storytelling (55% desktop) -->
+    <section class="auth-cinematic-panel" aria-label="Giới thiệu MediCare AI">
+      <canvas id="healthCanvas" class="health-canvas" aria-hidden="true"></canvas>
+      <div class="cinematic-backdrop-poster" aria-hidden="true"></div>
+
+      <div class="cinematic-content">
+        <div class="cinematic-brand">
+          <div class="brand-mark-circle">+</div>
+          <div class="brand-text-group">
+            <h1>MediCare <em>AI</em></h1>
+            <p class="brand-tagline">Trí tuệ nhân tạo y khoa · Đồng hành cùng bạn</p>
+          </div>
+        </div>
+
+        <div class="cinematic-quote">
+          <p class="quote-text">"Sức khỏe của bạn và gia đình luôn là ưu tiên hàng đầu. MediCare AI phân tích, đối chiếu nguồn tin y tế tin cậy để đưa ra hướng dẫn sơ khởi an toàn 24/7."</p>
+        </div>
+
+        <div class="cinematic-pillars">
+          <div class="pillar-item">
+            <span class="pillar-icon">🛡️</span>
+            <div>
+              <strong>Bảo mật y tế đa lớp</strong>
+              <small>Mã hóa dữ liệu cá nhân &amp; lịch sử tư vấn chuẩn mực.</small>
+            </div>
+          </div>
+          <div class="pillar-item">
+            <span class="pillar-icon">🩺</span>
+            <div>
+              <strong>Kiến thức y khoa chuẩn hóa</strong>
+              <small>Đối chiếu tài liệu chính thống từ Bộ Y tế, Vinmec, VnExpress.</small>
+            </div>
+          </div>
+          <div class="pillar-item">
+            <span class="pillar-icon">👨‍👩‍👧‍👦</span>
+            <div>
+              <strong>Quản lý sức khỏe gia đình</strong>
+              <small>Cô lập và cá nhân hóa hồ sơ cho từng thành viên.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="cinematic-footer">
+          <small>© 2026 MediCare AI. Nền tảng số chăm sóc sức khỏe gia đình.</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cột Glassmorphic Auth Card (45% desktop) -->
+    <section class="auth-card-panel" aria-label="Khu vực đăng nhập và đăng ký">
+      <div class="auth-card-container">
+        <div class="auth-glass-card">
+          <!-- Switcher Tabs -->
+          <div class="auth-tabs-nav" role="tablist" aria-label="Lựa chọn phương thức xác thực">
+            <button
+              class="auth-tab-btn {{ 'active' if active_tab != 'register' else '' }}"
+              id="tabLoginBtn"
+              type="button"
+              role="tab"
+              aria-selected="{{ 'true' if active_tab != 'register' else 'false' }}"
+              aria-controls="panelLogin"
+            >
+              Đăng nhập
+            </button>
+            <button
+              class="auth-tab-btn {{ 'active' if active_tab == 'register' else '' }}"
+              id="tabRegisterBtn"
+              type="button"
+              role="tab"
+              aria-selected="{{ 'true' if active_tab == 'register' else 'false' }}"
+              aria-controls="panelRegister"
+            >
+              Tạo tài khoản
+            </button>
+            <div class="tab-pill-indicator" id="tabPillIndicator" aria-hidden="true"></div>
+          </div>
+
+          <!-- Thông báo lỗi chung -->
+          <div class="auth-global-alert hidden" id="authGlobalAlert" role="alert"></div>
+
+          <!-- Form Đăng Nhập -->
+          <div
+            class="auth-panel-content {{ 'hidden' if active_tab == 'register' else '' }}"
+            id="panelLogin"
+            role="tabpanel"
+            aria-labelledby="tabLoginBtn"
+          >
+            <div class="panel-header">
+              <h2>Chào mừng trở lại</h2>
+              <p>Đăng nhập vào tài khoản để tiếp tục theo dõi sức khỏe và lịch sử tư vấn.</p>
+            </div>
+
+            <form id="loginForm" class="auth-form-body" novalidate>
+              <div class="form-group">
+                <label for="loginAccount">Email hoặc Số điện thoại</label>
+                <div class="input-wrap">
+                  <span class="input-icon" aria-hidden="true">✉</span>
+                  <input
+                    id="loginAccount"
+                    name="account"
+                    type="text"
+                    autocomplete="username"
+                    placeholder="user@example.com hoặc 0912345678"
+                    required
+                  >
+                </div>
+                <small class="field-error hidden" id="loginAccountError"></small>
+              </div>
+
+              <div class="form-group">
+                <div class="label-row">
+                  <label for="loginPassword">Mật khẩu</label>
+                  <a href="javascript:void(0)" class="forgot-pwd-link" id="forgotPwdLink">Quên mật khẩu?</a>
+                </div>
+                <div class="input-wrap">
+                  <span class="input-icon" aria-hidden="true">🔒</span>
+                  <input
+                    id="loginPassword"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="Nhập mật khẩu của bạn"
+                    required
+                  >
+                  <button class="pwd-toggle-btn" type="button" data-target="loginPassword" aria-label="Hiện/Ẩn mật khẩu" title="Hiện/Ẩn mật khẩu">
+                    <span class="eye-icon" aria-hidden="true">👁</span>
+                  </button>
+                </div>
+                <small class="field-error hidden" id="loginPasswordError"></small>
+              </div>
+
+              <div class="form-meta-row">
+                <label class="remember-wrap">
+                  <input type="checkbox" id="rememberMe" name="remember" checked>
+                  <span>Ghi nhớ phiên đăng nhập (30 ngày)</span>
+                </label>
+              </div>
+
+              <button class="auth-submit-btn" id="loginSubmitBtn" type="submit">
+                <span class="btn-text">Đăng nhập</span>
+                <span class="btn-spinner hidden" aria-hidden="true"></span>
+              </button>
+            </form>
+
+            <div class="panel-footer">
+              <p>Chưa có tài khoản? <button type="button" class="text-link-btn" id="switchToRegisterBtn">Tạo tài khoản miễn phí</button></p>
+            </div>
+          </div>
+
+          <!-- Form Đăng Ký -->
+          <div
+            class="auth-panel-content {{ 'hidden' if active_tab != 'register' else '' }}"
+            id="panelRegister"
+            role="tabpanel"
+            aria-labelledby="tabRegisterBtn"
+          >
+            <div class="panel-header">
+              <h2>Khởi tạo tài khoản</h2>
+              <p>Trải nghiệm dịch vụ trợ lý y tế số thông minh cho bạn và gia đình.</p>
+            </div>
+
+            <form id="registerForm" class="auth-form-body" novalidate>
+              <div class="form-group">
+                <label for="regFullName">Họ và tên</label>
+                <div class="input-wrap">
+                  <span class="input-icon" aria-hidden="true">👤</span>
+                  <input
+                    id="regFullName"
+                    name="full_name"
+                    type="text"
+                    autocomplete="name"
+                    placeholder="Nguyễn Văn A"
+                    required
+                  >
+                </div>
+                <small class="field-error hidden" id="regFullNameError"></small>
+              </div>
+
+              <div class="form-group">
+                <label for="regEmail">Địa chỉ Email</label>
+                <div class="input-wrap">
+                  <span class="input-icon" aria-hidden="true">✉</span>
+                  <input
+                    id="regEmail"
+                    name="email"
+                    type="email"
+                    autocomplete="email"
+                    placeholder="nguyenvana@example.com"
+                    required
+                  >
+                </div>
+                <small class="field-error hidden" id="regEmailError"></small>
+              </div>
+
+              <div class="form-group">
+                <label for="regPhone">Số điện thoại <small class="text-muted">(Không bắt buộc)</small></label>
+                <div class="input-wrap">
+                  <span class="input-icon" aria-hidden="true">📞</span>
+                  <input
+                    id="regPhone"
+                    name="phone"
+                    type="tel"
+                    autocomplete="tel"
+                    placeholder="0912345678"
+                  >
+                </div>
+                <small class="field-error hidden" id="regPhoneError"></small>
+              </div>
+
+              <div class="form-group">
+                <label for="regPassword">Mật khẩu <small class="text-muted">(Ít nhất 8 ký tự)</small></label>
+                <div class="input-wrap">
+                  <span class="input-icon" aria-hidden="true">🔒</span>
+                  <input
+                    id="regPassword"
+                    name="password"
+                    type="password"
+                    autocomplete="new-password"
+                    placeholder="Tối thiểu 8 ký tự"
+                    required
+                  >
+                  <button class="pwd-toggle-btn" type="button" data-target="regPassword" aria-label="Hiện/Ẩn mật khẩu" title="Hiện/Ẩn mật khẩu">
+                    <span class="eye-icon" aria-hidden="true">👁</span>
+                  </button>
+                </div>
+                <small class="field-error hidden" id="regPasswordError"></small>
+              </div>
+
+              <div class="form-group">
+                <label for="regConfirmPassword">Xác nhận mật khẩu</label>
+                <div class="input-wrap">
+                  <span class="input-icon" aria-hidden="true">🔒</span>
+                  <input
+                    id="regConfirmPassword"
+                    name="confirm_password"
+                    type="password"
+                    autocomplete="new-password"
+                    placeholder="Nhập lại mật khẩu"
+                    required
+                  >
+                  <button class="pwd-toggle-btn" type="button" data-target="regConfirmPassword" aria-label="Hiện/Ẩn mật khẩu" title="Hiện/Ẩn mật khẩu">
+                    <span class="eye-icon" aria-hidden="true">👁</span>
+                  </button>
+                </div>
+                <small class="field-error hidden" id="regConfirmPasswordError"></small>
+              </div>
+
+              <button class="auth-submit-btn" id="registerSubmitBtn" type="submit">
+                <span class="btn-text">Đăng ký tài khoản</span>
+                <span class="btn-spinner hidden" aria-hidden="true"></span>
+              </button>
+            </form>
+
+            <div class="panel-footer">
+              <p>Đã có tài khoản? <button type="button" class="text-link-btn" id="switchToLoginBtn">Đăng nhập ngay</button></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="auth-toast hidden" id="authToast" role="status" aria-live="polite"></div>
+
+  <script src="{{ url_for('static', filename='auth.js') }}"></script>
+</body>
+</html>
