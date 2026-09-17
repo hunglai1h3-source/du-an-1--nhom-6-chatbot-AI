@@ -1,3 +1,140 @@
+
+/* ==========================================================================
+   APP NAVIGATION RAIL & PERSONAL HEALTH OS INTEGRATION
+   ========================================================================== */
+.app-nav-rail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--nav-rail-width, 76px);
+  z-index: 85;
+  background: var(--bg-l1, #ffffff);
+  border-right: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.08));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0 18px;
+  gap: 12px;
+  user-select: none;
+}
+
+.rail-brand {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent-primary, #0d9488), #0f766e);
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(13, 148, 136, 0.28);
+  transition: transform var(--motion-fast), box-shadow var(--motion-fast);
+  margin-bottom: 8px;
+}
+.rail-brand:hover {
+  transform: scale(1.05);
+  box-shadow: 0 10px 24px rgba(13, 148, 136, 0.36);
+}
+
+.rail-menu {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.rail-item {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--text-secondary, #64748b);
+  background: transparent;
+  transition: all var(--motion-fast);
+  text-decoration: none;
+}
+.rail-item:hover {
+  color: var(--accent-primary, #0d9488);
+  background: var(--accent-light, #ccfbf1);
+}
+.rail-item.active {
+  color: #ffffff;
+  background: var(--accent-primary, #0d9488);
+  box-shadow: 0 6px 16px rgba(13, 148, 136, 0.32);
+}
+
+.rail-item[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 62px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+  padding: 6px 11px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: var(--shadow-md);
+  transition: opacity var(--motion-fast), transform var(--motion-fast);
+  z-index: 100;
+}
+.rail-item[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.rail-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.rail-user-avatar {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #14b8a6, #0d9488);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 10px rgba(13, 148, 136, 0.22);
+}
+
+/* Page integration when nav-rail is present */
+.has-nav-rail .topbar {
+  margin-left: var(--nav-rail-width, 76px);
+  width: calc(100% - var(--nav-rail-width, 76px));
+}
+
+.has-nav-rail .app-shell {
+  margin-left: var(--nav-rail-width, 76px);
+  width: calc(100% - var(--nav-rail-width, 76px));
+  max-width: var(--content-wide-max, 1680px);
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.has-nav-rail .left-sidebar {
+  display: none !important;
+}
+
+.mobile-bottom-nav {
+  display: none;
+}
+
 /**
  * MediCare AI — Dashboard Styles (VIP Pro V3 Restored & Hardened)
  * Clean Clinical Architecture, Content-First, Asymmetric Health OS
@@ -2471,4 +2608,57 @@ body.page-home-v2 {
 .emergency-floating-text {
   font-size: 13px;
   letter-spacing: 0.02em;
+}
+
+
+@media (max-width: 768px) {
+  .app-nav-rail {
+    display: none !important;
+  }
+  .has-nav-rail .topbar {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 0 16px;
+  }
+  .has-nav-rail .app-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding-bottom: 74px !important;
+  }
+  .mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    z-index: 80;
+    background: var(--glass-panel, rgba(255, 255, 255, 0.95));
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border-subtle);
+    display: flex !important;
+    align-items: center;
+    justify-content: space-around;
+  }
+  .mobile-bottom-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    color: var(--text-secondary, #64748b);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 8px;
+    text-decoration: none;
+  }
+  .mobile-bottom-item.active {
+    color: var(--accent-primary, #0d9488);
+  }
+  .mcai-widget {
+    display: none !important;
+  }
+  .emergency-floating {
+    bottom: 74px !important;
+  }
 }

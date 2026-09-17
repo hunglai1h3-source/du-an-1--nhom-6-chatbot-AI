@@ -611,32 +611,74 @@ function renderWelcomeHero(profile) {
   const profileName = profile?.name || "bạn";
   return `
     <div class="welcome-hero" id="welcomeHero">
-      <div class="welcome-badge">
-        <span class="welcome-icon">🏥</span>
-        <span>Trợ lý y tế thông minh</span>
+      <div class="ai-visual-identity">
+        <div class="ai-pulse-orb" aria-hidden="true">
+          <div class="orb-halo halo-3"></div>
+          <div class="orb-halo halo-2"></div>
+          <div class="orb-halo halo-1"></div>
+          <div class="orb-core">
+            <svg class="orb-glyph" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+        </div>
+        <div class="ai-badge-label">
+          <span class="pulse-dot-live"></span>
+          <span>PERSONAL HEALTH AI OS</span>
+        </div>
       </div>
-      <h2 class="welcome-title">Xin chào, tôi là MediCare AI</h2>
-      <p class="welcome-subtitle">Đang sẵn sàng đồng hành và tư vấn sức khỏe cho <strong>${M.escapeHTML(profileName)}</strong>. Bạn có thể chọn gợi ý nhanh bên dưới hoặc đặt câu hỏi bất kỳ.</p>
+
+      <h2 class="welcome-title">Bạn muốn mình hỗ trợ điều gì hôm nay?</h2>
+      <p class="welcome-subtitle">MEDICARE AI có thể cùng <strong>${M.escapeHTML(profileName)}</strong> tìm hiểu triệu chứng, theo dõi sức khỏe và chuẩn bị thông tin trước khi đi khám.</p>
+
       <div class="starter-cards">
-        <button class="starter-card" type="button" data-starter-prompt="Tôi bị sốt nhẹ và đau họng từ hôm qua, cần theo dõi những gì?">
-          <span class="starter-icon">🩺</span>
-          <strong>Tư vấn triệu chứng</strong>
-          <small>Sốt nhẹ, đau đầu, ho dai dẳng, đau bụng...</small>
+        <button class="starter-card featured-tile" type="button" data-starter-prompt="Tôi bị sốt nhẹ và đau họng từ hôm qua, cần theo dõi những gì?">
+          <div class="starter-icon-wrap">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/>
+            </svg>
+          </div>
+          <div class="starter-copy">
+            <strong>Tư vấn triệu chứng</strong>
+            <small>Sốt nhẹ, đau đầu, ho dai dẳng, đau bụng, mệt mỏi...</small>
+          </div>
+          <span class="starter-arrow">→</span>
         </button>
+
         <button class="starter-card" type="button" data-starter-prompt="Thuốc Paracetamol nên uống cách nhau mấy tiếng và có lưu ý gì khi dùng?">
-          <span class="starter-icon">💊</span>
-          <strong>Hướng dẫn dùng thuốc</strong>
-          <small>Liều lượng, khoảng cách uống, tương tác thuốc...</small>
+          <div class="starter-icon-wrap icon-meds">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/>
+            </svg>
+          </div>
+          <div class="starter-copy">
+            <strong>Thuốc &amp; cách dùng</strong>
+            <small>Liều lượng, khoảng cách, tương tác thuốc...</small>
+          </div>
         </button>
+
         <button class="starter-card" type="button" data-starter-prompt="Tìm nhà thuốc hoặc phòng khám đa khoa uy tín gần tôi nhất">
-          <span class="starter-icon">📍</span>
-          <strong>Cơ sở y tế gần bạn</strong>
-          <small>Tìm nhà thuốc, trung tâm y tế, bệnh viện gần nhất...</small>
+          <div class="starter-icon-wrap icon-loc">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+            </svg>
+          </div>
+          <div class="starter-copy">
+            <strong>Cơ sở y tế gần bạn</strong>
+            <small>Nhà thuốc, phòng khám, bệnh viện gần nhất...</small>
+          </div>
         </button>
+
         <button class="starter-card" type="button" data-starter-prompt="Chỉ số bụi mịn AQI hôm nay thế nào, người có bệnh hô hấp cần lưu ý gì?">
-          <span class="starter-icon">🍃</span>
-          <strong>Môi trường & Thời tiết</strong>
-          <small>Khuyến cáo bụi mịn PM2.5, dị ứng thời tiết...</small>
+          <div class="starter-icon-wrap icon-air">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+            </svg>
+          </div>
+          <div class="starter-copy">
+            <strong>Môi trường &amp; Thời tiết</strong>
+            <small>Khuyến cáo bụi mịn PM2.5, dị ứng thời tiết...</small>
+          </div>
         </button>
       </div>
     </div>`;
@@ -2171,43 +2213,69 @@ async function initialize() {
     });
   });
 
-  // Toggle Context Sidebar (Desktop)
-  const shell = $("#consultationShell");
-  const toggleContextBtn = $("#toggleContextButton");
-  toggleContextBtn?.addEventListener("click", () => {
-    shell?.classList.toggle("context-collapsed");
-  });
-
-  // Mobile Drawers
-  const mobileMenuBtn = $("#mobileMenuButton");
-  const mobileContextBtn = $("#mobileContextButton");
+  // Personal Health AI OS Drawers (Unified Desktop & Mobile Off-Canvas)
   const historySidebar = $("#historySidebar");
   const contextSidebar = $("#contextSidebar");
   const backdrop = $("#sidebarBackdrop");
+  const mobileMenuBtn = $("#mobileMenuButton");
+  const mobileContextBtn = $("#mobileContextButton");
+  const toggleContextBtn = $("#toggleContextButton");
+  const railHistoryBtn = $("#railHistoryButton");
+  const railContextBtn = $("#railContextButton");
   const closeHistoryBtn = $("#closeHistorySidebar");
   const closeContextBtn = $("#closeContextSidebar");
 
   const closeDrawers = () => {
-    historySidebar?.classList.remove("mobile-open");
-    contextSidebar?.classList.remove("mobile-open");
+    historySidebar?.classList.remove("drawer-open", "mobile-open");
+    contextSidebar?.classList.remove("drawer-open", "mobile-open");
     backdrop?.classList.add("hidden");
   };
 
-  mobileMenuBtn?.addEventListener("click", () => {
-    contextSidebar?.classList.remove("mobile-open");
-    historySidebar?.classList.toggle("mobile-open");
-    backdrop?.classList.toggle("hidden", !historySidebar?.classList.contains("mobile-open"));
-  });
+  const toggleHistoryDrawer = () => {
+    contextSidebar?.classList.remove("drawer-open", "mobile-open");
+    const willOpen = !historySidebar?.classList.contains("drawer-open");
+    historySidebar?.classList.toggle("drawer-open", willOpen);
+    historySidebar?.classList.toggle("mobile-open", willOpen);
+    backdrop?.classList.toggle("hidden", !willOpen);
+  };
 
-  mobileContextBtn?.addEventListener("click", () => {
-    historySidebar?.classList.remove("mobile-open");
-    contextSidebar?.classList.toggle("mobile-open");
-    backdrop?.classList.toggle("hidden", !contextSidebar?.classList.contains("mobile-open"));
-  });
+  const toggleContextDrawer = () => {
+    historySidebar?.classList.remove("drawer-open", "mobile-open");
+    const willOpen = !contextSidebar?.classList.contains("drawer-open");
+    contextSidebar?.classList.toggle("drawer-open", willOpen);
+    contextSidebar?.classList.toggle("mobile-open", willOpen);
+    backdrop?.classList.toggle("hidden", !willOpen);
+  };
+
+  mobileMenuBtn?.addEventListener("click", toggleHistoryDrawer);
+  railHistoryBtn?.addEventListener("click", toggleHistoryDrawer);
+
+  mobileContextBtn?.addEventListener("click", toggleContextDrawer);
+  toggleContextBtn?.addEventListener("click", toggleContextDrawer);
+  railContextBtn?.addEventListener("click", toggleContextDrawer);
 
   closeHistoryBtn?.addEventListener("click", closeDrawers);
   closeContextBtn?.addEventListener("click", closeDrawers);
   backdrop?.addEventListener("click", closeDrawers);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeDrawers();
+  });
+
+  // Deep link support (?drawer=history, ?drawer=context, ?theme=dark)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("drawer") === "history") {
+      toggleHistoryDrawer();
+    } else if (urlParams.get("drawer") === "context") {
+      toggleContextDrawer();
+    }
+    if (urlParams.get("theme") === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  } catch (e) {
+    console.warn("Drawer URL param check error:", e);
+  }
 
   // Character counter for composer
   const chatInputEl = $("#chatInput");
