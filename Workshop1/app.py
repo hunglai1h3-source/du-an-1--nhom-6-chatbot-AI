@@ -2161,32 +2161,38 @@ def public_health_news():
 
     where_sql = " AND ".join(conditions)
 
-    connection = get_database()
     try:
-        total = connection.execute(
-            f"""
-            SELECT COUNT(*)
-            FROM health_news
-            WHERE {where_sql}
-            """,
-            tuple(filter_parameters),
-        ).fetchone()[0]
+        connection = get_database()
+        try:
+            total_row = connection.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM health_news
+                WHERE {where_sql}
+                """,
+                tuple(filter_parameters),
+            ).fetchone()
+            total = total_row[0] if total_row else 0
 
-        rows = connection.execute(
-            f"""
-            SELECT *
-            FROM health_news
-            WHERE {where_sql}
-            ORDER BY
-                is_featured DESC,
-                COALESCE(published_at, reviewed_at, created_at) DESC,
-                id DESC
-            LIMIT ? OFFSET ?
-            """,
-            tuple(filter_parameters + [limit, offset]),
-        ).fetchall()
-    finally:
-        connection.close()
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM health_news
+                WHERE {where_sql}
+                ORDER BY
+                    is_featured DESC,
+                    COALESCE(published_at, reviewed_at, created_at) DESC,
+                    id DESC
+                LIMIT ? OFFSET ?
+                """,
+                tuple(filter_parameters + [limit, offset]),
+            ).fetchall()
+        finally:
+            connection.close()
+    except Exception as err:
+        app.logger.warning("public_health_news: DB error (%s)", err)
+        total = 0
+        rows = []
 
     return jsonify({
         "items": [health_news_row_to_dict(row) for row in rows],
@@ -2432,18 +2438,27 @@ def current_user():
 
     # Luôn đọc lại quyền từ CSDL. Nhờ vậy tài khoản vừa được cấp admin
     # có thể vào /admin mà không bị giữ quyền cũ trong cookie phiên.
-    connection = get_database()
-    user = connection.execute(
-        """SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active,
-                  hp.birth_date
-           FROM users u
-           LEFT JOIN health_profiles hp ON hp.user_id = u.id
-           WHERE u.id = ?""",
-        (user_id,),
-    ).fetchone()
-    connection.close()
+    try:
+        connection = get_database()
+        user = connection.execute(
+            """SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active,
+                      hp.birth_date
+               FROM users u
+               LEFT JOIN health_profiles hp ON hp.user_id = u.id
+               WHERE u.id = ?""",
+            (user_id,),
+        ).fetchone()
+        connection.close()
+    except Exception as db_err:
+        app.logger.warning("current_user DB error (%s)", db_err)
+        return jsonify({"logged_in": False})
 
-    if user is None or not bool(user["is_active"]):
+    if user is None:
+        session.clear()
+        return jsonify({"logged_in": False})
+
+    is_active_val = user["is_active"] if "is_active" in user.keys() else 1
+    if is_active_val is not None and not bool(is_active_val):
         session.clear()
         return jsonify({"logged_in": False})
 
@@ -2452,10 +2467,19 @@ def current_user():
     session["phone"] = user["phone"]
     session["role"] = user["role"]
     session.permanent = True
-    subscription_connection = get_database()
-    entitlement = get_user_entitlement(subscription_connection, user_id)
-    subscription_connection.commit()
-    subscription_connection.close()
+    try:
+        subscription_connection = get_database()
+        entitlement = get_user_entitlement(subscription_connection, user_id)
+        subscription_connection.commit()
+        subscription_connection.close()
+    except Exception as ent_err:
+        app.logger.warning("current_user entitlement DB error (%s)", ent_err)
+        entitlement = {
+            "plan": "free",
+            "is_premium": False,
+            "is_admin": user["role"] == "admin",
+            "expires_at": None,
+        }
 
     return jsonify({
         "logged_in": True,

@@ -117,3 +117,22 @@ body.dark {
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   Universal Resets & Normalization (Bulletproof Prevention of Purple Links & 3D Buttons)
+   ========================================================================== */
+a, a:visited {
+  color: inherit;
+  text-decoration: none;
+}
+
+button, input[type="button"], input[type="submit"], input[type="reset"] {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+

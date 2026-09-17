@@ -41,7 +41,7 @@ button, a {
   -webkit-tap-highlight-color: transparent;
 }
 
-a {
+a, a:visited {
   color: inherit;
   text-decoration: none;
   transition: color var(--motion-fast, 180ms ease);
@@ -51,10 +51,14 @@ a:hover {
   color: var(--accent-primary, #0d9488);
 }
 
-button {
+button, input[type="button"], input[type="submit"], input[type="reset"] {
   cursor: pointer;
   border: none;
   background: transparent;
+  font: inherit;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .hidden {
@@ -168,8 +172,10 @@ html[data-theme="dark"] .home-greeting {
 .brand { width: 296px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .brand-mark { width: 43px; height: 43px; display: grid; place-items: center; border: 4px solid var(--green); border-radius: 50%; color: var(--green); font-size: 28px; font-weight: 900; line-height: 1; }
 .brand strong { display: block; font-size: 22px; line-height: 1.05; }.brand em { color: var(--green); font-style: normal; }.brand small { color: var(--muted); font-size: 11px; }
-.main-nav { height: 100%; display: flex; align-items: center; gap: clamp(20px, 2vw, 38px); margin: 0 auto; font-weight: 650; white-space: nowrap; }
-.main-nav a { height: 100%; display: grid; place-items: center; position: relative; }.main-nav a:hover,.main-nav a.active { color: var(--green); }.main-nav a.active::after { content:""; position:absolute; left:0; right:0; bottom:0; height:3px; border-radius:99px; background:var(--green); }
+.main-nav { height: 100%; display: flex; align-items: center; gap: clamp(16px, 2.2vw, 36px); margin: 0 auto; font-weight: 650; white-space: nowrap; }
+.main-nav a, .main-nav a:visited { height: 100%; display: grid; place-items: center; padding: 0 4px; position: relative; color: var(--text-primary, #0f172a); text-decoration: none; }
+.main-nav a:hover, .main-nav a.active, .main-nav a.active:visited { color: var(--green); }
+.main-nav a.active::after { content:""; position:absolute; left:0; right:0; bottom:0; height:3px; border-radius:99px; background:var(--green); }
 .top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 400px; }
 .search-box { width: 210px; height: 42px; display:flex; align-items:center; gap:8px; padding:0 14px; border:1px solid var(--border); border-radius:999px; background:#fbfcfc; }.search-box input { width:100%; border:0; outline:0; background:transparent; }.search-box span { color:var(--muted); font-size:20px; }
 .icon-button { position:relative; width:42px; height:42px; border:1px solid var(--border); border-radius:50%; color:#536071; background:white; }.icon-button b { position:absolute; right:-2px; top:-5px; width:19px; height:19px; display:grid; place-items:center; border:2px solid white; border-radius:50%; color:white; background:var(--red); font-size:10px; }
@@ -2162,7 +2168,7 @@ body.dark .mcai-profile-open {
 /* =========================================================
    MEDICARE DASHBOARD V2 - HOME NEWS + HEALTH & UTILITIES
    ========================================================= */
-.side-main-nav{display:grid;gap:4px;margin-top:14px}.side-main-nav a,.side-main-nav button{width:100%;min-height:40px;display:flex;align-items:center;gap:10px;padding:9px 11px;border:0;border-radius:9px;color:#526071;background:transparent;font-size:11px;text-align:left}.side-main-nav a:hover,.side-main-nav button:hover,.side-main-nav .active{color:var(--green-dark);background:var(--green-soft)}.side-main-nav span{width:18px;text-align:center}.side-main-nav small{margin-left:auto;color:var(--muted);font-size:8px}.compact-profile-summary{margin-top:0}.app-nav-sidebar .premium-card{margin-top:18px}.panel-text-link{color:var(--green);font-size:9px;font-weight:800}
+.side-main-nav{display:grid;gap:4px;margin-top:14px}.side-main-nav a,.side-main-nav a:visited,.side-main-nav button{width:100%;min-height:40px;display:flex;align-items:center;gap:10px;padding:9px 11px;border:0;border-radius:9px;color:#526071;background:transparent;font-size:11px;text-align:left;text-decoration:none}.side-main-nav a:hover,.side-main-nav a:hover:visited,.side-main-nav button:hover,.side-main-nav .active,.side-main-nav .active:visited{color:var(--green-dark);background:var(--green-soft)}.side-main-nav span{width:18px;text-align:center}.side-main-nav small{margin-left:auto;color:var(--muted);font-size:8px}.compact-profile-summary{margin-top:0}.app-nav-sidebar .premium-card{margin-top:18px}.panel-text-link,.panel-text-link:visited{color:var(--green);font-size:9px;font-weight:800;text-decoration:none}
 .home-greeting{display:grid;grid-template-columns:minmax(300px,1fr) auto;align-items:center;gap:18px;margin-bottom:16px}.home-greeting h1{font-size:27px}.home-greeting>div>p:last-child{margin-top:4px;color:var(--muted);font-size:11px}.home-status-grid{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:10px}.home-status-grid article{min-width:140px;display:flex;align-items:center;gap:9px;padding:12px;border:1px solid var(--border);border-radius:13px;background:#fff;box-shadow:var(--shadow-small)}.home-status-grid article>span{width:33px;height:33px;display:grid;place-items:center;border-radius:10px;background:var(--green-soft);color:var(--green);font-size:18px}.home-status-grid small,.home-status-grid strong{display:block}.home-status-grid small{color:var(--muted);font-size:8px}.home-status-grid strong{margin-top:2px;font-size:10px}
 .health-news-panel{padding:0;overflow:hidden;margin-bottom:16px}.news-heading-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}.news-heading-row>div{display:flex;align-items:center;gap:9px}.news-heading-row>div>p{font-size:20px}.news-heading-row h2,.news-heading-row small{display:block}.news-heading-row h2{font-size:16px}.news-heading-row small{margin-top:2px;color:var(--muted);font-size:9px}.news-heading-row>a{color:var(--green);font-size:9px;font-weight:800}.news-filter-row{display:flex;gap:7px;padding:0 16px 10px;border-bottom:1px solid var(--border);overflow-x:auto}.news-filter-row button{flex:0 0 auto;padding:6px 12px;border:0;border-radius:999px;background:#f4f6f5;color:#5f6b79;font-size:9px}.news-filter-row button.active{color:var(--green-dark);background:var(--green-soft);font-weight:800}.news-layout{display:grid;grid-template-columns:1.03fr 1.35fr;gap:16px;padding:14px 16px 16px}.news-featured{position:relative;display:block;border:0;background:transparent;text-align:left}.news-featured img{width:100%;height:190px;object-fit:cover;border-radius:13px;border:1px solid var(--border);background:#edf8f2}.news-hot{position:absolute;top:10px;left:10px;padding:4px 8px;border-radius:999px;color:#fff;background:#ef4444;font-size:8px;font-weight:850}.news-featured strong{display:block;margin-top:10px;font-size:18px;line-height:1.35}.news-featured p{margin-top:6px;color:var(--muted);font-size:10px;line-height:1.55}.news-featured small{display:block;margin-top:8px;color:#82909e;font-size:8px}.news-list{display:grid;align-content:start}.news-list button{min-height:82px;display:grid;grid-template-columns:126px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 0;border:0;border-bottom:1px solid var(--border);background:transparent;text-align:left}.news-list button:last-child{border-bottom:0}.news-list img{width:126px;height:66px;object-fit:cover;border-radius:10px;background:#f3f8f5}.news-list strong,.news-list small{display:block}.news-list strong{font-size:11px;line-height:1.4}.news-list small{margin-top:5px;color:var(--muted);font-size:8px}.news-list em{padding:5px 7px;border-radius:7px;color:var(--green);background:var(--green-soft);font-size:8px;font-style:normal;white-space:nowrap}.news-hidden{display:none!important}.news-featured:hover strong,.news-list button:hover strong{color:var(--green)}
 .popular-tools{padding:14px 16px;margin-bottom:16px}.popular-tools-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.popular-tools-grid a,.popular-tools-grid button{min-height:94px;display:grid;place-items:center;align-content:center;gap:6px;padding:10px;border:1px solid var(--border);border-radius:12px;background:#fbfdfc;text-align:center}.popular-tools-grid a:hover,.popular-tools-grid button:hover{border-color:#b8e2c7;background:var(--green-soft)}.popular-tools-grid span{font-size:27px}.popular-tools-grid strong{font-size:9px;line-height:1.35}.zalo-mini{width:30px;height:30px;display:grid;place-items:center;border-radius:50%;color:#fff;background:#0a7cff;font-size:13px!important;font-weight:900}.preserved-tools-grid{margin-bottom:18px}

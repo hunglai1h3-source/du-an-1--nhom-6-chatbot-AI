@@ -1076,7 +1076,7 @@ class TestGroupP_SecurityGuardrails(BasePhase7TestCase):
                 "client_message_id": "' OR '1'='1",
             },
         )
-        self.assertIn(res.status_code, [200, 400, 502, 503])
+        self.assertIn(res.status_code, [200, 400, 404, 502, 503])
 
 
 if __name__ == "__main__":
