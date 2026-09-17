@@ -2037,6 +2037,21 @@ def location_context():
 
 @app.get("/")
 def index():
+    # Phân tách 2 thế giới: Khách chưa đăng nhập -> Public Landing; Đã đăng nhập -> Dashboard
+    if not session.get("user_id"):
+        return render_template("landing.html")
+    return render_template("index.html")
+
+
+@app.get("/landing")
+def landing_page():
+    return render_template("landing.html")
+
+
+@app.get("/dashboard")
+def dashboard_page():
+    if not session.get("user_id"):
+        return redirect(url_for("login_page"))
     return render_template("index.html")
 
 
