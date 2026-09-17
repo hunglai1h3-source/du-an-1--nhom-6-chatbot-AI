@@ -1118,7 +1118,10 @@
  
      renderGooglePharmacy(null);
  
-     M.showToast(error.message, "error");
+     const errMsg = (error && error.message && error.message.includes("429"))
+       ? "Dịch vụ thời tiết tạm thời bận, vui lòng thử lại sau giây lát."
+       : (error?.message || "Không thể tải dữ liệu vị trí.");
+     M.showToast(errMsg, error?.message?.includes("429") ? "info" : "error");
  
    } finally {
  
@@ -1572,7 +1575,10 @@
  
      } catch (error) {
  
-       M.showToast(error.message, "error");
+     const errMsg = (error && error.message && error.message.includes("429"))
+      ? "Dịch vụ thời tiết tạm thời bận, vui lòng thử lại sau giây lát."
+      : (error?.message || "Không thể tải dữ liệu vị trí.");
+    M.showToast(errMsg, error?.message?.includes("429") ? "info" : "error");
  
      } finally {
  

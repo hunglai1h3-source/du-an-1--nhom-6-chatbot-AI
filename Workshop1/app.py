@@ -617,6 +617,9 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 LOCATION_CACHE = {}
 LOCATION_CACHE_TTL_SECONDS = 300
 LOCATION_CACHE_LOCK = Lock()
+WEATHER_CACHE = {}
+WEATHER_CACHE_TTL_SECONDS = 900
+WEATHER_CACHE_LOCK = Lock()
 NOMINATIM_LOCK = Lock()
 NOMINATIM_LAST_REQUEST_AT = 0.0
 APP_CONTACT_EMAIL = os.getenv("APP_CONTACT_EMAIL", "").strip()
@@ -1850,6 +1853,13 @@ def reverse_geocode(latitude, longitude):
 
 
 def fetch_weather_and_air(latitude, longitude):
+    cache_key = f"{round(latitude, 2)}:{round(longitude, 2)}"
+    now = time.time()
+    with WEATHER_CACHE_LOCK:
+        cached = WEATHER_CACHE.get(cache_key)
+        if cached and (now - cached["cached_at"] < WEATHER_CACHE_TTL_SECONDS):
+            return dict(cached["data"])
+
     weather_query = urlencode({
         "latitude": latitude,
         "longitude": longitude,
@@ -1866,18 +1876,33 @@ def fetch_weather_and_air(latitude, longitude):
         "timezone": "auto",
     })
 
-    weather = http_get_json(
-        f"https://api.open-meteo.com/v1/forecast?{weather_query}",
-        timeout=15,
-    )
-    air = http_get_json(
-        f"https://air-quality-api.open-meteo.com/v1/air-quality?{air_query}",
-        timeout=15,
-    )
+    weather = {}
+    air = {}
+    try:
+        weather = http_get_json(
+            f"https://api.open-meteo.com/v1/forecast?{weather_query}",
+            timeout=15,
+        )
+    except HTTPError as err:
+        if err.code == 429 and cached:
+            return dict(cached["data"])
+        raise
+
+    try:
+        air = http_get_json(
+            f"https://air-quality-api.open-meteo.com/v1/air-quality?{air_query}",
+            timeout=15,
+        )
+    except HTTPError as err:
+        if err.code == 429 and cached:
+            return dict(cached["data"])
+        if err.code != 429:
+            raise
+        air = {}
 
     current_weather = weather.get("current") or {}
     current_air = air.get("current") or {}
-    return {
+    result_data = {
         "temperature": current_weather.get("temperature_2m"),
         "apparent_temperature": current_weather.get("apparent_temperature"),
         "humidity": current_weather.get("relative_humidity_2m"),
@@ -1891,6 +1916,12 @@ def fetch_weather_and_air(latitude, longitude):
         "weather_time": current_weather.get("time"),
         "air_time": current_air.get("time"),
     }
+    with WEATHER_CACHE_LOCK:
+        WEATHER_CACHE[cache_key] = {"cached_at": now, "data": dict(result_data)}
+        if len(WEATHER_CACHE) > 100:
+            for old_key in list(WEATHER_CACHE.keys())[:25]:
+                WEATHER_CACHE.pop(old_key, None)
+    return result_data
 
 
 def fetch_nearby_pharmacies(latitude, longitude, radius_m=5000, limit=6):
@@ -1992,7 +2023,10 @@ def get_location_context(latitude, longitude, accuracy=None):
             try:
                 result[key] = future.result()
             except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError, OSError) as error:
-                result["warnings"].append(f"{error_labels[key]}: {error}")
+                if isinstance(error, HTTPError) and error.code == 429:
+                    result["warnings"].append("Dịch vụ thời tiết đang bận (vui lòng thử lại sau).")
+                else:
+                    result["warnings"].append(f"{error_labels[key]}: {error}")
 
     if not result["location"]:
         result["location"] = {
