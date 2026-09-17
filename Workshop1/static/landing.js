@@ -149,4 +149,19 @@
   } else {
     render();
   }
+
+  // 4. Cinematic Intro Handling
+  const intro = document.getElementById("cinematicIntro");
+  if (intro) {
+    const seen = sessionStorage.getItem("medicareIntroSeen");
+    if (seen || prefersReducedMotion) {
+      intro.style.display = "none";
+    } else {
+      setTimeout(() => {
+        intro.classList.add("dismissed");
+        sessionStorage.setItem("medicareIntroSeen", "1");
+        setTimeout(() => { intro.style.display = "none"; }, 600);
+      }, 1200);
+    }
+  }
 })();

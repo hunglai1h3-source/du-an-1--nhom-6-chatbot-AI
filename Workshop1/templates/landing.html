@@ -13,6 +13,15 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='landing.css', v='20260917-ultimate-v1') }}">
 </head>
 <body class="landing-body">
+  <!-- Cinematic Intro (Plays on first visit ~1.2s, skippable) -->
+  <div id="cinematicIntro" class="cinematic-intro-overlay" aria-hidden="true">
+    <div class="intro-pulse-core">
+      <div class="intro-core-orb"></div>
+      <div class="intro-brand-name">MediCare <span>AI</span></div>
+      <div class="intro-tagline">Sức khỏe của bạn. Được hiểu theo thời gian.</div>
+    </div>
+  </div>
+
   <!-- Interactive Biometric Signal Canvas Background -->
   <div class="landing-visual-environment" aria-hidden="true">
     <canvas id="landingCanvas" class="landing-canvas"></canvas>
@@ -292,6 +301,7 @@
     </div>
   </footer>
 
+  <script src="{{ url_for('static', filename='cinematic_engine.js') }}"></script>
   <script src="{{ url_for('static', filename='landing.js') }}"></script>
 </body>
 </html>

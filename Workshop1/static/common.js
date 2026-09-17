@@ -847,9 +847,236 @@
     });
   });
 
+  // ==========================================================================
+  // APEX MAXIMUM: GLOBAL COMMAND PALETTE (Ctrl/Cmd + K)
+  // ==========================================================================
+  const COMMANDS = [
+    {
+      id: "new-chat",
+      title: "Cuộc trò chuyện mới",
+      badge: "Tư vấn AI",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+      action: () => {
+        if (window.location.pathname === "/tu-van") {
+          window.location.href = "/tu-van?reset=1";
+        } else {
+          window.location.href = "/tu-van";
+        }
+      }
+    },
+    {
+      id: "home",
+      title: "Trung tâm điều hành Sức khỏe (Home)",
+      badge: "Hệ điều hành",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+      action: () => { window.location.href = "/"; }
+    },
+    {
+      id: "consult",
+      title: "Không gian Tư vấn AI (Medical Workspace)",
+      badge: "AI",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+      action: () => { window.location.href = "/tu-van"; }
+    },
+    {
+      id: "health-space",
+      title: "Hồ sơ sức khỏe, Gia đình & Diễn biến bệnh",
+      badge: "Hồ sơ",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+      action: () => { window.location.href = "/suc-khoe-tien-ich"; }
+    },
+    {
+      id: "knowledge",
+      title: "Thư viện Kiến thức Y khoa Đã kiểm duyệt",
+      badge: "Kiến thức",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
+      action: () => { window.location.href = "/kien-thuc"; }
+    },
+    {
+      id: "news",
+      title: "Bản tin Sức khỏe Chính thống",
+      badge: "Bản tin",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1m2 13a2 2 0 0 1-2-2V7m2 13a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/></svg>',
+      action: () => { window.location.href = "/ban-tin-suc-khoe"; }
+    },
+    {
+      id: "pharmacy",
+      title: "Tìm kiếm Nhà thuốc GPP & Trạm Y tế gần nhất",
+      badge: "Bản đồ",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+      action: () => { window.location.href = "/nha-thuoc"; }
+    },
+    {
+      id: "theme",
+      title: "Chuyển đổi giao diện Sáng / Tối (Dark / Light Mode)",
+      badge: "Giao diện",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
+      action: () => { toggleTheme(); }
+    },
+    {
+      id: "settings",
+      title: "Cài đặt tài khoản & Thông tin y tế",
+      badge: "Tài khoản",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+      action: () => { openSettings(); }
+    },
+    {
+      id: "emergency-115",
+      title: "Gọi khẩn cấp Cấp cứu 115",
+      badge: "Khẩn cấp",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+      action: () => { window.location.href = "tel:115"; }
+    }
+  ];
+
+  let cmdBackdrop = null;
+  let cmdInput = null;
+  let cmdList = null;
+  let selectedIndex = 0;
+  let filteredCommands = [...COMMANDS];
+
+  function initCommandPalette() {
+    if (document.getElementById("cmdPaletteBackdrop")) return;
+
+    cmdBackdrop = document.createElement("div");
+    cmdBackdrop.id = "cmdPaletteBackdrop";
+    cmdBackdrop.className = "cmd-palette-backdrop";
+    cmdBackdrop.setAttribute("role", "dialog");
+    cmdBackdrop.setAttribute("aria-modal", "true");
+    cmdBackdrop.setAttribute("aria-label", "MediCare Command Palette");
+
+    cmdBackdrop.innerHTML = `
+      <div class="cmd-palette-modal">
+        <div class="cmd-palette-header">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" class="cmd-palette-input" id="cmdPaletteInput" placeholder="Tìm kiếm trang, chức năng hoặc hành động (Ctrl+K)..." autocomplete="off" spellcheck="false">
+          <kbd class="cmd-palette-kbd">ESC</kbd>
+        </div>
+        <ul class="cmd-palette-list" id="cmdPaletteList"></ul>
+      </div>
+    `;
+
+    document.body.appendChild(cmdBackdrop);
+    cmdInput = document.getElementById("cmdPaletteInput");
+    cmdList = document.getElementById("cmdPaletteList");
+
+    cmdBackdrop.addEventListener("click", (e) => {
+      if (e.target === cmdBackdrop) closeCommandPalette();
+    });
+
+    cmdInput.addEventListener("input", (e) => {
+      filterCommands(e.target.value);
+    });
+
+    cmdInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeCommandPalette();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        selectedIndex = (selectedIndex + 1) % Math.max(1, filteredCommands.length);
+        renderCommandItems();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        selectedIndex = (selectedIndex - 1 + filteredCommands.length) % Math.max(1, filteredCommands.length);
+        renderCommandItems();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (filteredCommands[selectedIndex]) {
+          const action = filteredCommands[selectedIndex].action;
+          closeCommandPalette();
+          action();
+        }
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        toggleCommandPalette();
+      }
+    });
+  }
+
+  function filterCommands(query) {
+    const q = (query || "").toLowerCase().trim();
+    if (!q) {
+      filteredCommands = [...COMMANDS];
+    } else {
+      filteredCommands = COMMANDS.filter(cmd => 
+        cmd.title.toLowerCase().includes(q) || cmd.badge.toLowerCase().includes(q)
+      );
+    }
+    selectedIndex = 0;
+    renderCommandItems();
+  }
+
+  function renderCommandItems() {
+    if (!cmdList) return;
+    cmdList.innerHTML = "";
+    if (filteredCommands.length === 0) {
+      cmdList.innerHTML = `<li style="padding: 20px; text-align: center; color: var(--text-tertiary);">Không tìm thấy lệnh hoặc trang phù hợp.</li>`;
+      return;
+    }
+
+    filteredCommands.forEach((cmd, idx) => {
+      const li = document.createElement("li");
+      li.className = `cmd-palette-item ${idx === selectedIndex ? 'selected' : ''}`;
+      li.innerHTML = `
+        <div class="cmd-item-left">
+          ${cmd.icon}
+          <span>${escapeHTML(cmd.title)}</span>
+        </div>
+        <span class="cmd-badge">${escapeHTML(cmd.badge)}</span>
+      `;
+      li.addEventListener("click", () => {
+        closeCommandPalette();
+        cmd.action();
+      });
+      li.addEventListener("mouseenter", () => {
+        selectedIndex = idx;
+        renderCommandItems();
+      });
+      cmdList.appendChild(li);
+    });
+  }
+
+  function toggleCommandPalette() {
+    if (!cmdBackdrop) initCommandPalette();
+    if (cmdBackdrop.classList.contains("active")) {
+      closeCommandPalette();
+    } else {
+      openCommandPalette();
+    }
+  }
+
+  function openCommandPalette() {
+    initCommandPalette();
+    filteredCommands = [...COMMANDS];
+    selectedIndex = 0;
+    renderCommandItems();
+    cmdBackdrop.classList.add("active");
+    if (cmdInput) {
+      cmdInput.value = "";
+      setTimeout(() => cmdInput.focus(), 50);
+    }
+  }
+
+  function closeCommandPalette() {
+    if (cmdBackdrop) {
+      cmdBackdrop.classList.remove("active");
+    }
+  }
+
+  window.MediCare.openCommandPalette = openCommandPalette;
+  window.MediCare.closeCommandPalette = closeCommandPalette;
+
   document.addEventListener("DOMContentLoaded", () => {
     applyTheme();
     $$('[data-action="toggle-theme"]').forEach((button) => button.addEventListener("click", toggleTheme));
     bindSettingsTriggers(document);
+    initCommandPalette();
   });
 })();
+
