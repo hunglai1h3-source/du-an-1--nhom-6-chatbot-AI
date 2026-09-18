@@ -3234,7 +3234,7 @@ html[data-theme="dark"] .ambient-glow-core {
   text-align: center;
 }
 
-/* 5. MULTIDIMENSIONAL MEDICARE CORE */
+/* 5. MEDICARE CORE V2 — SIGNATURE HEALTH INTELLIGENCE ORB */
 .core-orbit-centerpiece {
   display: flex !important;
   flex-direction: column !important;
@@ -3242,73 +3242,163 @@ html[data-theme="dark"] .ambient-glow-core {
   justify-content: center !important;
   width: 100% !important;
   max-width: 860px !important;
-  margin: 0 auto 24px !important;
+  margin: 0 auto 28px !important;
   text-align: center !important;
 }
 
+.medicare-core-v2,
 .medicare-core-multidimensional {
   position: relative;
   width: 140px;
   height: 140px;
-  margin: 0 auto 24px;
+  margin: 0 auto 28px;
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.medicare-core-v2:hover,
 .medicare-core-multidimensional:hover {
-  transform: scale(1.05);
+  transform: scale(1.06);
 }
 
+/* Controlled Volumetric Aura Glow */
+.core-aura-glow,
+.core-breathing-halo {
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.32) 0%, rgba(56, 189, 248, 0.18) 45%, rgba(139, 92, 246, 0.08) 70%, transparent 80%);
+  filter: blur(20px);
+  pointer-events: none;
+  animation: coreAuraPulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes coreAuraPulse {
+  0% { transform: scale(0.92); opacity: 0.55; }
+  100% { transform: scale(1.15); opacity: 0.9; }
+}
+
+/* Neural Orbital Rings */
+.core-orbit-ring,
 .core-magnetic-ring {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
 }
 
+.core-orbit-ring.ring-latitude,
 .core-magnetic-ring.ring-outer {
-  width: 154px;
-  height: 154px;
-  border: 1px dashed rgba(13, 148, 136, 0.3);
-  animation: orbitSpin 24s linear infinite;
+  width: 160px;
+  height: 160px;
+  border: 1px dashed rgba(45, 212, 191, 0.35);
+  animation: orbitTrack1 26s linear infinite;
 }
 
+.core-orbit-ring.ring-longitude,
 .core-magnetic-ring.ring-inner {
-  width: 138px;
-  height: 138px;
-  border: 1px solid rgba(45, 212, 191, 0.2);
-  animation: orbitSpinRev 16s linear infinite;
+  width: 142px;
+  height: 142px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  animation: orbitTrack2 18s linear infinite reverse;
 }
 
-@keyframes orbitSpin {
+@keyframes orbitTrack1 {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
-@keyframes orbitSpinRev {
+@keyframes orbitTrack2 {
   from { transform: rotate(0deg); }
-  to { transform: rotate(-360deg); }
+  to { transform: rotate(360deg); }
 }
 
+/* Spherical Glassmorphic Vessel with Multi-layered Depth */
+.core-orb-sphere,
 .core-outer-shell {
   position: relative;
   z-index: 2;
-  width: 118px;
-  height: 118px;
+  width: 122px;
+  height: 122px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45) 0%, rgba(45, 212, 191, 0.35) 35%, #0d9488 70%, #0f766e 100%);
-  box-shadow: 0 0 50px rgba(13, 148, 136, 0.45), inset 0 2px 14px rgba(255, 255, 255, 0.65), inset 0 -6px 16px rgba(0, 0, 0, 0.25);
+  background: radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.55) 0%, rgba(45, 212, 191, 0.3) 30%, rgba(13, 148, 136, 0.75) 65%, #094e47 100%);
+  box-shadow: 
+    0 12px 36px rgba(13, 148, 136, 0.38),
+    inset 0 2px 14px rgba(255, 255, 255, 0.75),
+    inset 0 -8px 20px rgba(0, 0, 0, 0.3);
   display: grid;
   place-items: center;
-  animation: coreBreathing 4.5s ease-in-out infinite alternate;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: sphereBreathing 4s ease-in-out infinite alternate;
 }
 
-@keyframes coreBreathing {
-  0% { transform: translateY(0) scale(1); box-shadow: 0 0 40px rgba(13, 148, 136, 0.4); }
-  100% { transform: translateY(-6px) scale(1.03); box-shadow: 0 0 65px rgba(20, 184, 166, 0.6), inset 0 2px 18px rgba(255, 255, 255, 0.85); }
+@keyframes sphereBreathing {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-5px) scale(1.03); }
 }
 
+/* Inner Volumetric Luminous Light Core */
+.core-inner-light {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(56, 189, 248, 0.6) 40%, rgba(13, 148, 136, 0.1) 75%, transparent 100%);
+  filter: blur(6px);
+  pointer-events: none;
+  animation: innerLightPulse 3s ease-in-out infinite alternate;
+}
+
+@keyframes innerLightPulse {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  100% { transform: scale(1.18); opacity: 1; }
+}
+
+/* Harmonic Biometric Intelligence Wave (Smooth Sine Wave, NOT Fake ECG Spikes) */
+.core-harmonic-wave {
+  position: relative;
+  z-index: 3;
+  width: 72px;
+  height: 44px;
+  pointer-events: none;
+}
+
+.core-harmonic-wave .wave-path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.core-harmonic-wave .wave-primary {
+  stroke: #ffffff;
+  stroke-width: 2.2;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9));
+  animation: waveFloatPrimary 3s ease-in-out infinite alternate;
+}
+
+.core-harmonic-wave .wave-secondary {
+  stroke: rgba(167, 243, 208, 0.75);
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0 4px rgba(45, 212, 191, 0.5));
+  animation: waveFloatSecondary 4s ease-in-out infinite alternate;
+}
+
+@keyframes waveFloatPrimary {
+  0% { transform: translateY(-1.5px); opacity: 0.85; }
+  100% { transform: translateY(1.5px); opacity: 1; }
+}
+
+@keyframes waveFloatSecondary {
+  0% { transform: translateY(1.5px); opacity: 0.5; }
+  100% { transform: translateY(-1.5px); opacity: 0.8; }
+}
+
+/* Neural Orbit Nodes & Particles */
+.core-neural-particles,
 .core-internal-particles {
   position: absolute;
   inset: 0;
@@ -3317,29 +3407,67 @@ html[data-theme="dark"] .ambient-glow-core {
   pointer-events: none;
 }
 
+.neural-node,
 .core-particle {
   position: absolute;
   border-radius: 50%;
   background: #ffffff;
-  filter: blur(1px);
-  opacity: 0.8;
+  filter: blur(0.5px);
+  box-shadow: 0 0 6px #ffffff;
 }
 
-.core-particle.p1 { width: 4px; height: 4px; top: 25%; left: 30%; animation: particleFloat1 4s ease-in-out infinite; }
-.core-particle.p2 { width: 3px; height: 3px; top: 60%; left: 70%; animation: particleFloat2 5s ease-in-out infinite; }
-.core-particle.p3 { width: 5px; height: 5px; top: 70%; left: 35%; animation: particleFloat1 6s ease-in-out infinite; }
-.core-particle.p4 { width: 3px; height: 3px; top: 20%; left: 65%; animation: particleFloat2 4.5s ease-in-out infinite; }
+.neural-node.n1, .core-particle.p1 { width: 3.5px; height: 3.5px; top: 28%; left: 32%; animation: neuralDrift1 4.5s ease-in-out infinite; }
+.neural-node.n2, .core-particle.p2 { width: 4px; height: 4px; top: 62%; left: 68%; animation: neuralDrift2 5.5s ease-in-out infinite; }
+.neural-node.n3, .core-particle.p3 { width: 3px; height: 3px; top: 68%; left: 30%; animation: neuralDrift1 6s ease-in-out infinite; }
 
-@keyframes particleFloat1 {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(8px, -8px); }
+@keyframes neuralDrift1 {
+  0%, 100% { transform: translate(0, 0); opacity: 0.4; }
+  50% { transform: translate(6px, -6px); opacity: 0.95; }
 }
 
-@keyframes particleFloat2 {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-6px, 6px); }
+@keyframes neuralDrift2 {
+  0%, 100% { transform: translate(0, 0); opacity: 0.85; }
+  50% { transform: translate(-5px, 5px); opacity: 0.35; }
 }
 
+/* Center Focus Nexus Dot */
+.core-focus-nexus {
+  position: absolute;
+  z-index: 4;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 10px #ffffff, 0 0 20px rgba(56, 189, 248, 0.8);
+  pointer-events: none;
+}
+
+/* States: IDLE, PROCESSING, RESPONDING, LISTENING */
+.medicare-core-v2.state-idle .core-orb-sphere {
+  /* Default serene rhythm */
+}
+
+.medicare-core-v2.state-processing .core-orbit-ring.ring-latitude {
+  animation-duration: 4s;
+  border-color: rgba(56, 189, 248, 0.7);
+}
+
+.medicare-core-v2.state-processing .core-orbit-ring.ring-longitude {
+  animation-duration: 3s;
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
+.medicare-core-v2.state-responding .core-aura-glow {
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.45) 0%, rgba(45, 212, 191, 0.3) 50%, transparent 75%);
+  animation-duration: 2s;
+}
+
+.medicare-core-v2.state-listening .core-harmonic-wave .wave-primary {
+  animation-duration: 1.2s;
+  stroke-width: 2.8;
+}
+
+/* Legacy SVG pulse support */
 .core-volumetric-center {
   position: relative;
   z-index: 3;
@@ -3349,22 +3477,7 @@ html[data-theme="dark"] .ambient-glow-core {
 }
 
 .core-pulse-svg {
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
-}
-
-.core-breathing-halo {
-  position: absolute;
-  inset: -12px;
-  border-radius: 50%;
-  border: 2px solid rgba(13, 148, 136, 0.3);
-  animation: haloPulse 3.5s cubic-bezier(0.25, 0.8, 0.25, 1) infinite;
-  pointer-events: none;
-}
-
-@keyframes haloPulse {
-  0% { transform: scale(0.9); opacity: 0.8; }
-  60% { transform: scale(1.35); opacity: 0; }
-  100% { transform: scale(1.35); opacity: 0; }
+  display: none; /* Replaced by harmonic wave */
 }
 
 /* 6. Typography in Core Axis */

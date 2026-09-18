@@ -65,7 +65,6 @@
       </span>
     </div>
     <div class="top-actions">
-      <a class="back-overview-btn" href="/">← Tổng quan</a>
       <button class="icon-button" data-action="toggle-theme" type="button" title="Đổi giao diện">☾</button>
       <button class="account-button" id="accountButton" type="button">
         <span class="account-avatar" id="accountAvatar">K</span>
@@ -76,40 +75,56 @@
 
   <!-- MAIN KNOWLEDGE SHELL -->
   <main class="knowledge-page">
-    <section class="knowledge-hero">
-      <div class="hero-copy">
-        <p class="eyebrow">THƯ VIỆN Y KHOA ĐÃ KIỂM DUYỆT</p>
-        <h1>Kiến thức dễ hiểu để chăm sóc bản thân &amp; gia đình</h1>
-        <p>Tra cứu nội dung y khoa ngắn gọn, chuẩn xác về triệu chứng thường gặp, sử dụng thuốc an toàn, theo dõi sức khỏe trẻ nhỏ và xử lý thời tiết, môi trường.</p>
-        
+    <!-- INTEGRATED KNOWLEDGE STAGE (Focal Search & Clinical Identity) -->
+    <section class="knowledge-hero knowledge-stage">
+      <div class="stage-ambient-glow" aria-hidden="true"></div>
+      <div class="stage-header">
+        <div class="stage-eyebrow">
+          <span class="eyebrow-dot"></span>
+          <span>THƯ VIỆN Y KHOA ĐÃ KIỂM DUYỆT</span>
+        </div>
+        <h1 class="stage-title">Kiến thức dễ hiểu để chăm sóc bản thân &amp; gia đình</h1>
+        <p class="stage-subtitle">Tra cứu nội dung y khoa ngắn gọn, chuẩn xác về triệu chứng thường gặp, sử dụng thuốc an toàn, theo dõi sức khỏe trẻ nhỏ và xử lý thời tiết, môi trường.</p>
+      </div>
+
+      <!-- FOCAL SEARCH CONSOLE -->
+      <div class="stage-search-console">
         <label class="knowledge-search">
           <span class="search-icon">⌕</span>
           <input id="knowledgeSearch" type="search" placeholder="Tìm kiếm: dị ứng thuốc, bụi mịn, sốt trẻ em, huyết áp cao, phản vệ..." autocomplete="off">
           <button id="clearKnowledgeSearch" type="button" title="Xóa tìm kiếm">×</button>
         </label>
-
-        <div class="hero-quick-topics">
-          <span>Chủ đề nổi bật:</span>
-          <button type="button" data-search-topic="bụi mịn">Bụi mịn PM2.5</button>
-          <button type="button" data-search-topic="dị ứng thuốc">Dị ứng thuốc</button>
-          <button type="button" data-search-topic="trẻ sốt">Trẻ sốt</button>
-          <button type="button" data-search-topic="huyết áp">Huyết áp tại nhà</button>
-          <button type="button" data-search-topic="phản vệ">Sơ cứu phản vệ</button>
-        </div>
+        <a id="askAIFromSearch" href="/tu-van" class="stage-ask-ai-pill" title="Hỏi Trợ lý MediCare AI theo triệu chứng cụ thể">
+          <span class="ask-ai-sparkle">✦</span>
+          <span>Hỏi MediCare AI</span>
+          <span class="ask-ai-arrow">→</span>
+        </a>
       </div>
 
-      <aside class="hero-help-card">
-        <div class="help-head">
-          <span class="help-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
-          </span>
-          <div>
-            <strong>Cần tư vấn theo triệu chứng riêng?</strong>
-            <p>Hỏi trực tiếp MediCare AI để được đối chiếu hồ sơ sức khỏe và tiền sử dị ứng của gia đình bạn.</p>
-          </div>
+      <!-- QUICK SEARCH TOPIC PILLS -->
+      <div class="hero-quick-topics">
+        <span>Gợi ý tra cứu:</span>
+        <button type="button" data-search-topic="bụi mịn">Bụi mịn PM2.5</button>
+        <button type="button" data-search-topic="dị ứng thuốc">Dị ứng thuốc</button>
+        <button type="button" data-search-topic="trẻ sốt">Trẻ sốt</button>
+        <button type="button" data-search-topic="huyết áp">Huyết áp tại nhà</button>
+        <button type="button" data-search-topic="phản vệ">Sơ cứu phản vệ</button>
+      </div>
+    </section>
+
+    <!-- CLINICAL SAFETY STRIP (115 Emergency Inline Affordance) -->
+    <section class="knowledge-safety-strip" role="region" aria-label="Cảnh báo cấp cứu y tế">
+      <div class="safety-strip-content">
+        <span class="safety-pulse-dot" aria-hidden="true"></span>
+        <div class="safety-strip-body">
+          <strong>Hỗ trợ y tế khẩn cấp 115</strong>
+          <p>Khi xuất hiện: Khó thở dữ dội, đau thắt ngực lan cánh tay, tím tái môi, mất tri giác, co giật hoặc nghi ngờ sốc phản vệ — gọi cấp cứu ngay lập tức.</p>
         </div>
-        <a id="askAIFromSearch" href="/tu-van" class="hero-ask-ai-cta">Hỏi MediCare AI →</a>
-      </aside>
+      </div>
+      <a href="tel:115" class="safety-strip-call-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        <span>Gọi 115 ngay</span>
+      </a>
     </section>
 
     <!-- HORIZONTAL CATEGORY FILTER STRIP -->
@@ -137,22 +152,30 @@
         </div>
 
         <div class="article-grid" id="knowledgeGrid">
-          <!-- CARD 1: BỤI MỊN PM2.5 -->
-          <article class="knowledge-card" data-category="environment" data-keywords="bụi mịn pm2.5 aqi không khí khẩu trang hô hấp hen suyễn">
-            <div class="card-top-row">
-              <div class="card-icon blue">🌫️</div>
-              <span class="card-tag">Môi trường</span>
-            </div>
-            <h3>Bụi mịn PM2.5 ảnh hưởng sức khỏe thế nào?</h3>
-            <p>AQI tăng cao có thể làm nặng ho, hen suyễn và khó thở. Trẻ nhỏ, người cao tuổi và người có bệnh hô hấp cần thận trọng hơn.</p>
-            <ul>
-              <li>Theo dõi chỉ số AQI định kỳ trước khi ra ngoài</li>
-              <li>Hạn chế tập thể dục vận động mạnh ngoài trời khi không khí xấu</li>
-              <li>Sử dụng khẩu trang lọc bụi N95/KF94 và đóng kín cửa phòng</li>
-            </ul>
-            <div class="card-actions">
-              <button type="button" data-read-article>Đọc nhanh</button>
-              <a href="/tu-van?prompt=Bụi mịn PM2.5 ảnh hưởng sức khỏe thế nào và tôi nên bảo vệ gia đình ra sao">Hỏi AI →</a>
+          <!-- CARD 1: BỤI MỊN PM2.5 (FEATURED EDITORIAL GUIDE) -->
+          <article class="knowledge-card featured-card" data-category="environment" data-keywords="bụi mịn pm2.5 aqi không khí khẩu trang hô hấp hen suyễn">
+            <div class="featured-badge-pill">★ HƯỚNG DẪN TRỌNG TÂM</div>
+            <div class="card-main-body">
+              <div class="card-lead-column">
+                <div class="card-top-row">
+                  <div class="card-icon blue">🌫️</div>
+                  <span class="card-tag">Môi trường</span>
+                </div>
+                <h3>Bụi mịn PM2.5 ảnh hưởng sức khỏe thế nào?</h3>
+                <p>AQI tăng cao có thể làm nặng ho, hen suyễn và khó thở. Trẻ nhỏ, người cao tuổi và người có bệnh hô hấp cần thận trọng hơn.</p>
+                <div class="card-actions">
+                  <button type="button" data-read-article>Đọc nhanh</button>
+                  <a href="/tu-van?prompt=Bụi mịn PM2.5 ảnh hưởng sức khỏe thế nào và tôi nên bảo vệ gia đình ra sao">Hỏi AI →</a>
+                </div>
+              </div>
+              <div class="featured-action-points">
+                <span class="points-label">Khuyến cáo phòng ngừa</span>
+                <ul>
+                  <li>Theo dõi chỉ số AQI định kỳ trước khi ra ngoài</li>
+                  <li>Hạn chế tập thể dục vận động mạnh ngoài trời khi không khí xấu</li>
+                  <li>Sử dụng khẩu trang lọc bụi N95/KF94 và đóng kín cửa phòng</li>
+                </ul>
+              </div>
             </div>
           </article>
 
@@ -261,20 +284,8 @@
         </div>
       </section>
 
-      <!-- SAFETY & CONTEXT SIDEBAR -->
+      <!-- CONTEXT SIDEBAR -->
       <aside class="knowledge-sidebar">
-        <!-- 115 EMERGENCY PANEL -->
-        <section class="side-card safety-card">
-          <div class="safety-head">
-            <span class="safety-pulse-dot"></span>
-            <h2>Khi nào cần cấp cứu 115?</h2>
-          </div>
-          <p>Gọi cấp cứu ngay lập tức khi xuất hiện: Khó thở nặng, tím tái môi, đau thắt ngực dữ dội, mất tri giác, co giật hoặc nghi ngờ sốc phản vệ.</p>
-          <a href="tel:115" class="emergency-call-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            Gọi khẩn cấp 115
-          </a>
-        </section>
 
         <!-- CLINICAL TOPICS -->
         <section class="side-card">

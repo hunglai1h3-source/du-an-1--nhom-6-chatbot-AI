@@ -234,58 +234,90 @@ function switchToProfile(profileId) {
 function renderProfiles() {
 
   const selected = M.getSelectedProfile();
+  if (!selected) return;
 
-  const relation = selected.relationship === "Con" ? "Bé" : selected.relationship;
+  const initials = M.initials(selected.name || "K");
+  const name = selected.name || "Tài khoản của tôi";
+  const relation = selected.relationship === "Con" ? "Bé" : (selected.relationship || "Bản thân");
 
-  $("#selectedProfileAvatar").textContent = M.initials(selected.name);
+  if ($("#selectedProfileAvatar")) $("#selectedProfileAvatar").textContent = initials;
+  if ($("#selectedProfileName")) $("#selectedProfileName").textContent = name;
+  if ($("#sidebarProfileAvatar")) $("#sidebarProfileAvatar").textContent = initials;
+  if ($("#sidebarProfileName")) $("#sidebarProfileName").textContent = name;
+  if ($("#sidebarRelationship")) $("#sidebarRelationship").textContent = relation;
+  if ($("#rightProfileAvatar")) $("#rightProfileAvatar").textContent = initials;
+  if ($("#rightProfileName")) $("#rightProfileName").textContent = name;
+  if ($("#rightProfileRelationship")) $("#rightProfileRelationship").textContent = relation;
 
-  $("#selectedProfileName").textContent = selected.name;
+  const hasAge = selected.age && selected.age !== "--" && !isNaN(Number(selected.age));
+  const hasGender = selected.gender && selected.gender !== "Chưa cập nhật" && selected.gender !== "unspecified";
 
-  $("#sidebarProfileAvatar").textContent = M.initials(selected.name);
+  const metaParts = [];
+  if (hasAge) metaParts.push(`${selected.age} tuổi`);
+  if (hasGender) metaParts.push(selected.gender);
+  const metaText = metaParts.length > 0 ? metaParts.join(" · ") : "Chưa cập nhật";
+  if ($("#sidebarProfileMeta")) $("#sidebarProfileMeta").textContent = metaText;
 
-  $("#sidebarProfileName").textContent = selected.name;
+  // Build clean, professional profileContextStrip
+  const contextStripEl = $("#profileContextStrip");
+  if (contextStripEl) {
+    const pills = [];
 
-  $("#sidebarProfileMeta").textContent = `${selected.age} tuổi · ${selected.gender}`;
+    if (hasGender && hasAge) {
+      pills.push(`<span>${M.escapeHTML(selected.gender)}, ${M.escapeHTML(selected.age)} tuổi</span>`);
+    } else if (hasAge) {
+      pills.push(`<span>${M.escapeHTML(selected.age)} tuổi</span>`);
+    } else if (hasGender) {
+      pills.push(`<span>${M.escapeHTML(selected.gender)}</span>`);
+    }
 
-  $("#sidebarRelationship").textContent = relation;
+    const condition = (selected.condition || "").trim();
+    if (condition && condition !== "Không" && condition !== "Chưa cập nhật") {
+      pills.push(`<span class="pill-condition">Bệnh nền: ${M.escapeHTML(condition)}</span>`);
+    }
 
-  $("#rightProfileAvatar").textContent = M.initials(selected.name);
+    const hasHeight = selected.height && selected.height !== "--" && !isNaN(Number(selected.height));
+    const hasWeight = selected.weight && selected.weight !== "--" && !isNaN(Number(selected.weight));
+    if (hasHeight && hasWeight) {
+      pills.push(`<span>${M.escapeHTML(selected.height)} cm · ${M.escapeHTML(selected.weight)} kg</span>`);
+    } else if (hasHeight) {
+      pills.push(`<span>${M.escapeHTML(selected.height)} cm</span>`);
+    } else if (hasWeight) {
+      pills.push(`<span>${M.escapeHTML(selected.weight)} kg</span>`);
+    }
 
-  $("#rightProfileName").textContent = selected.name;
+    const allergies = (selected.allergies || "").trim();
+    if (allergies && allergies !== "Không" && allergies !== "Chưa cập nhật") {
+      pills.push(`<span class="pill-allergy">Dị ứng: ${M.escapeHTML(allergies)}</span>`);
+    }
 
-  $("#rightProfileRelationship").textContent = selected.relationship;
+    if (pills.length === 0) {
+      contextStripEl.innerHTML = `<span class="profile-strip-compact">Hồ sơ: <strong>${M.escapeHTML(name)}</strong> (Chưa cập nhật chỉ số chi tiết)</span>`;
+    } else {
+      contextStripEl.innerHTML = pills.join('<span class="strip-sep">·</span>');
+    }
+  }
 
- 
+  const detailsEl = $("#profileDetails");
+  if (detailsEl) {
+    const ageDisplay = hasAge ? `${selected.age} tuổi` : "Chưa cập nhật";
+    const genderDisplay = hasGender ? selected.gender : "Chưa cập nhật";
+    const conditionDisplay = (selected.condition && selected.condition !== "Không" && selected.condition !== "Chưa cập nhật") ? selected.condition : "Không có";
+    const hasHeight = selected.height && selected.height !== "--" && !isNaN(Number(selected.height));
+    const hasWeight = selected.weight && selected.weight !== "--" && !isNaN(Number(selected.weight));
+    const heightDisplay = hasHeight ? `${selected.height} cm` : "Chưa cập nhật";
+    const weightDisplay = hasWeight ? `${selected.weight} kg` : "Chưa cập nhật";
+    const allergiesDisplay = (selected.allergies && selected.allergies !== "Không" && selected.allergies !== "Chưa cập nhật") ? selected.allergies : "Không có";
 
-  $("#profileContextStrip").innerHTML = [
-
-    `♙ ${selected.gender}, ${selected.age} tuổi`,
-
-    `⚕ ${selected.condition || "Không có bệnh nền"}`,
-
-    `↕ ${selected.height || "--"} cm`,
-
-    `⚖ ${selected.weight || "--"} kg`
-
-  ].map((item) => `<span>${M.escapeHTML(item)}</span>`).join('<b>•</b>');
-
- 
-
-  $("#profileDetails").innerHTML = `
-
-    <dt>Họ tên</dt><dd>${M.escapeHTML(selected.name)}</dd>
-
-    <dt>Tuổi</dt><dd>${M.escapeHTML(selected.age)}</dd>
-
-    <dt>Giới tính</dt><dd>${M.escapeHTML(selected.gender)}</dd>
-
-    <dt>Bệnh nền</dt><dd>${M.escapeHTML(selected.condition || "Không")}</dd>
-
-    <dt>Chiều cao</dt><dd>${M.escapeHTML(selected.height || "--")} cm</dd>
-
-    <dt>Cân nặng</dt><dd>${M.escapeHTML(selected.weight || "--")} kg</dd>
-
-    <dt>Dị ứng</dt><dd>${M.escapeHTML(selected.allergies || "Không")}</dd>`;
+    detailsEl.innerHTML = `
+      <dt>Họ tên</dt><dd>${M.escapeHTML(name)}</dd>
+      <dt>Tuổi</dt><dd>${M.escapeHTML(ageDisplay)}</dd>
+      <dt>Giới tính</dt><dd>${M.escapeHTML(genderDisplay)}</dd>
+      <dt>Bệnh nền</dt><dd>${M.escapeHTML(conditionDisplay)}</dd>
+      <dt>Chiều cao</dt><dd>${M.escapeHTML(heightDisplay)}</dd>
+      <dt>Cân nặng</dt><dd>${M.escapeHTML(weightDisplay)}</dd>
+      <dt>Dị ứng</dt><dd>${M.escapeHTML(allergiesDisplay)}</dd>`;
+  }
 
  
 
@@ -612,13 +644,14 @@ function renderWelcomeHero(profile) {
   return `
     <div class="welcome-hero" id="welcomeHero">
       <div class="ai-visual-identity">
-        <div class="ai-pulse-orb" aria-hidden="true">
+        <div class="ai-pulse-orb medicare-core-v2 state-idle" aria-hidden="true">
           <div class="orb-halo halo-3"></div>
           <div class="orb-halo halo-2"></div>
           <div class="orb-halo halo-1"></div>
           <div class="orb-core">
-            <svg class="orb-glyph" viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            <svg class="core-harmonic-wave" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+              <path class="wave-path wave-secondary" d="M0 30 C 20 18, 35 42, 50 30 C 65 18, 80 42, 100 30"/>
+              <path class="wave-path wave-primary" d="M0 30 C 25 12, 35 48, 50 30 C 65 12, 75 48, 100 30"/>
             </svg>
           </div>
         </div>
