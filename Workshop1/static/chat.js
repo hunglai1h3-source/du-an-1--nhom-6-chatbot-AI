@@ -963,8 +963,7 @@ function renderHistory() {
         ${session.favorite ? '<span class="favorite">★</span>' : ""}
 
       </button>`;
-
-  }).join("") : '<p style="padding:18px 8px;color:#7b887f;font-size:12px">Không có cuộc trò chuyện phù hợp.</p>';
+  }).join("") : '<div class="chat-history-empty" style="padding:28px 12px;text-align:center;color:var(--text-tertiary, #64748b);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 8px;opacity:0.6;display:block;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span style="font-size:12px;font-weight:500;">Không có cuộc trò chuyện</span></div>';
 
  
 

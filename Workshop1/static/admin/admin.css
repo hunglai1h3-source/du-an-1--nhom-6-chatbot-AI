@@ -35,3 +35,43 @@
 [data-theme="dark"] .feedback-bell.has-pending{background:#3a2b13}
 [data-theme="dark"] .feedback-popover-item:hover{background:#152033}
 @media(max-width:760px){.feedback-popover{position:fixed;right:12px;top:76px;left:12px;width:auto}}
+
+/* ===== APEX Polish: SVG Icons & Glassmorphism ===== */
+.sidebar nav a svg, .sidebar-bottom a svg, .sidebar-bottom button svg {
+  flex-shrink: 0;
+  stroke: currentColor;
+  opacity: 0.85;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+.sidebar nav a:hover svg, .sidebar nav a.active svg,
+.sidebar-bottom a:hover svg, .sidebar-bottom button:hover svg {
+  opacity: 1;
+  transform: translateX(2px);
+}
+.topbar .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+.topbar .icon-btn:hover {
+  transform: translateY(-1px);
+}
+.topbar .icon-btn svg {
+  stroke: currentColor;
+}
+[data-theme="dark"] .topbar {
+  background: rgba(17, 26, 44, 0.85);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .sidebar {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

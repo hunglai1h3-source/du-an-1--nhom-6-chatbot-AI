@@ -1,0 +1,223 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MediCare AI - Thông báo hệ thống">
+  <title>{{ error_code | default('Lỗi') }} — {{ error_title | default('Thông báo hệ thống') }} | MediCare AI</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css', v='20260917-ultimate-v1') }}">
+  <script>
+    if (new URLSearchParams(window.location.search).get('theme') === 'dark' || localStorage.getItem('medicareTheme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  </script>
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-l0, #f8fafc);
+      background-image: 
+        radial-gradient(at 10% 12%, rgba(13, 148, 136, 0.08) 0px, transparent 45%),
+        radial-gradient(at 90% 18%, rgba(56, 189, 248, 0.07) 0px, transparent 45%),
+        radial-gradient(at 50% 85%, rgba(99, 102, 241, 0.05) 0px, transparent 55%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+    }
+    .error-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      background: var(--glass-bg, rgba(255, 255, 255, 0.85));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .brand-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 20px;
+    }
+    .brand-text {
+      font-weight: 800;
+      font-size: 1.1rem;
+    }
+    .brand-text em {
+      color: var(--accent-primary);
+      font-style: normal;
+    }
+    .error-main {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      padding: 40px 20px;
+    }
+    .error-card {
+      max-width: 580px;
+      width: 100%;
+      text-align: center;
+      padding: 44px 36px;
+      border-radius: var(--radius-2xl, 24px);
+      background: var(--glass-card-bg, rgba(255, 255, 255, 0.78));
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+      position: relative;
+      overflow: hidden;
+    }
+    html[data-theme="dark"] .error-card {
+      background: rgba(15, 23, 42, 0.7);
+      border-color: rgba(255, 255, 255, 0.09);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+    .error-core-visual {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      margin: 0 auto 24px;
+      background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.6) 0%, rgba(45, 212, 191, 0.3) 30%, rgba(13, 148, 136, 0.8) 70%, #094e47 100%);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 0 30px rgba(13, 148, 136, 0.35);
+      position: relative;
+    }
+    .error-code-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: var(--radius-full, 9999px);
+      background: var(--accent-light, #ccfbf1);
+      color: var(--accent-primary, #0d9488);
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+    }
+    .error-card h1 {
+      font-size: clamp(1.6rem, 3vw, 2.1rem);
+      font-weight: 850;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      margin: 0 0 12px;
+      line-height: 1.25;
+    }
+    .error-card p {
+      font-size: 0.96rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin: 0 0 28px;
+    }
+    .error-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: var(--radius-lg, 16px);
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      color: #fff;
+      font-weight: 750;
+      font-size: 0.9rem;
+      text-decoration: none;
+      box-shadow: 0 4px 14px var(--accent-glow);
+      transition: transform var(--motion-fast);
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+    }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: var(--radius-lg, 16px);
+      background: var(--bg-l1, #ffffff);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-weight: 700;
+      font-size: 0.9rem;
+      text-decoration: none;
+      transition: all var(--motion-fast);
+      cursor: pointer;
+    }
+    .btn-secondary:hover {
+      background: var(--bg-l2);
+      border-color: var(--border-strong);
+    }
+    .error-emergency-strip {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+    }
+    .error-emergency-strip a {
+      color: #ef4444;
+      font-weight: 800;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <header class="error-topbar">
+    <a href="/" class="brand-link" aria-label="MediCare AI Trang chủ">
+      <span class="brand-mark">+</span>
+      <span class="brand-text">MediCare <em>AI</em></span>
+    </a>
+    <button type="button" onclick="document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark')" style="background:none;border:1px solid var(--border-subtle);padding:8px 12px;border-radius:8px;cursor:pointer;color:var(--text-secondary);font-size:14px;" title="Đổi giao diện">☾</button>
+  </header>
+
+  <main class="error-main">
+    <div class="error-card">
+      <div class="error-core-visual">
+        <svg viewBox="0 0 100 60" width="50" height="30" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M0 30 C 25 12, 35 48, 50 30 C 65 12, 75 48, 100 30"/>
+        </svg>
+      </div>
+
+      <div class="error-code-pill">MÃ HỆ THỐNG: {{ error_code | default('404') }}</div>
+      <h1>{{ error_title | default('Không tìm thấy trang yêu cầu') }}</h1>
+      <p>{{ error_message | default('Trang bạn đang tìm kiếm có thể đã được di chuyển, đổi tên hoặc tạm thời không khả dụng trên hệ thống.') }}</p>
+
+      <div class="error-actions">
+        <a href="/" class="btn-primary">⌂ Về Trang chủ</a>
+        <a href="/tu-van" class="btn-secondary">💬 Tư vấn cùng AI</a>
+        <button type="button" onclick="window.location.reload()" class="btn-secondary">↻ Tải lại</button>
+      </div>
+
+      <div class="error-emergency-strip">
+        <span>Trường hợp có dấu hiệu bất thường cấp bách, vui lòng liên hệ ngay <a href="tel:115">Cấp cứu 115</a>.</span>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

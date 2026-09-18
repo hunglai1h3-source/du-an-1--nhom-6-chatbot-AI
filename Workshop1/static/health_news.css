@@ -26,7 +26,12 @@ html[data-theme="dark"] {
 
 body.page-news-v2 {
   min-width: 320px;
-  background-color: var(--bg-l0);
+  background-color: var(--bg-l0, #f8fafc);
+  background-image: 
+    radial-gradient(at 10% 12%, rgba(13, 148, 136, 0.08) 0px, transparent 45%),
+    radial-gradient(at 90% 18%, rgba(56, 189, 248, 0.07) 0px, transparent 45%),
+    radial-gradient(at 50% 85%, rgba(99, 102, 241, 0.05) 0px, transparent 55%);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.5;
@@ -227,7 +232,9 @@ a {
 .news-public-card {
   display: flex;
   flex-direction: column;
-  background: var(--bg-l1);
+  background: var(--glass-card-bg, rgba(255, 255, 255, 0.75));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   overflow: hidden;
@@ -235,9 +242,14 @@ a {
   transition: transform var(--motion-fast), box-shadow var(--motion-fast), border-color var(--motion-fast);
 }
 
+html[data-theme="dark"] .news-public-card {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .news-public-card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 12px 30px rgba(13, 148, 136, 0.12), var(--shadow-lg);
   border-color: var(--accent-primary);
 }
 
@@ -414,3 +426,13 @@ a {
     stroke-width: 2.2;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

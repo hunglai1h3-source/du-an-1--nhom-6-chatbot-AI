@@ -1,8 +1,134 @@
 /**
- * MediCare AI — Personal Health Space & Utilities (VIP Pro Apex)
+ * MediCare AI — Personal Health Space & Utilities (APEX Master Pass)
  * Profile, Family Isolation, Symptom Logs, Vitals & Health Reports
  */
 
+body.page-health-v2 {
+  min-width: 320px;
+  background-color: var(--bg-l0, #f8fafc);
+  background-image: 
+    radial-gradient(at 10% 12%, rgba(13, 148, 136, 0.08) 0px, transparent 45%),
+    radial-gradient(at 90% 18%, rgba(56, 189, 248, 0.07) 0px, transparent 45%),
+    radial-gradient(at 50% 85%, rgba(99, 102, 241, 0.05) 0px, transparent 55%);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Spatial Health Shell Layout */
+.health-app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 28px;
+  margin-left: var(--nav-rail-width, 76px);
+  width: calc(100% - var(--nav-rail-width, 76px));
+  max-width: var(--content-wide-max, 1680px);
+  padding: 28px 32px 80px;
+  box-sizing: border-box;
+  align-items: start;
+}
+
+/* Health Page Main Focal Space */
+.health-tools-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  min-width: 0;
+}
+
+.health-page-heading {
+  padding: 8px 0;
+}
+
+.health-page-heading .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: var(--accent-light, #ccfbf1);
+  color: var(--accent-primary, #0d9488);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.health-page-heading h1 {
+  font-size: clamp(1.8rem, 3vw, 2.3rem);
+  font-weight: 850;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.health-page-heading p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+/* Floating Navigation Section Tabs */
+.health-section-tabs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 2px 14px;
+  scrollbar-width: none;
+}
+
+.health-section-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.health-section-tabs button {
+  padding: 10px 18px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--glass-card-bg, rgba(255, 255, 255, 0.75));
+  backdrop-filter: blur(12px);
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: all var(--motion-fast);
+  cursor: pointer;
+}
+
+.health-section-tabs button:hover {
+  background: var(--bg-l2);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.health-section-tabs button.active {
+  background: var(--accent-primary, #0d9488);
+  color: #ffffff;
+  border-color: var(--accent-primary);
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+/* Translucent Glass Panels */
+.page-health-v2 .panel {
+  background: var(--glass-card-bg, rgba(255, 255, 255, 0.75));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+  transition: border-color var(--motion-fast);
+}
+
+html[data-theme="dark"] .page-health-v2 .panel {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Family Profile Zone */
 .profile-only-panel {
   width: 100%;
 }
@@ -12,9 +138,46 @@
   min-width: 0;
 }
 
+.profile-only-panel .subsection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.profile-only-panel .subsection-heading h2 {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.profile-only-panel .subsection-heading p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.profile-only-panel .subsection-heading button {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-l2);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--motion-fast);
+}
+
+.profile-only-panel .subsection-heading button:hover {
+  background: var(--accent-light);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
 .profile-only-family-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(190px, 1fr)) !important;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
   gap: 16px;
   align-items: stretch;
 }
@@ -22,22 +185,168 @@
 .profile-only-family-grid .family-card,
 .profile-only-family-grid .add-family-card {
   width: 100%;
+  border-radius: var(--radius-lg);
   transition: transform var(--motion-fast), box-shadow var(--motion-fast);
 }
 
 .profile-only-family-grid .family-card:hover {
   transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 10px 25px rgba(13, 148, 136, 0.12);
 }
 
+/* Symptom Tracking Panel */
+.symptom-tracking-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.symptom-tracking-heading h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.symptom-tracking-heading button {
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  transition: transform var(--motion-fast);
+}
+
+.symptom-tracking-heading button:hover {
+  transform: translateY(-2px);
+}
+
+.symptom-profile-strip,
+.metric-profile-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-l2, rgba(241, 245, 249, 0.6));
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 18px;
+}
+
+.symptom-profile-avatar,
+#metricProfileAvatar,
+#reportProfileAvatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.symptom-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.symptom-summary-grid article,
+.metric-latest-grid article {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-l1, #ffffff);
+  border: 1px solid var(--border-subtle);
+  transition: transform var(--motion-fast), border-color var(--motion-fast);
+}
+
+html[data-theme="dark"] .symptom-summary-grid article,
+html[data-theme="dark"] .metric-latest-grid article {
+  background: rgba(30, 41, 59, 0.5);
+}
+
+.symptom-summary-grid article:hover,
+.metric-latest-grid article:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+}
+
+/* Health Metrics & Vitals */
+.health-metrics-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.health-metrics-heading h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.health-metrics-heading button {
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  transition: transform var(--motion-fast);
+}
+
+.health-metrics-heading button:hover {
+  transform: translateY(-2px);
+}
+
+.metric-latest-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.metric-dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 18px;
+}
+
+.metric-chart-card,
+.metric-history-card {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-l1, #ffffff);
+  border: 1px solid var(--border-subtle);
+}
+
+html[data-theme="dark"] .metric-chart-card,
+html[data-theme="dark"] .metric-history-card {
+  background: rgba(30, 41, 59, 0.5);
+}
+
+/* Auto Health Report */
 .wide-health-report {
   width: 100%;
   padding: 24px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
 }
 
 .report-horizontal-layout {
@@ -54,6 +363,13 @@
   background: var(--bg-l1);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+html[data-theme="dark"] .wide-health-report .report-profile-line {
+  background: rgba(30, 41, 59, 0.5);
 }
 
 .wide-health-report .report-metric-list {
@@ -75,6 +391,10 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   transition: border-color var(--motion-fast);
+}
+
+html[data-theme="dark"] .wide-health-report .report-metric-list article {
+  background: rgba(30, 41, 59, 0.5);
 }
 
 .wide-health-report .report-metric-list article:hover {
@@ -110,31 +430,136 @@
   margin-top: 0;
   border-radius: var(--radius-md);
   font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  transition: transform var(--motion-fast);
 }
 
-@media (max-width: 1400px) {
-  .profile-only-family-grid {
-    grid-template-columns: repeat(3, minmax(190px, 1fr)) !important;
+.wide-health-report .report-detail-button:hover {
+  transform: translateY(-2px);
+}
+
+/* Context Rail (Right Sidebar) */
+.health-context-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.health-context-rail .side-panel,
+.health-context-rail .emergency-panel,
+.health-context-rail .zalo-support-card {
+  padding: 22px;
+  border-radius: var(--radius-xl);
+  background: var(--glass-card-bg, rgba(255, 255, 255, 0.75));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+}
+
+html[data-theme="dark"] .health-context-rail .side-panel,
+html[data-theme="dark"] .health-context-rail .emergency-panel,
+html[data-theme="dark"] .health-context-rail .zalo-support-card {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.health-context-rail .side-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.health-context-rail .side-panel-heading h2 {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.health-context-rail .emergency-panel {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: radial-gradient(circle at 90% 10%, rgba(239, 68, 68, 0.08), transparent 65%),
+              var(--glass-card-bg, rgba(255, 255, 255, 0.75));
+}
+
+.health-context-rail .emergency-panel strong {
+  display: block;
+  font-size: 1rem;
+  color: #ef4444;
+  margin-bottom: 6px;
+}
+
+.health-context-rail .emergency-panel a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #ffffff;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+  transition: transform var(--motion-fast);
+}
+
+.health-context-rail .emergency-panel a:hover {
+  transform: translateY(-2px);
+}
+
+/* Responsive Rules */
+@media (max-width: 1200px) {
+  .health-app-shell {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 20px 20px 80px;
   }
-  .wide-health-report .report-metric-list {
+  .symptom-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-@media (max-width: 980px) {
-  .profile-only-family-grid {
-    grid-template-columns: repeat(2, minmax(180px, 1fr)) !important;
+  .metric-latest-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .report-horizontal-layout,
-  .report-footer-row {
+  .metric-dashboard-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 620px) {
-  .profile-only-family-grid,
-  .wide-health-report .report-metric-list,
-  .wide-health-report .report-notes {
+@media (max-width: 768px) {
+  .health-app-shell {
+    margin-left: 0;
+    width: 100%;
+    padding: 16px 14px 84px;
+  }
+  .profile-only-family-grid {
     grid-template-columns: 1fr !important;
   }
+  .report-horizontal-layout,
+  .report-footer-row,
+  .wide-health-report .report-notes {
+    grid-template-columns: 1fr;
+  }
+  .wide-health-report .report-metric-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .symptom-summary-grid,
+  .metric-latest-grid {
+    grid-template-columns: 1fr;
+  }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

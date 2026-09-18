@@ -5,7 +5,7 @@
 {% block content %}
 <div class="toolbar"><div><b>Xin chào, {{ session.get('full_name','Admin') }}</b><span class="muted">Dữ liệu tự làm mới mỗi 5 giây</span></div><button class="btn primary" id="refreshDashboard">↻ Làm mới ngay</button></div>
 <div class="stats-grid" id="statsGrid">
- {% for key,label,icon in [('users','Người dùng','♟'),('chats','Lượt chat','◌'),('success_rate','Tỷ lệ thành công','✓'),('tokens','Tổng token','⚡'),('avg_latency','Độ trễ TB','◷'),('errors','Lỗi AI','△'),('new_today','Đăng ký hôm nay','＋'),('chats_today','Chat hôm nay','↗')] %}
+ {% for key,label,icon in [('users','Người dùng','👥'),('chats','Lượt chat','💬'),('success_rate','Tỷ lệ thành công','✓'),('tokens','Tổng token','⚡'),('avg_latency','Độ trễ TB','⏱'),('errors','Lỗi AI','⚠'),('new_today','Đăng ký hôm nay','＋'),('chats_today','Chat hôm nay','↗')] %}
  <article class="stat-card"><div class="stat-icon">{{ icon }}</div><div><span>{{ label }}</span><strong data-stat="{{key}}">{{ stats.get(key,0) }}</strong></div></article>
  {% endfor %}
 </div>

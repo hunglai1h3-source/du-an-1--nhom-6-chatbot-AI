@@ -15,7 +15,12 @@
 
 body.page-pharmacies-v2 {
   min-width: 320px;
-  background-color: var(--bg-l0);
+  background-color: var(--bg-l0, #f8fafc);
+  background-image: 
+    radial-gradient(at 10% 12%, rgba(13, 148, 136, 0.08) 0px, transparent 45%),
+    radial-gradient(at 90% 18%, rgba(56, 189, 248, 0.07) 0px, transparent 45%),
+    radial-gradient(at 50% 85%, rgba(99, 102, 241, 0.05) 0px, transparent 55%);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.5;
@@ -217,7 +222,9 @@ a {
 
 /* Sidebar */
 .pharmacy-sidebar {
-  background: var(--bg-l1);
+  background: var(--glass-card-bg, rgba(255, 255, 255, 0.82));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid var(--border-subtle);
   padding: 28px 24px;
   display: flex;
@@ -225,6 +232,11 @@ a {
   gap: 20px;
   overflow-y: auto;
   box-shadow: var(--shadow-sm);
+}
+
+html[data-theme="dark"] .pharmacy-sidebar {
+  background: rgba(13, 20, 36, 0.82);
+  border-right-color: rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-head .eyebrow {
@@ -526,3 +538,13 @@ a {
     stroke-width: 2.2;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

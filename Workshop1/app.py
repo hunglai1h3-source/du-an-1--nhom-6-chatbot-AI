@@ -15,6 +15,7 @@ import hmac
 import re
 import os
 import sqlite3
+import logging
 from psycopg.errors import UniqueViolation
 from database import get_connection
 from medical_safety import (
@@ -2206,22 +2207,27 @@ def public_health_news():
 
 @app.get("/ban-tin-suc-khoe")
 def health_news_page():
-    connection = get_database()
+    items = []
     try:
-        rows = connection.execute(
-            """
-            SELECT *
-            FROM health_news
-            WHERE status = 'approved'
-            ORDER BY
-                is_featured DESC,
-                COALESCE(published_at, reviewed_at, created_at) DESC,
-                id DESC
-            """
-        ).fetchall()
-        items = [health_news_row_to_dict(row) for row in rows]
-    finally:
-        connection.close()
+        connection = get_database()
+        try:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM health_news
+                WHERE status = 'approved'
+                ORDER BY
+                    is_featured DESC,
+                    COALESCE(published_at, reviewed_at, created_at) DESC,
+                    id DESC
+                """
+            ).fetchall()
+            items = [health_news_row_to_dict(row) for row in rows]
+        finally:
+            connection.close()
+    except Exception as exc:
+        logging.warning("Không thể lấy dữ liệu bản tin cho trang /ban-tin-suc-khoe: %s", exc)
+        items = []
 
     return render_template(
         "health_news.html",
@@ -2255,6 +2261,53 @@ def health():
         "version": "Phase 5 Hardened",
     })
 
+
+@app.errorhandler(404)
+def handle_not_found_error(error):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Resource not found", "status": 404}), 404
+    return render_template(
+        "error.html",
+        error_code="404",
+        error_title="Không tìm thấy trang yêu cầu",
+        error_message="Trang hoặc chức năng bạn đang tìm kiếm có thể đã được di chuyển hoặc không tồn tại trên hệ thống.",
+    ), 404
+
+
+@app.errorhandler(403)
+def handle_forbidden_error(error):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Forbidden", "status": 403}), 403
+    return render_template(
+        "error.html",
+        error_code="403",
+        error_title="Không có quyền truy cập",
+        error_message="Bạn không có quyền xem khu vực này. Vui lòng đăng nhập với tài khoản có thẩm quyền.",
+    ), 403
+
+
+@app.errorhandler(429)
+def handle_rate_limit_error(error):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Too Many Requests", "status": 429}), 429
+    return render_template(
+        "error.html",
+        error_code="429",
+        error_title="Yêu cầu gửi đi quá nhanh",
+        error_message="Hệ thống đang điều phối lưu lượng y tế an toàn. Vui lòng chờ vài giây rồi tiếp tục.",
+    ), 429
+
+
+@app.errorhandler(500)
+def handle_internal_server_error(error):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Internal Server Error", "status": 500}), 500
+    return render_template(
+        "error.html",
+        error_code="500",
+        error_title="Hệ thống đang xử lý sự cố tạm thời",
+        error_message="Đội ngũ kỹ thuật đã ghi nhận và đang khắc phục ngay lập tức. Dữ liệu y tế của bạn vẫn an toàn.",
+    ), 500
 
 
 @app.get("/login")

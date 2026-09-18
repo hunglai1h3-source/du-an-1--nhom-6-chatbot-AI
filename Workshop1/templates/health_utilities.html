@@ -59,33 +59,27 @@
       </span>
     </div>
     <div class="top-actions">
-      <label class="search-box"><span>⌕</span><input type="search" placeholder="Tìm kiếm..." aria-label="Tìm kiếm"></label>
+      <button class="command-trigger-pill" type="button" onclick="window.MediCare?.openCommandPalette?.()" aria-label="Tìm kiếm nhanh">
+        <span class="cmd-icon">⌕</span>
+        <span class="cmd-label">Tìm kiếm</span>
+        <kbd class="cmd-shortcut">Ctrl K</kbd>
+      </button>
       <button class="icon-button" data-action="toggle-theme" type="button" title="Đổi giao diện">☾</button>
-      <button class="icon-button" id="notificationButton" type="button" title="Thông báo">♢<b>3</b></button>
       <button class="account-button" type="button" id="accountButton">
         <span class="account-avatar" id="accountAvatar">K</span>
         <span><strong id="accountName" data-account-name>Khách</strong><small>Tài khoản của tôi</small></span>
       </button>
+      <button class="safety-affordance-btn" id="openEmergencySheet" type="button" title="Hỗ trợ y tế khẩn cấp 115" onclick="window.location.assign('tel:115')">
+        <span class="safety-pulse-dot"></span>
+        <span>115</span>
+      </button>
     </div>
   </header>
-  <div class="app-shell">
-    <aside class="left-sidebar app-nav-sidebar">
-      <section class="profile-summary compact-profile-summary">
-        <div class="profile-summary-head"><span class="profile-avatar" id="sidebarAvatar">NA</span><div><strong id="sidebarName">Chưa có hồ sơ</strong><small id="sidebarMeta">Đăng nhập để quản lý</small></div></div>
-        <span class="premium-badge" id="accountPlanBadge">Free</span>
-      </section>
-      <nav class="side-main-nav" aria-label="Điều hướng tài khoản">
-        <a class="" href="/"><span>⌂</span>Tổng quan</a>
-        <a href="/tu-van"><span>▣</span>Tư vấn gần đây</a>
-        <a class="" href="/suc-khoe-tien-ich#family-health"><span>♙</span>Hồ sơ cá nhân</a>
-        <a class="" href="/suc-khoe-tien-ich#family-health"><span>♧</span>Gia đình của tôi <small id="familyCountMini">0 hồ sơ</small></a>
-        <a class="active" href="/suc-khoe-tien-ich"><span>♡</span>Sức khỏe &amp; Tiện ích</a>
-        <button type="button" id="openSettings" data-open-settings data-settings-tab="account"><span>⚙</span>Cài đặt</button>
-        <button type="button" id="sidebarAuthButton"><span>⇥</span>Đăng nhập / Đăng xuất</button>
-      </nav>
-      <section class="premium-card"><div><h3>Nâng cấp Premium</h3><p>Mở khóa toàn bộ tính năng nâng cao.</p><button type="button" id="upgradeButton">Nâng cấp ngay</button></div><span aria-hidden="true">💎</span></section>
-      <div id="recentList" class="hidden" aria-hidden="true"></div>
-    </aside>
+  <div class="app-shell health-app-shell">
+    <div id="recentList" class="hidden" aria-hidden="true"></div>
+    <button type="button" id="upgradeButton" class="hidden" aria-hidden="true"></button>
+    <button type="button" id="openSettings" class="hidden" aria-hidden="true"></button>
+    <button type="button" id="sidebarAuthButton" class="hidden" aria-hidden="true"></button>
     <main class="dashboard-main health-tools-main">
       <span id="welcomeName" class="hidden">Khách</span>
       <section class="health-page-heading"><div><p class="eyebrow">TRUNG TÂM SỨC KHỎE</p><h1>Sức khỏe &amp; Tiện ích</h1><p>Quản lý hồ sơ sức khỏe gia đình và xem báo cáo được tổng hợp tự động.</p></div></section>
@@ -130,7 +124,7 @@
           <article><span>📝</span><div><small>Bản ghi gần đây</small><strong id="symptomLogCount">0</strong></div></article>
           <article><span>📈</span><div><small>Xu hướng mới nhất</small><strong id="symptomLatestTrend">Chưa có</strong></div></article>
           <article><span>🌡</span><div><small>Nhiệt độ gần nhất</small><strong id="symptomLatestTemp">--</strong></div></article>
-          <article><span>⚕</span><div><small>Mức độ gần nhất</small><strong id="symptomLatestSeverity">--</strong></div></article>
+          <article><span>⚡</span><div><small>Mức độ gần nhất</small><strong id="symptomLatestSeverity">--</strong></div></article>
         </div>
 
         <div class="symptom-timeline" id="symptomTimeline">
@@ -208,7 +202,7 @@
       </section>
       <div class="health-hidden-environment" aria-hidden="true"><span id="weatherIcon"></span><span id="weatherDescription"></span><span id="temperatureValue"></span><span id="aqiValue"></span><span id="aqiLevel"></span><span id="pm25Value"></span><span id="humidityValue"></span><span id="windValue"></span><span id="feelsLikeValue"></span><span id="weatherLocation"></span><span id="pharmacyLocation"></span><span id="environmentUpdatedAt"></span><ul id="recommendationList"></ul></div>
     </main>
-    <aside class="right-sidebar">
+    <aside class="right-sidebar health-context-rail">
       <section class="side-panel">
         <div class="side-panel-heading"><h2>Lịch nhắc &amp; quản lý</h2><button type="button" id="showRemindersButton">Xem tất cả</button></div>
         <div class="reminder-list"><article class="reminder-empty"><span>⌛</span><div><strong>Đang tải lịch nhắc</strong><small>Dữ liệu theo tài khoản đăng nhập.</small></div></article></div>
