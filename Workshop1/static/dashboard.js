@@ -409,8 +409,6 @@
  
    if (!modal || !form) {
  
-     console.error("Không tìm thấy #familyModal hoặc #familyForm.");
- 
      return;
  
    }
@@ -1047,6 +1045,15 @@
    $("#aqiValue").textContent = Number.isFinite(Number(context.aqi)) ? Math.round(context.aqi) : "--";
  
    $("#aqiLevel").textContent = aqi.text;
+
+   const heroIcon = $("#envHeroWeatherIcon");
+   const heroTemp = $("#envHeroTemp");
+   const heroAqi = $("#envHeroAqi");
+   const heroAqiLvl = $("#envHeroAqiLevel");
+   if (heroIcon) heroIcon.textContent = weather.icon;
+   if (heroTemp) heroTemp.textContent = Number.isFinite(Number(context.temperature)) ? `${Math.round(context.temperature)}°C` : "--°C";
+   if (heroAqi) heroAqi.textContent = Number.isFinite(Number(context.aqi)) ? Math.round(context.aqi) : "--";
+   if (heroAqiLvl) heroAqiLvl.textContent = aqi.text;
  
    $("#pm25Value").textContent = Number.isFinite(Number(context.pm25)) ? Number(context.pm25).toFixed(1) : "--";
  
@@ -1153,7 +1160,7 @@
  
  async function registerReminderServiceWorker() {
  
-   if (!("serviceWorker" in navigator)) return null;
+   if (!("serviceWorker" in navigator) || window.location.search.includes("nosw")) return null;
  
  
  

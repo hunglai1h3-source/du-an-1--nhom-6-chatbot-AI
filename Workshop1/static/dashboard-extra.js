@@ -108,6 +108,12 @@
     content.classList.remove("hidden");
 
     const featured = filtered.find((article) => article.is_featured) || filtered[0];
+    if (featured) {
+      const ribbonText = $("#ribbonNewsText");
+      if (ribbonText) ribbonText.textContent = featured.title;
+      const orbitNews = $("#orbitNewsTitle");
+      if (orbitNews) orbitNews.textContent = featured.title;
+    }
     const remaining = filtered.filter((article) => article.id !== featured.id);
 
     const fallback = newsFallbackImage(featured.category);
@@ -269,8 +275,11 @@
         source.textContent = `Nguồn: ${article.source_name} · ${relativeNewsTime(article.published_at || article.reviewed_at || article.created_at)}`;
       }
 
-      const sourceLink = $("#homeNewsSourceLink");
-      if (sourceLink) sourceLink.href = article.source_url;
+      const sourceLink = $("#homeNewsSourceLink") || $("#homeNewsReadOrigin");
+      if (sourceLink) {
+        sourceLink.href = article.source_url || "#";
+        sourceLink.setAttribute("href", article.source_url || "#");
+      }
 
       const ask = $("#homeNewsAskAI");
       if (ask) {

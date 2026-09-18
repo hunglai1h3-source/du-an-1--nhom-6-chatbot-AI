@@ -225,8 +225,10 @@
   }
 
   function applyTheme(theme) {
-    const selected = theme || localStorage.getItem(KEYS.theme) || "light";
+    const urlTheme = new URLSearchParams(window.location.search).get("theme");
+    const selected = theme || urlTheme || localStorage.getItem(KEYS.theme) || "light";
     document.documentElement.dataset.theme = selected;
+    document.documentElement.setAttribute("data-theme", selected);
     localStorage.setItem(KEYS.theme, selected);
     $$('[data-action="toggle-theme"]').forEach((button) => {
       button.textContent = selected === "dark" ? "☀" : "☾";
