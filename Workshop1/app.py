@@ -188,6 +188,16 @@ def app_after_request(response):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
+    # Invalidate bfcache / back-button retention of private sessions
+    content_type = response.headers.get("Content-Type", "")
+    is_html = "text/html" in content_type
+    is_dynamic_api = request.path.startswith(("/current-user", "/logout", "/chat", "/api/"))
+    if is_html or is_dynamic_api:
+        if not response.headers.get("Cache-Control"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, private"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+
     if request.path.startswith(("/chat", "/api/", "/transcribe", "/login", "/register")):
         duration_ms = round((time.time() - getattr(g, "request_start_time", time.time())) * 1000, 1)
         print(f"[API_LOG] {request_id} | {request.method} {request.path} | {response.status_code} | {duration_ms}ms")
@@ -2858,12 +2868,27 @@ def save_chat_feedback():
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.clear()
+    session.permanent = False
+    session.modified = True
+
     if request.method == "GET":
-        return redirect(url_for("landing_page"))
-    return jsonify({
-        "message": "Đăng xuất thành công.",
-        "redirect": "/landing"
-    })
+        resp = redirect(url_for("landing_page"))
+    else:
+        resp = jsonify({
+            "message": "Đăng xuất thành công.",
+            "redirect": "/landing"
+        })
+
+    cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+    resp.delete_cookie(cookie_name, path="/")
+    resp.delete_cookie("session", path="/")
+    resp.delete_cookie("remember_token", path="/")
+    resp.delete_cookie("auth_token", path="/")
+
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, private"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 
@@ -7595,7 +7620,15 @@ def admin_backup_users_db():
 @app.post("/admin/logout")
 @admin_required
 def admin_logout():
-    session.clear(); return redirect(url_for("index"))
+    session.clear()
+    session.permanent = False
+    session.modified = True
+    resp = redirect(url_for("index"))
+    cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+    resp.delete_cookie(cookie_name, path="/")
+    resp.delete_cookie("session", path="/")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, private"
+    return resp
 
 
 # =========================

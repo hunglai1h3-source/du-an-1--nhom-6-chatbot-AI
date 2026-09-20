@@ -122,10 +122,11 @@
       "medicareSelectedFamilyProfileV1", "medicareSelectedFamilyProfileV2", "medicareSelectedFamilyProfileV3",
       "medicareChatSessionsV1", "medicareChatSessionsV2", "medicareChatSessionsV3",
       "medicareCurrentChatIdV1", "medicareCurrentChatIdV2", "medicareCurrentChatIdV3",
-      "medicareSelectedSpecialtyV1", "medicareSelectedSpecialtyV2", "medicareSelectedSpecialtyV3"
+      "medicareSelectedSpecialtyV1", "medicareSelectedSpecialtyV2", "medicareSelectedSpecialtyV3",
+      "medicareReminderNotificationsEnabled"
     ];
     legacyKeys.forEach((key) => localStorage.removeItem(key));
-    sessionStorage.removeItem(KEYS.authUserId);
+    sessionStorage.clear();
   }
 
   async function syncProfiles(userData = null) {
@@ -375,7 +376,11 @@
 
   async function currentUser() {
     try {
-      const response = await fetch("/current-user", { credentials: "same-origin" });
+      const response = await fetch("/current-user", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Pragma": "no-cache", "Cache-Control": "no-cache" }
+      });
       if (!response.ok) return { logged_in: false };
       return await response.json();
     } catch {
@@ -480,72 +485,69 @@
   let accountDropdownEl = null;
 
   function ensureAccountDropdown() {
-    if (accountDropdownEl && document.body.contains(accountDropdownEl)) {
-      return accountDropdownEl;
-    }
-    const existing = $("#accountDropdownMenu");
-    if (existing) {
-      accountDropdownEl = existing;
-      return existing;
-    }
-
-    const dropdown = document.createElement("div");
-    dropdown.id = "accountDropdownMenu";
-    dropdown.className = "account-dropdown-menu";
-    dropdown.setAttribute("role", "menu");
-    dropdown.setAttribute("aria-hidden", "true");
-    dropdown.innerHTML = `
-      <div class="account-dropdown-header">
-        <span class="account-dropdown-avatar" id="accountMenuAvatar">K</span>
-        <div class="account-dropdown-info">
-          <strong class="account-dropdown-name" id="accountMenuName">Khách</strong>
-          <span class="account-dropdown-email" id="accountMenuEmail">Chưa đăng nhập</span>
-          <span class="account-dropdown-badge" id="accountMenuRole">Tài khoản</span>
+    let dropdown = $("#accountDropdownMenu");
+    if (!dropdown) {
+      dropdown = document.createElement("div");
+      dropdown.id = "accountDropdownMenu";
+      dropdown.className = "account-dropdown-menu";
+      dropdown.setAttribute("role", "menu");
+      dropdown.setAttribute("aria-hidden", "true");
+      dropdown.innerHTML = `
+        <div class="account-dropdown-header">
+          <span class="account-dropdown-avatar" id="accountMenuAvatar">K</span>
+          <div class="account-dropdown-info">
+            <strong class="account-dropdown-name" id="accountMenuName">Khách</strong>
+            <span class="account-dropdown-email" id="accountMenuEmail">Chưa đăng nhập</span>
+            <span class="account-dropdown-badge" id="accountMenuRole">Tài khoản</span>
+          </div>
         </div>
-      </div>
-      <div class="account-dropdown-menu-list">
-        <button type="button" class="account-dropdown-item" id="accountMenuItemSettings">
-          <span class="account-item-icon">⚙️</span>
-          <span>Tài khoản của tôi</span>
-        </button>
-        <a href="/suc-khoe-tien-ich#family-health" class="account-dropdown-item" id="accountMenuItemHealth">
-          <span class="account-item-icon">🩺</span>
-          <span>Hồ sơ sức khỏe gia đình</span>
-        </a>
-        <button type="button" class="account-dropdown-item danger" id="accountMenuItemLogout">
-          <span class="account-item-icon">🚪</span>
-          <span>Đăng xuất</span>
-        </button>
-      </div>
-    `;
-
-    document.body.appendChild(dropdown);
+        <div class="account-dropdown-menu-list">
+          <button type="button" class="account-dropdown-item" id="accountMenuItemSettings">
+            <span class="account-item-icon">⚙️</span>
+            <span>Tài khoản của tôi</span>
+          </button>
+          <a href="/suc-khoe-tien-ich#family-health" class="account-dropdown-item" id="accountMenuItemHealth">
+            <span class="account-item-icon">🩺</span>
+            <span>Hồ sơ sức khỏe gia đình</span>
+          </a>
+          <button type="button" class="account-dropdown-item danger" id="accountMenuItemLogout">
+            <span class="account-item-icon">🚪</span>
+            <span>Đăng xuất</span>
+          </button>
+        </div>
+      `;
+      document.body.appendChild(dropdown);
+    }
     accountDropdownEl = dropdown;
 
-    $("#accountMenuItemSettings", dropdown)?.addEventListener("click", (e) => {
-      e.preventDefault();
-      closeAccountDropdown();
-      openSettings();
-    });
+    if (dropdown.dataset.bound !== "1") {
+      dropdown.dataset.bound = "1";
 
-    $("#accountMenuItemLogout", dropdown)?.addEventListener("click", async (e) => {
-      e.preventDefault();
-      closeAccountDropdown();
-      await performLogout();
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!accountDropdownEl || !accountDropdownEl.classList.contains("active")) return;
-      if (!accountDropdownEl.contains(e.target) && !e.target.closest("#accountButton")) {
+      $("#accountMenuItemSettings", dropdown)?.addEventListener("click", (e) => {
+        e.preventDefault();
         closeAccountDropdown();
-      }
-    });
+        openSettings();
+      });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && accountDropdownEl?.classList.contains("active")) {
+      $("#accountMenuItemLogout", dropdown)?.addEventListener("click", async (e) => {
+        e.preventDefault();
         closeAccountDropdown();
-      }
-    });
+        await performLogout();
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!accountDropdownEl || !accountDropdownEl.classList.contains("active")) return;
+        if (!accountDropdownEl.contains(e.target) && !e.target.closest("#accountButton")) {
+          closeAccountDropdown();
+        }
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && accountDropdownEl?.classList.contains("active")) {
+          closeAccountDropdown();
+        }
+      });
+    }
 
     return dropdown;
   }
@@ -597,7 +599,12 @@
 
   async function performLogout() {
     try {
-      await fetch("/logout", { method: "POST", credentials: "same-origin" });
+      await fetch("/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Pragma": "no-cache", "Cache-Control": "no-cache" }
+      });
     } catch (err) {
       console.warn("Logout fetch failed:", err);
     }
@@ -613,7 +620,7 @@
 
     const params = new URLSearchParams(window.location.search);
     if (params.get("login") === "1") {
-      $("#authModal").classList.remove("hidden");
+      $("#authModal")?.classList.remove("hidden");
     }
     if (params.get("admin_error") === "1") {
       showToast("Tài khoản này chưa có quyền quản trị.", "error");
@@ -641,6 +648,11 @@
       }
       return data;
     };
+
+    if (button.dataset.authBound === "1") {
+      return refresh();
+    }
+    button.dataset.authBound = "1";
 
     button.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -734,6 +746,7 @@
               </div>
               <div class="settings-row-actions">
                 <button type="button" class="settings-secondary" data-logout-other>Đăng xuất khỏi thiết bị khác</button>
+                <button type="button" class="settings-danger" data-logout-current style="margin-left: 8px;">Đăng xuất</button>
               </div>
             </section>
 
@@ -893,6 +906,12 @@
 
     $("[data-logout-other]", modal)?.addEventListener("click", () => {
       showToast("Phiên đăng nhập hiện tại được giữ nguyên. Hệ thống hiện chưa lưu nhiều phiên để thu hồi riêng.");
+    });
+
+    $("[data-logout-current]", modal)?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      modal.classList.add("hidden");
+      await performLogout();
     });
 
     $("[data-export-data]", modal)?.addEventListener("click", () => {
@@ -1069,6 +1088,13 @@
       badge: "Khẩn cấp",
       icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
       action: () => { window.location.href = "tel:115"; }
+    },
+    {
+      id: "logout",
+      title: "Đăng xuất tài khoản",
+      badge: "Tài khoản",
+      icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+      action: () => { performLogout(); }
     }
   ];
 
@@ -1220,6 +1246,21 @@
     $$('[data-action="toggle-theme"]').forEach((button) => button.addEventListener("click", toggleTheme));
     bindSettingsTriggers(document);
     initCommandPalette();
+  });
+
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+      currentUser().then((data) => {
+        const isAuthPage = !window.location.pathname.startsWith("/landing") &&
+                           !window.location.pathname.startsWith("/login") &&
+                           !window.location.pathname.startsWith("/register");
+        if (!data.logged_in && isAuthPage) {
+          window.location.assign("/landing");
+        } else {
+          window.dispatchEvent(new CustomEvent("medicare:auth-changed", { detail: data.user || null }));
+        }
+      });
+    }
   });
 })();
 
