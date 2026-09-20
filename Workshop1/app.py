@@ -195,6 +195,29 @@ def app_after_request(response):
     return response
 
 
+@app.context_processor
+def inject_current_user():
+    uid = session.get("user_id")
+    if not uid:
+        return {"current_user": None}
+    full_name = session.get("full_name") or session.get("user_name") or "Người dùng"
+    email = session.get("email") or session.get("user_email")
+    phone = session.get("phone")
+    role = session.get("role", "user")
+    initial = full_name.strip()[0].upper() if full_name.strip() else "U"
+    return {
+        "current_user": {
+            "id": uid,
+            "full_name": full_name,
+            "email": email,
+            "phone": phone,
+            "role": role,
+            "initial": initial,
+            "is_authenticated": True,
+        }
+    }
+
+
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 
@@ -2555,7 +2578,25 @@ def current_user():
         connection.close()
     except Exception as db_err:
         app.logger.warning("current_user DB error (%s)", db_err)
-        return jsonify({"logged_in": False})
+        fallback_name = session.get("full_name") or session.get("user_name") or "Người dùng"
+        fallback_email = session.get("email") or session.get("user_email")
+        return jsonify({
+            "logged_in": True,
+            "subscription": {
+                "plan": "free",
+                "is_premium": False,
+                "is_admin": session.get("role") == "admin",
+                "expires_at": None,
+            },
+            "user": {
+                "id": user_id,
+                "full_name": fallback_name,
+                "email": fallback_email,
+                "phone": session.get("phone"),
+                "birth_date": None,
+                "role": session.get("role", "user")
+            }
+        })
 
     if user is None:
         session.clear()
@@ -2814,10 +2855,15 @@ def save_chat_feedback():
     })
 
 
-@app.post("/logout")
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.clear()
-    return jsonify({"message": "Đăng xuất thành công."})
+    if request.method == "GET":
+        return redirect(url_for("landing_page"))
+    return jsonify({
+        "message": "Đăng xuất thành công.",
+        "redirect": "/landing"
+    })
 
 
 

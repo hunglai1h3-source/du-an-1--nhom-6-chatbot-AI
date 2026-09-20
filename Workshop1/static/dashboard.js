@@ -1782,20 +1782,24 @@
    M.bindAccountButton($("#sidebarAuthButton"));
  
    if (user?.logged_in) {
- 
+
      await M.syncProfiles(user.user);
- 
-     if ($("#welcomeName")) $("#welcomeName").textContent = user.user.full_name;
- 
+
+     if ($("#accountName")) $("#accountName").textContent = user.user.full_name;
+
      if ($("#accountAvatar")) $("#accountAvatar").textContent = M.initials(user.user.full_name);
- 
+
+     if ($("#welcomeName")) $("#welcomeName").textContent = user.user.full_name;
+
    } else {
- 
+
      M.clearPrivateState();
- 
-     if ($("#welcomeName")) $("#welcomeName").textContent = "Khách";
- 
+
+     if ($("#accountName")) $("#accountName").textContent = "Khách";
+
      if ($("#accountAvatar")) $("#accountAvatar").textContent = "K";
+
+     if ($("#welcomeName")) $("#welcomeName").textContent = "Khách";
  
    }
  
@@ -2017,17 +2021,21 @@
  
        await M.syncProfiles(event.detail);
  
-       if ($("#welcomeName")) $("#welcomeName").textContent = event.detail.full_name || "Tài khoản";
+       if ($("#accountName")) $("#accountName").textContent = event.detail.full_name || "Tài khoản";
  
        if ($("#accountAvatar")) $("#accountAvatar").textContent = M.initials(event.detail.full_name);
+ 
+       if ($("#welcomeName")) $("#welcomeName").textContent = event.detail.full_name || "Tài khoản";
  
      } else {
  
        M.clearPrivateState();
  
-       if ($("#welcomeName")) $("#welcomeName").textContent = "Khách";
+       if ($("#accountName")) $("#accountName").textContent = "Khách";
  
        if ($("#accountAvatar")) $("#accountAvatar").textContent = "K";
+ 
+       if ($("#welcomeName")) $("#welcomeName").textContent = "Khách";
  
      }
  

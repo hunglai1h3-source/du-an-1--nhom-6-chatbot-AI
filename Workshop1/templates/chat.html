@@ -82,7 +82,7 @@
         </svg>
       </button>
       <a class="rail-user-avatar" href="/suc-khoe-tien-ich#family-health" data-tooltip="Hồ sơ người dùng" aria-label="Hồ sơ người dùng">
-        <span id="railUserAvatar">K</span>
+        <span id="railUserAvatar">{{ current_user.initial if current_user else 'K' }}</span>
       </a>
     </div>
   </aside>
@@ -141,9 +141,9 @@
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
         <b>3</b>
       </button>
-      <button class="account-button" id="accountButton" type="button">
-        <span class="account-avatar" id="accountAvatar">K</span>
-        <span><strong id="accountName" data-account-name>Khách</strong><small>Tài khoản của tôi</small></span>
+      <button class="account-button" id="accountButton" type="button" aria-label="Tài khoản của tôi" aria-haspopup="true" aria-expanded="false">
+        <span class="account-avatar" id="accountAvatar">{{ current_user.initial if current_user else 'K' }}</span>
+        <span><strong id="accountName" data-account-name>{{ current_user.full_name if current_user else 'Khách' }}</strong><small>Tài khoản của tôi</small></span>
       </button>
     </div>
   </header>

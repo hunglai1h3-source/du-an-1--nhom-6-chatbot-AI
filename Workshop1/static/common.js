@@ -477,6 +477,136 @@
     });
   }
 
+  let accountDropdownEl = null;
+
+  function ensureAccountDropdown() {
+    if (accountDropdownEl && document.body.contains(accountDropdownEl)) {
+      return accountDropdownEl;
+    }
+    const existing = $("#accountDropdownMenu");
+    if (existing) {
+      accountDropdownEl = existing;
+      return existing;
+    }
+
+    const dropdown = document.createElement("div");
+    dropdown.id = "accountDropdownMenu";
+    dropdown.className = "account-dropdown-menu";
+    dropdown.setAttribute("role", "menu");
+    dropdown.setAttribute("aria-hidden", "true");
+    dropdown.innerHTML = `
+      <div class="account-dropdown-header">
+        <span class="account-dropdown-avatar" id="accountMenuAvatar">K</span>
+        <div class="account-dropdown-info">
+          <strong class="account-dropdown-name" id="accountMenuName">Khách</strong>
+          <span class="account-dropdown-email" id="accountMenuEmail">Chưa đăng nhập</span>
+          <span class="account-dropdown-badge" id="accountMenuRole">Tài khoản</span>
+        </div>
+      </div>
+      <div class="account-dropdown-menu-list">
+        <button type="button" class="account-dropdown-item" id="accountMenuItemSettings">
+          <span class="account-item-icon">⚙️</span>
+          <span>Tài khoản của tôi</span>
+        </button>
+        <a href="/suc-khoe-tien-ich#family-health" class="account-dropdown-item" id="accountMenuItemHealth">
+          <span class="account-item-icon">🩺</span>
+          <span>Hồ sơ sức khỏe gia đình</span>
+        </a>
+        <button type="button" class="account-dropdown-item danger" id="accountMenuItemLogout">
+          <span class="account-item-icon">🚪</span>
+          <span>Đăng xuất</span>
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(dropdown);
+    accountDropdownEl = dropdown;
+
+    $("#accountMenuItemSettings", dropdown)?.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeAccountDropdown();
+      openSettings();
+    });
+
+    $("#accountMenuItemLogout", dropdown)?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      closeAccountDropdown();
+      await performLogout();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!accountDropdownEl || !accountDropdownEl.classList.contains("active")) return;
+      if (!accountDropdownEl.contains(e.target) && !e.target.closest("#accountButton")) {
+        closeAccountDropdown();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && accountDropdownEl?.classList.contains("active")) {
+        closeAccountDropdown();
+      }
+    });
+
+    return dropdown;
+  }
+
+  function openAccountDropdown(anchorEl, userData) {
+    const dropdown = ensureAccountDropdown();
+    if (!dropdown || !anchorEl) return;
+
+    const user = userData?.user || {};
+    const name = user.full_name || "Tài khoản";
+    const email = user.email || user.phone || "Đã đăng nhập";
+    const initialChar = initials(name);
+    const roleText = user.role === "admin" ? "Quản trị viên" : "Thành viên";
+
+    const avatarNode = $("#accountMenuAvatar", dropdown);
+    const nameNode = $("#accountMenuName", dropdown);
+    const emailNode = $("#accountMenuEmail", dropdown);
+    const roleNode = $("#accountMenuRole", dropdown);
+
+    if (avatarNode) avatarNode.textContent = initialChar;
+    if (nameNode) nameNode.textContent = name;
+    if (emailNode) emailNode.textContent = email;
+    if (roleNode) roleNode.textContent = roleText;
+
+    const rect = anchorEl.getBoundingClientRect();
+    const dropdownWidth = 290;
+    let left = rect.right - dropdownWidth;
+    if (left < 16) left = 16;
+    if (left + dropdownWidth > window.innerWidth - 16) {
+      left = window.innerWidth - dropdownWidth - 16;
+    }
+    const top = rect.bottom + 8;
+
+    dropdown.style.top = `${top}px`;
+    dropdown.style.left = `${left}px`;
+    dropdown.classList.add("active");
+    dropdown.setAttribute("aria-hidden", "false");
+    anchorEl.setAttribute("aria-expanded", "true");
+  }
+
+  function closeAccountDropdown() {
+    if (accountDropdownEl) {
+      accountDropdownEl.classList.remove("active");
+      accountDropdownEl.setAttribute("aria-hidden", "true");
+    }
+    const btn = $("#accountButton");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  }
+
+  async function performLogout() {
+    try {
+      await fetch("/logout", { method: "POST", credentials: "same-origin" });
+    } catch (err) {
+      console.warn("Logout fetch failed:", err);
+    }
+    clearPrivateState();
+    showToast("Đã đăng xuất.", "success");
+    window.dispatchEvent(new CustomEvent("medicare:auth-changed", { detail: null }));
+    window.location.assign("/landing");
+  }
+
   async function bindAccountButton(button) {
     if (!button) return { logged_in: false };
     ensureAuthModal();
@@ -492,37 +622,47 @@
     const refresh = async () => {
       const data = await currentUser();
       button.dataset.loggedIn = data.logged_in ? "true" : "false";
-      const nameNode = $("[data-account-name]", button);
-      if (nameNode) {
-        nameNode.textContent = data.logged_in ? (data.user?.full_name || "Tài khoản") : "Khách";
+
+      const nameNode = $("[data-account-name]", button) || $("#accountName");
+      const avatarNode = $("#accountAvatar", button) || $("#accountAvatar");
+      const welcomeNode = $("#welcomeName");
+
+      if (data.logged_in && data.user) {
+        if (nameNode) nameNode.textContent = data.user.full_name || "Tài khoản";
+        if (avatarNode) avatarNode.textContent = initials(data.user.full_name);
+        if (welcomeNode) welcomeNode.textContent = data.user.full_name || "Tài khoản";
       } else {
-        button.textContent = data.logged_in ? "⇥ Đăng xuất" : "⇥ Đăng nhập";
+        if (nameNode) nameNode.textContent = "Khách";
+        if (avatarNode) avatarNode.textContent = "K";
+        if (welcomeNode) welcomeNode.textContent = "Khách";
+        if (!nameNode && !avatarNode) {
+          button.textContent = "⇥ Đăng nhập";
+        }
       }
       return data;
     };
 
     button.addEventListener("click", async (event) => {
       event.preventDefault();
-      const data = await refresh();
+      event.stopPropagation();
+      const data = await currentUser();
+
       if (!data.logged_in) {
-        $("#authModal").classList.remove("hidden");
+        window.location.assign("/login");
         return;
       }
-      if (data.user?.role === "admin") {
+
+      if (data.user?.role === "admin" && button.id === "sidebarAuthButton") {
         window.location.assign("/admin");
         return;
       }
-      const shouldLogout = confirm(`Bạn đang đăng nhập với tên ${data.user?.full_name || "người dùng"}. Bạn muốn đăng xuất?`);
-      if (!shouldLogout) return;
-      const response = await fetch("/logout", { method: "POST", credentials: "same-origin" });
-      if (!response.ok) {
-        showToast("Đăng xuất chưa thành công. Hãy thử lại.", "error");
-        return;
+
+      const dropdown = ensureAccountDropdown();
+      if (dropdown.classList.contains("active")) {
+        closeAccountDropdown();
+      } else {
+        openAccountDropdown(button, data);
       }
-      clearPrivateState();
-      showToast("Đã đăng xuất.", "success");
-      window.dispatchEvent(new CustomEvent("medicare:auth-changed", { detail: null }));
-      window.location.assign("/");
     });
 
     window.addEventListener("medicare:auth-changed", refresh);
@@ -819,7 +959,8 @@
     getProfiles, saveProfiles, getSelectedProfile, selectProfile, addProfile, syncProfiles, clearPrivateState,
     showToast, applyTheme, toggleTheme, weatherCode, aqiLevel,
     getBestPosition, loadLocationContext, mapsSearchUrl, pharmacyMapUrl, mapsDirectionsUrl,
-    currentUser, bindAccountButton, openSettings, ensureSettingsModal
+    currentUser, bindAccountButton, openSettings, ensureSettingsModal,
+    logout: performLogout, openAccountDropdown, closeAccountDropdown
   };
 
   function bindSettingsTriggers(root = document) {
