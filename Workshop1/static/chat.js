@@ -601,14 +601,30 @@ function renderSources(sources) {
 
   const cardsHtml = sources.map((item) => {
     const title = item.title || "Tài liệu y khoa tham khảo";
-    let sourceName = item.source || "Kho tri thức Y tế";
+    let sourceName = item.issuing_authority || item.source || "Kho tri thức Y tế";
     if (/vinmec/i.test(sourceName)) sourceName = "Bệnh viện ĐKQT Vinmec";
     else if (/vnexpress/i.test(sourceName)) sourceName = "VnExpress Sức Khỏe";
     else if (/vihealthqa/i.test(sourceName)) sourceName = "ViHealthQA Y Khoa";
 
-    const trustBadge = (item.trust_level === "verified" || item.trust_level === "authoritative")
-      ? '<span class="source-trust-badge">✓ Đã đối chiếu</span>'
-      : '<span class="source-trust-badge">Tham khảo</span>';
+    const tier = String(item.trust_tier || item.trust_level || "").toUpperCase();
+    let trustBadge = '<span class="source-trust-badge">Tham khảo</span>';
+    if (tier === "TIER_1" || tier === "OFFICIAL_GOVERNMENT" || /bộ y tế/i.test(sourceName)) {
+      trustBadge = '<span class="source-trust-badge" style="background:rgba(13,148,136,0.18);color:#0d9488;border:1px solid rgba(13,148,136,0.35);">★ Chính thức (Bộ Y tế)</span>';
+    } else if (tier === "TIER_2" || tier === "OFFICIAL_INTERNATIONAL" || /who/i.test(sourceName)) {
+      trustBadge = '<span class="source-trust-badge" style="background:rgba(14,165,233,0.18);color:#0284c7;border:1px solid rgba(14,165,233,0.35);">★ Quốc tế (WHO)</span>';
+    } else if (tier === "TIER_3" || tier === "OFFICIAL_INSTITUTION") {
+      trustBadge = '<span class="source-trust-badge" style="background:rgba(99,102,241,0.18);color:#4f46e5;border:1px solid rgba(99,102,241,0.35);">BV Tuyến cuối</span>';
+    } else if (item.trust_level === "verified" || item.trust_level === "authoritative") {
+      trustBadge = '<span class="source-trust-badge">✓ Đã đối chiếu</span>';
+    }
+
+    const docMeta = item.document_number
+      ? `<div style="font-size:0.75rem;color:var(--text-tertiary);margin-top:2px;">Văn bản: <strong>${M.escapeHTML(item.document_number)}</strong>${item.issue_date ? ' · Ban hành: ' + M.escapeHTML(item.issue_date) : ''}</div>`
+      : "";
+
+    const sectionMeta = item.section_path
+      ? `<div style="font-size:0.75rem;color:var(--accent-primary);margin-top:2px;">Phần: ${M.escapeHTML(item.section_path)}</div>`
+      : "";
 
     const url = item.source_url && /^https?:\/\//i.test(item.source_url) ? item.source_url : "";
     const linkHtml = url
@@ -623,9 +639,12 @@ function renderSources(sources) {
           ${trustBadge}
         </div>
         <p class="rag-source-title">${M.escapeHTML(title)}</p>
+        ${docMeta}
+        ${sectionMeta}
         ${linkHtml}
       </div>`;
   }).join("");
+
 
   return `
     <section class="rag-sources-panel" aria-label="Nguồn tham khảo y khoa">

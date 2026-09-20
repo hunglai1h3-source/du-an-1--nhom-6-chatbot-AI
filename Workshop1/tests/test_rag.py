@@ -45,10 +45,16 @@ class TestMedicalRAGPhase4(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Ensure knowledge base exists
+        # Ensure knowledge base exists and Phase 4 tests use RAG V1 engine
+        cls.orig_use_v2 = getattr(rag_service, "USE_RAG_V2", True)
+        rag_service.USE_RAG_V2 = False
         cls.db_path = rag_service.DATABASE_PATH
         if not cls.db_path.is_file():
             build_medical_knowledge.build_knowledge_base(rebuild=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        rag_service.USE_RAG_V2 = cls.orig_use_v2
 
     def test_01_kb_build_has_documents_and_schema(self):
         """1. Kiểm tra kho tri thức y tế chứa > 0 documents và cấu trúc bảng chuẩn."""

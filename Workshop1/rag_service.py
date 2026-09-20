@@ -102,8 +102,28 @@ for term in MEDICAL_VOCABULARY:
 
 
 def is_rag_available(db_path: Optional[Path] = None) -> bool:
-    """Check if the SQLite medical database exists and has readable tables."""
-    target_path = db_path or DATABASE_PATH
+    """Check if either Knowledge V2 or RAG V1 database exists and has readable tables."""
+    if db_path is not None:
+        target_path = db_path
+        if not target_path.is_file():
+            return False
+        try:
+            con = sqlite3.connect(f"file:{target_path}?mode=ro", uri=True)
+            cur = con.execute("SELECT count(*) FROM sqlite_master WHERE type='table'")
+            has_table = (cur.fetchone() or [0])[0] > 0
+            con.close()
+            return has_table
+        except Exception:
+            return False
+
+    try:
+        import rag_service_v2
+        if rag_service_v2.is_knowledge_v2_available():
+            return True
+    except Exception:
+        pass
+
+    target_path = DATABASE_PATH
     if not target_path.is_file():
         return False
     try:
@@ -151,10 +171,12 @@ def extract_medical_concepts(
             state_terms.append(str(medical_state["symptom_location"]).lower())
 
     all_folded = f"{clean_folded} {' '.join(fold_vietnamese(t) for t in state_terms)}"
+    padded_folded = f" {all_folded} "
 
     matched_concepts = set()
     for k_folded, canonical in sorted(MED_VOCAB_MAP.items(), key=lambda x: len(x[0]), reverse=True):
-        if k_folded in all_folded:
+        pattern = rf"(?:^|[\s,.\-!?;:\(\)\[\]]){re.escape(k_folded)}(?:$|[\s,.\-!?;:\(\)\[\]])"
+        if re.search(pattern, padded_folded):
             matched_concepts.add(canonical)
             if canonical in SYNONYMS:
                 matched_concepts.add(SYNONYMS[canonical])
@@ -276,6 +298,9 @@ def should_activate_rag(
     return has_medical_intent
 
 
+USE_RAG_V2 = os.getenv("USE_RAG_V2", "true").strip().lower() in ("true", "1", "yes")
+
+
 def search_medical_knowledge(
     user_message: str,
     limit: int = 3,
@@ -284,10 +309,42 @@ def search_medical_knowledge(
     db_path: Optional[Path] = None
 ) -> List[Dict[str, Any]]:
     """
-    Retrieve relevant medical chunks using SQLite FTS5 BM25.
-    Returns list of dicts with chunk_id, title, content, source, source_url, trust_level, relevance_score.
+    Retrieve relevant medical chunks.
+    Prioritizes Official Medical Knowledge V2 (Official Vietnam guidelines & validity),
+    with graceful fallback to RAG V1 (medical.db) if V2 is unavailable.
     Never raises an unhandled exception.
     """
+    # If custom db_path is passed (e.g. testing corrupt/missing db in test suites), handle with V1 engine on that db
+    if db_path is not None:
+        return _search_medical_knowledge_v1(user_message, limit=limit, min_score=min_score, medical_state=medical_state, db_path=db_path)
+
+    if USE_RAG_V2:
+        try:
+            import rag_service_v2
+            if rag_service_v2.is_knowledge_v2_available():
+                results = rag_service_v2.search_official_medical_knowledge(
+                    user_message,
+                    limit=limit,
+                    min_score=min_score,
+                    medical_state=medical_state
+                )
+                if results:
+                    return results
+        except Exception as e:
+            logger.warning(f"Knowledge V2 search failed, falling back to V1: {e}")
+
+    # Fallback to V1
+    return _search_medical_knowledge_v1(user_message, limit=limit, min_score=min_score, medical_state=medical_state, db_path=db_path)
+
+
+def _search_medical_knowledge_v1(
+    user_message: str,
+    limit: int = 3,
+    min_score: float = DEFAULT_MIN_RELEVANCE_SCORE,
+    medical_state: Optional[Dict[str, Any]] = None,
+    db_path: Optional[Path] = None
+) -> List[Dict[str, Any]]:
+    """V1 retrieval engine using SQLite FTS5 BM25 on medical.db."""
     target_limit = max(1, min(int(limit), 5))
 
     fts_query, has_intent = build_rag_query(user_message, medical_state)
@@ -299,9 +356,6 @@ def search_medical_knowledge(
         return []
 
     try:
-        # SQLite FTS5 bm25 weights: title(5.0), content(2.0), title_folded(3.0), content_folded(1.0)
-        # raw_bm25 is negative; lower raw_bm25 means better match.
-        # relevance_score = -raw_bm25 (positive, higher is better).
         sql = """
             SELECT 
                 f.chunk_id,
@@ -348,7 +402,7 @@ def search_medical_knowledge(
         return results
 
     except Exception as e:
-        logger.warning(f"RAG search exception: {e}")
+        logger.warning(f"RAG V1 search exception: {e}")
         return []
     finally:
         try:
@@ -360,8 +414,18 @@ def search_medical_knowledge(
 def format_rag_context(retrieved_docs: List[Dict[str, Any]]) -> str:
     """
     Format retrieved documents into a grounded context block for Gemini.
-    Embeds clear instructions on [MED-XXXXX] citation and no-hallucination rules.
+    Delegates to Knowledge V2 formatter if V2 fields are present or V2 is enabled.
     """
+    try:
+        import rag_service_v2
+        return rag_service_v2.format_rag_context_v2(retrieved_docs)
+    except Exception as e:
+        logger.warning(f"V2 context format failed, using V1 formatter: {e}")
+        return _format_rag_context_v1(retrieved_docs)
+
+
+def _format_rag_context_v1(retrieved_docs: List[Dict[str, Any]]) -> str:
+    """V1 formatting fallback."""
     if not retrieved_docs:
         return (
             "THÔNG BÁO TỪ HỆ THỐNG TRI THỨC:\n"
@@ -408,41 +472,38 @@ def validate_and_extract_citations(
     retrieved_docs: List[Dict[str, Any]]
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Inspect model reply for citations [MED-XXXXX].
-    - Validates cited IDs against retrieved_docs.
-    - Strips any hallucinated IDs (e.g. [MED-99999] that were not retrieved).
-    - Returns sanitized reply text and list of actually used sources.
+    Validate and extract citations from model reply.
+    Supports both V2 authority tags ([BYT-...], [DAV-...], [WHO-...]) and legacy [MED-XXXXX] tags.
     """
+    try:
+        import rag_service_v2
+        return rag_service_v2.validate_and_extract_citations_v2(reply_text, retrieved_docs)
+    except Exception as e:
+        logger.warning(f"V2 citation validation failed, using V1 validator: {e}")
+
     reply_text = str(reply_text or "")
     if not retrieved_docs:
-        # If no docs were retrieved, strip any invented citations
-        sanitized = re.sub(r"\[MED-\d+\]", "", reply_text)
-        # Clean up double spaces left behind
+        sanitized = re.sub(r"\[(?:MED|BYT|DAV|WHO)-[A-Za-z0-9]+\]", "", reply_text)
         sanitized = re.sub(r" {2,}", " ", sanitized)
         return sanitized.strip(), []
 
     retrieved_map = {doc["chunk_id"]: doc for doc in retrieved_docs}
-    cited_ids = set(re.findall(r"\[(MED-\d+)\]", reply_text))
+    cited_ids = set(re.findall(r"\[((?:MED|BYT|DAV|WHO)-[A-Za-z0-9]+)\]", reply_text))
 
     valid_sources = []
     seen_source_ids = set()
 
-    # Identify valid vs invalid
     invalid_ids = cited_ids - set(retrieved_map.keys())
 
-    # Strip invalid / hallucinated citations from reply text
     sanitized_text = reply_text
     for fake_id in invalid_ids:
         sanitized_text = sanitized_text.replace(f"[{fake_id}]", "")
     sanitized_text = re.sub(r" {2,}", " ", sanitized_text).strip()
 
-    # Collect valid sources
     for cid in cited_ids:
         if cid in retrieved_map and cid not in seen_source_ids:
             seen_source_ids.add(cid)
             valid_sources.append(retrieved_map[cid])
 
-    # If the model didn't explicitly cite the tag, but retrieved docs were provided
-    # we return empty cited sources or only cited sources per requirement:
-    # "sources chỉ gồm các tài liệu: thực sự retrieved và thực sự được sử dụng / cited nếu có thể xác định. Không trả toàn bộ top-k như thể tất cả đều hỗ trợ câu trả lời."
     return sanitized_text, valid_sources
+
