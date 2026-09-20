@@ -1,12 +1,11 @@
 /**
- * MediCare AI - Cinematic Auth Experience V3
- * Canvas 2D GPU Health Waveform & Ambient Neural Field
- * Fast & Secure Authentication Handler
+ * MediCare AI — Apex Cinematic Auth Controller
+ * Integrates MedicareCinematicEngine, Fluid Morphing Tabs & Signature Login-Success Transition
  */
 
-"use strict";
-
 (function () {
+  "use strict";
+
   const $ = (selector, parent = document) => parent.querySelector(selector);
   const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
 
@@ -16,16 +15,20 @@
   const THEME_KEY = "medicareThemeV4";
 
   function initTheme() {
-    const saved = localStorage.getItem(THEME_KEY) || "light";
-    document.documentElement.dataset.theme = saved;
+    const saved = localStorage.getItem(THEME_KEY) || "dark";
+    document.documentElement.setAttribute("data-theme", saved);
     updateThemeIcon(saved);
-  }
 
-  function toggleTheme() {
-    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem(THEME_KEY, next);
-    updateThemeIcon(next);
+    const toggleBtn = $("#themeToggleBtn");
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme") || "dark";
+        const next = current === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem(THEME_KEY, next);
+        updateThemeIcon(next);
+      });
+    }
   }
 
   function updateThemeIcon(theme) {
@@ -36,190 +39,28 @@
   }
 
   // ==========================================================================
-  // 2. CINEMATIC HEALTH WAVEFORM & NEURAL ENGINE (Canvas 2D)
+  // 2. UNIFIED CINEMATIC GRAPHICS ENGINE INTEGRATION
   // ==========================================================================
-  class CinematicHealthCanvas {
-    constructor(canvasEl) {
-      this.canvas = canvasEl;
-      if (!this.canvas) return;
-      this.ctx = this.canvas.getContext("2d", { alpha: true });
-      this.particles = [];
-      this.animId = null;
-      this.isPaused = false;
-      this.width = 0;
-      this.height = 0;
-      this.ecgOffset = 0;
+  let authEngine = null;
 
-      // Reduced motion check
-      this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (this.reducedMotion) return;
+  function initAuthGraphics() {
+    const canvas = $("#healthCanvas");
+    if (!canvas || typeof window.MedicareCinematicEngine === "undefined") return;
 
-      this.init();
-    }
-
-    init() {
-      this.resize();
-      this.createParticles();
-      this.bindEvents();
-      this.start();
-    }
-
-    resize() {
-      const rect = this.canvas.parentElement.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      this.width = rect.width;
-      this.height = rect.height;
-      this.canvas.width = this.width * dpr;
-      this.canvas.height = this.height * dpr;
-      this.ctx.scale(dpr, dpr);
-    }
-
-    createParticles() {
-      this.particles = [];
-      // Adaptive particle count based on screen width
-      const count = this.width > 1200 ? 32 : 20;
-      for (let i = 0; i < count; i++) {
-        this.particles.push({
-          x: Math.random() * this.width,
-          y: Math.random() * this.height,
-          vx: (Math.random() - 0.5) * 0.45,
-          vy: (Math.random() - 0.5) * 0.45,
-          radius: Math.random() * 2.2 + 1.2,
-          alpha: Math.random() * 0.5 + 0.25,
-          glow: Math.random() * 6 + 2,
-        });
-      }
-    }
-
-    bindEvents() {
-      window.addEventListener("resize", () => {
-        this.resize();
-        this.createParticles();
-      }, { passive: true });
-
-      // Energy-saving auto-pause when tab is hidden
-      document.addEventListener("visibilitychange", () => {
-        if (document.hidden) {
-          this.pause();
-        } else {
-          this.resume();
-        }
+    try {
+      authEngine = new window.MedicareCinematicEngine({
+        canvas: canvas,
+        mode: "auth",
+        intensity: 0.8,
+        initialState: "idle"
       });
-    }
-
-    pause() {
-      this.isPaused = true;
-      if (this.animId) {
-        cancelAnimationFrame(this.animId);
-        this.animId = null;
-      }
-    }
-
-    resume() {
-      if (this.isPaused && !this.reducedMotion) {
-        this.isPaused = false;
-        this.start();
-      }
-    }
-
-    start() {
-      const render = () => {
-        if (this.isPaused) return;
-        this.draw();
-        this.animId = requestAnimationFrame(render);
-      };
-      this.animId = requestAnimationFrame(render);
-    }
-
-    draw() {
-      this.ctx.clearRect(0, 0, this.width, this.height);
-
-      // 1. Draw subtle ECG health pulse wave across vertical center
-      this.drawEcgWave();
-
-      // 2. Draw neural particles & connections
-      this.drawParticles();
-    }
-
-    drawEcgWave() {
-      this.ecgOffset += 1.4;
-      const ctx = this.ctx;
-      const centerY = this.height * 0.62;
-      ctx.beginPath();
-      ctx.strokeStyle = "rgba(13, 148, 136, 0.22)";
-      ctx.lineWidth = 1.6;
-
-      const step = 4;
-      for (let x = 0; x < this.width; x += step) {
-        const waveX = (x + this.ecgOffset) % 420;
-        let y = centerY;
-
-        // Simulate periodic P-Q-R-S-T cardiac waveform
-        if (waveX > 150 && waveX < 170) {
-          y -= Math.sin((waveX - 150) / 20 * Math.PI) * 12; // P wave
-        } else if (waveX >= 170 && waveX < 185) {
-          y += 6; // Q drop
-        } else if (waveX >= 185 && waveX < 205) {
-          const t = (waveX - 185) / 20;
-          y -= (1 - Math.abs(t - 0.5) * 2) * 52; // R spike
-        } else if (waveX >= 205 && waveX < 220) {
-          y += 14; // S drop
-        } else if (waveX >= 240 && waveX < 275) {
-          y -= Math.sin((waveX - 240) / 35 * Math.PI) * 18; // T wave
-        }
-
-        if (x === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.stroke();
-    }
-
-    drawParticles() {
-      const ctx = this.ctx;
-      const pLen = this.particles.length;
-
-      // Update positions & draw points
-      for (let i = 0; i < pLen; i++) {
-        const p = this.particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-
-        if (p.x < 0) p.x = this.width;
-        if (p.x > this.width) p.x = 0;
-        if (p.y < 0) p.y = this.height;
-        if (p.y > this.height) p.y = 0;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(45, 212, 191, ${p.alpha})`;
-        ctx.fill();
-
-        // Connect nearby nodes
-        for (let j = i + 1; j < pLen; j++) {
-          const p2 = this.particles[j];
-          const dx = p.x - p2.x;
-          const dy = p.y - p2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < 130) {
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            const lineAlpha = (1 - dist / 130) * 0.22;
-            ctx.strokeStyle = `rgba(13, 148, 136, ${lineAlpha})`;
-            ctx.lineWidth = 0.9;
-            ctx.stroke();
-          }
-        }
-      }
+    } catch (err) {
+      console.warn("Auth graphics fallback:", err);
     }
   }
 
   // ==========================================================================
-  // 3. TAB SWITCHING & URL SYNC
+  // 3. MORPHING TAB SWITCHER & URL SYNC
   // ==========================================================================
   function setupTabs() {
     const tabLogin = $("#tabLoginBtn");
@@ -227,28 +68,37 @@
     const panelLogin = $("#panelLogin");
     const panelRegister = $("#panelRegister");
     const globalAlert = $("#authGlobalAlert");
+    const quoteText = $("#authQuoteText");
 
     function switchTab(target) {
       if (globalAlert) globalAlert.classList.add("hidden");
 
       if (target === "register") {
-        tabRegister.classList.add("active");
-        tabRegister.setAttribute("aria-selected", "true");
-        tabLogin.classList.remove("active");
-        tabLogin.setAttribute("aria-selected", "false");
+        tabRegister?.classList.add("active");
+        tabRegister?.setAttribute("aria-selected", "true");
+        tabLogin?.classList.remove("active");
+        tabLogin?.setAttribute("aria-selected", "false");
 
-        panelRegister.classList.remove("hidden");
-        panelLogin.classList.add("hidden");
+        panelRegister?.classList.remove("hidden");
+        panelLogin?.classList.add("hidden");
         history.replaceState(null, "", "/register");
-      } else {
-        tabLogin.classList.add("active");
-        tabLogin.setAttribute("aria-selected", "true");
-        tabRegister.classList.remove("active");
-        tabRegister.setAttribute("aria-selected", "false");
 
-        panelLogin.classList.remove("hidden");
-        panelRegister.classList.add("hidden");
+        if (quoteText) {
+          quoteText.textContent = '"Khởi tạo tài khoản MediCare AI để đồng hành và bảo vệ sức khỏe cho bạn cùng từng thành viên gia đình."';
+        }
+      } else {
+        tabLogin?.classList.add("active");
+        tabLogin?.setAttribute("aria-selected", "true");
+        tabRegister?.classList.remove("active");
+        tabRegister?.setAttribute("aria-selected", "false");
+
+        panelLogin?.classList.remove("hidden");
+        panelRegister?.classList.add("hidden");
         history.replaceState(null, "", "/login");
+
+        if (quoteText) {
+          quoteText.textContent = '"Chào mừng trở lại. Tiếp tục hành trình sức khỏe thông minh và an toàn của bạn."';
+        }
       }
     }
 
@@ -257,7 +107,6 @@
     $("#switchToRegisterBtn")?.addEventListener("click", () => switchTab("register"));
     $("#switchToLoginBtn")?.addEventListener("click", () => switchTab("login"));
 
-    // Check initial query parameter or path
     if (window.location.pathname.includes("register") || new URLSearchParams(window.location.search).get("tab") === "register") {
       switchTab("register");
     }
@@ -284,22 +133,8 @@
   }
 
   // ==========================================================================
-  // 5. TOAST & NOTIFICATION HELPERS
+  // 5. NOTIFICATION & ERROR HELPERS
   // ==========================================================================
-  let toastTimer = null;
-  function showToast(message, type = "info") {
-    const toast = $("#authToast");
-    if (!toast) return;
-    toast.textContent = message;
-    toast.className = `auth-toast show ${type}`;
-    toast.classList.remove("hidden");
-
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      toast.classList.add("hidden");
-    }, 3800);
-  }
-
   function showGlobalAlert(message, type = "error") {
     const alert = $("#authGlobalAlert");
     if (!alert) return;
@@ -332,13 +167,13 @@
   }
 
   // ==========================================================================
-  // 6. FORM SUBMISSION (LOGIN & REGISTER)
+  // 6. FORM SUBMISSIONS & SIGNATURE LOGIN-SUCCESS TRANSITION
   // ==========================================================================
   function setupAuthForms() {
     const loginForm = $("#loginForm");
     const registerForm = $("#registerForm");
 
-    // Login Handler
+    // --- Login Form Submission ---
     loginForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
       clearAllErrors();
@@ -346,8 +181,8 @@
       const accountInput = $("#loginAccount");
       const passwordInput = $("#loginPassword");
       const submitBtn = $("#loginSubmitBtn");
-      const btnText = submitBtn.querySelector(".btn-text");
-      const spinner = submitBtn.querySelector(".btn-spinner");
+      const btnText = submitBtn?.querySelector(".btn-text");
+      const spinner = submitBtn?.querySelector(".btn-spinner");
 
       const account = accountInput.value.trim();
       const password = passwordInput.value;
@@ -363,16 +198,16 @@
       }
       if (hasError) return;
 
-      submitBtn.disabled = true;
-      btnText.textContent = "Đang xác thực...";
-      spinner.classList.remove("hidden");
+      if (submitBtn) submitBtn.disabled = true;
+      if (btnText) btnText.textContent = "Đang xác thực...";
+      if (spinner) spinner.classList.remove("hidden");
 
       try {
         const response = await fetch("/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ account, password }),
+          body: JSON.stringify({ account, password })
         });
 
         const data = await response.json().catch(() => ({}));
@@ -381,22 +216,31 @@
           throw new Error(data.error || "Đăng nhập không thành công.");
         }
 
-        showGlobalAlert("Đăng nhập thành công! Đang chuyển hướng...", "success");
-        showToast("Chào mừng bạn trở lại MediCare AI!", "success");
+        // SIGNATURE LOGIN-SUCCESS CINEMATIC TRANSITION
+        const cardPanel = $("#authCardPanel");
+        const successStage = $("#loginSuccessStage");
 
-        const redirectUrl = new URLSearchParams(window.location.search).get("redirect") || "/";
+        if (cardPanel) cardPanel.classList.add("transitioning-out");
+        if (successStage) successStage.classList.add("active");
+
+        // Set session continuity flag for Health OS
+        sessionStorage.setItem("medicare_login_transition", "1");
+
+        const redirectUrl = new URLSearchParams(window.location.search).get("redirect") || "/dashboard";
+
         setTimeout(() => {
           window.location.href = redirectUrl;
-        }, 550);
+        }, 650);
+
       } catch (err) {
         showGlobalAlert(err.message || "Không thể kết nối đến máy chủ.");
-        submitBtn.disabled = false;
-        btnText.textContent = "Đăng nhập";
-        spinner.classList.add("hidden");
+        if (submitBtn) submitBtn.disabled = false;
+        if (btnText) btnText.textContent = "Đăng nhập";
+        if (spinner) spinner.classList.add("hidden");
       }
     });
 
-    // Register Handler
+    // --- Register Form Submission ---
     registerForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
       clearAllErrors();
@@ -408,39 +252,31 @@
       const confirmPassword = $("#regConfirmPassword").value;
 
       const submitBtn = $("#registerSubmitBtn");
-      const btnText = submitBtn.querySelector(".btn-text");
-      const spinner = submitBtn.querySelector(".btn-spinner");
+      const btnText = submitBtn?.querySelector(".btn-text");
+      const spinner = submitBtn?.querySelector(".btn-spinner");
 
       let hasError = false;
       if (fullName.length < 2) {
-        setFieldError("regFullName", "Họ và tên cần có ít nhất 2 ký tự.");
+        setFieldError("regFullName", "Vui lòng nhập họ và tên đầy đủ.");
         hasError = true;
       }
       if (!email || !email.includes("@") || !email.includes(".")) {
         setFieldError("regEmail", "Địa chỉ email không đúng định dạng.");
         hasError = true;
       }
-      if (phone) {
-        const cleanPhone = phone.replace(/[\s-]/g, "");
-        if (!/^\d{9,11}$/.test(cleanPhone)) {
-          setFieldError("regPhone", "Số điện thoại cần có từ 9 đến 11 chữ số.");
-          hasError = true;
-        }
-      }
       if (password.length < 8) {
-        setFieldError("regPassword", "Mật khẩu phải chứa ít nhất 8 ký tự.");
+        setFieldError("regPassword", "Mật khẩu phải có ít nhất 8 ký tự.");
         hasError = true;
       }
       if (password !== confirmPassword) {
         setFieldError("regConfirmPassword", "Mật khẩu xác nhận không khớp.");
         hasError = true;
       }
-
       if (hasError) return;
 
-      submitBtn.disabled = true;
-      btnText.textContent = "Đang tạo tài khoản...";
-      spinner.classList.remove("hidden");
+      if (submitBtn) submitBtn.disabled = true;
+      if (btnText) btnText.textContent = "Đang khởi tạo tài khoản...";
+      if (spinner) spinner.classList.remove("hidden");
 
       try {
         const response = await fetch("/register", {
@@ -449,69 +285,55 @@
           credentials: "same-origin",
           body: JSON.stringify({
             full_name: fullName,
-            email,
-            phone,
-            password,
-            confirm_password: confirmPassword,
-          }),
+            email: email,
+            phone: phone,
+            password: password,
+            confirm_password: confirmPassword
+          })
         });
 
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          throw new Error(data.error || "Đăng ký không thành công.");
+          throw new Error(data.error || "Không thể tạo tài khoản lúc này.");
         }
 
-        showGlobalAlert("Tạo tài khoản thành công! Tự động đăng nhập...", "success");
-        showToast("Đăng ký thành công!", "success");
+        showGlobalAlert("Đăng ký thành công! Đang chuyển sang màn hình đăng nhập...", "success");
 
-        // Automatically log user in
-        const loginRes = await fetch("/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ account: email, password }),
-        });
+        // Automatically prefill account and switch to login
+        const loginAccount = $("#loginAccount");
+        if (loginAccount) loginAccount.value = email;
 
-        if (loginRes.ok) {
-          setTimeout(() => {
-            window.location.href = "/";
-          }, 600);
-        } else {
-          // Switch to login tab if auto-login fails
+        setTimeout(() => {
           $("#tabLoginBtn")?.click();
-          submitBtn.disabled = false;
-          btnText.textContent = "Đăng ký tài khoản";
-          spinner.classList.add("hidden");
-        }
-      } catch (err) {
-        showGlobalAlert(err.message || "Không thể hoàn tất đăng ký.");
-        submitBtn.disabled = false;
-        btnText.textContent = "Đăng ký tài khoản";
-        spinner.classList.add("hidden");
-      }
-    });
+          if (submitBtn) submitBtn.disabled = false;
+          if (btnText) btnText.textContent = "Đăng ký tài khoản";
+          if (spinner) spinner.classList.add("hidden");
+        }, 900);
 
-    // Forgot Password link helper
-    $("#forgotPwdLink")?.addEventListener("click", () => {
-      showToast("Vui lòng liên hệ quản trị viên hoặc sử dụng số điện thoại đăng ký để đặt lại mật khẩu.");
+      } catch (err) {
+        showGlobalAlert(err.message || "Lỗi kết nối máy chủ.");
+        if (submitBtn) submitBtn.disabled = false;
+        if (btnText) btnText.textContent = "Đăng ký tài khoản";
+        if (spinner) spinner.classList.add("hidden");
+      }
     });
   }
 
-  // ==========================================================================
-  // INITIALIZATION
-  // ==========================================================================
-  document.addEventListener("DOMContentLoaded", () => {
+  // DOM Bootstrapper
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      initTheme();
+      initAuthGraphics();
+      setupTabs();
+      setupPasswordToggles();
+      setupAuthForms();
+    });
+  } else {
     initTheme();
-    $("#themeToggleBtn")?.addEventListener("click", toggleTheme);
-
-    const canvas = $("#healthCanvas");
-    if (canvas) {
-      new CinematicHealthCanvas(canvas);
-    }
-
+    initAuthGraphics();
     setupTabs();
     setupPasswordToggles();
     setupAuthForms();
-  });
+  }
 })();

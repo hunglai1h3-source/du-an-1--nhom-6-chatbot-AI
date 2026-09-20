@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi" data-theme="light">
+<html lang="vi" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,10 +8,12 @@
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css', v='20260917-ultimate-v1') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='auth.css', v='20260917-ultimate-v1') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css', v='20260920-apex-v3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='auth.css', v='20260920-apex-v3') }}">
 </head>
 <body class="auth-page">
+  <!-- Minimal Top Navigation Bar -->
   <header class="auth-topbar">
     <a href="/" class="auth-back-link" title="Quay lại trang chủ">
       <span aria-hidden="true">←</span> Quay lại Trang chủ
@@ -23,23 +25,45 @@
     </div>
   </header>
 
-  <main class="auth-shell">
-    <!-- Cột Cinematic Visual & Storytelling (55% desktop) -->
-    <section class="auth-cinematic-panel" aria-label="Giới thiệu MediCare AI">
+  <!-- Main Split Architecture Shell (60% Visual Zone / 40% Auth Zone) -->
+  <main class="auth-shell" id="authShell">
+    <!-- 1. CINEMATIC VISUAL ZONE (~60% Desktop) -->
+    <section class="auth-cinematic-panel" id="authVisualPanel" aria-label="Không gian thương hiệu MediCare AI">
       <canvas id="healthCanvas" class="health-canvas" aria-hidden="true"></canvas>
       <div class="cinematic-backdrop-poster" aria-hidden="true"></div>
 
       <div class="cinematic-content">
+        <!-- Unified Signature MEDICARE Core -->
+        <div class="auth-core-centerpiece">
+          <div class="medicare-core-v2 state-idle auth-signature-core" id="authMedicareCore" role="img" aria-label="Biểu tượng trí tuệ nhân tạo MediCare Core">
+            <div class="core-aura-glow"></div>
+            <div class="core-orbit-ring ring-latitude"></div>
+            <div class="core-orbit-ring ring-longitude"></div>
+            <div class="core-orb-sphere">
+              <div class="core-inner-light"></div>
+              <svg class="core-harmonic-wave" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+                <path class="wave-path wave-secondary" d="M0 30 C 20 18, 35 42, 50 30 C 65 18, 80 42, 100 30"/>
+                <path class="wave-path wave-primary" d="M0 30 C 25 12, 35 48, 50 30 C 65 12, 75 48, 100 30"/>
+              </svg>
+              <div class="core-neural-particles">
+                <span class="neural-node n1"></span>
+                <span class="neural-node n2"></span>
+                <span class="neural-node n3"></span>
+              </div>
+              <div class="core-focus-nexus"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="cinematic-brand">
-          <div class="brand-mark-circle">+</div>
           <div class="brand-text-group">
             <h1>MediCare <em>AI</em></h1>
-            <p class="brand-tagline">Trí tuệ nhân tạo y khoa · Đồng hành cùng bạn</p>
+            <p class="brand-tagline">Trí tuệ nhân tạo y tế · Đồng hành cùng bạn</p>
           </div>
         </div>
 
         <div class="cinematic-quote">
-          <p class="quote-text">"Sức khỏe của bạn và gia đình luôn là ưu tiên hàng đầu. MediCare AI phân tích, đối chiếu nguồn tin y tế tin cậy để đưa ra hướng dẫn sơ khởi an toàn 24/7."</p>
+          <p class="quote-text" id="authQuoteText">"Chào mừng trở lại. Tiếp tục hành trình sức khỏe thông minh và an toàn của bạn."</p>
         </div>
 
         <div class="cinematic-pillars">
@@ -54,7 +78,7 @@
             <span class="pillar-icon">🩺</span>
             <div>
               <strong>Kiến thức y khoa chuẩn hóa</strong>
-              <small>Đối chiếu tài liệu chính thống từ Bộ Y tế, Vinmec, VnExpress.</small>
+              <small>Đối chiếu tài liệu chính thống từ Bộ Y tế &amp; Vinmec.</small>
             </div>
           </div>
           <div class="pillar-item">
@@ -67,16 +91,16 @@
         </div>
 
         <div class="cinematic-footer">
-          <small>© 2026 MediCare AI. Nền tảng số chăm sóc sức khỏe gia đình.</small>
+          <small>© 2026 MediCare AI. Nền tảng số chăm sóc sức khỏe cá nhân &amp; gia đình.</small>
         </div>
       </div>
     </section>
 
-    <!-- Cột Glassmorphic Auth Card (45% desktop) -->
-    <section class="auth-card-panel" aria-label="Khu vực đăng nhập và đăng ký">
+    <!-- 2. GLASSMORPHIC AUTH PANEL (~40% Desktop) -->
+    <section class="auth-card-panel" id="authCardPanel" aria-label="Khu vực đăng nhập và đăng ký">
       <div class="auth-card-container">
         <div class="auth-glass-card">
-          <!-- Switcher Tabs -->
+          <!-- Switcher Tabs (Login / Register Morph) -->
           <div class="auth-tabs-nav" role="tablist" aria-label="Lựa chọn phương thức xác thực">
             <button
               class="auth-tab-btn {{ 'active' if active_tab != 'register' else '' }}"
@@ -101,8 +125,8 @@
             <div class="tab-pill-indicator" id="tabPillIndicator" aria-hidden="true"></div>
           </div>
 
-          <!-- Thông báo lỗi chung -->
-          <div class="auth-global-alert hidden" id="authGlobalAlert" role="alert"></div>
+          <!-- Thông báo lỗi / trạng thái chung -->
+          <div class="auth-global-alert hidden" id="authGlobalAlert" role="alert" aria-live="assertive"></div>
 
           <!-- Form Đăng Nhập -->
           <div
@@ -286,8 +310,35 @@
     </section>
   </main>
 
+  <!-- 3. SIGNATURE LOGIN-SUCCESS CINEMATIC TRANSITION STAGE -->
+  <div class="login-success-stage" id="loginSuccessStage" aria-hidden="true">
+    <div class="success-transition-core">
+      <div class="medicare-core-v2 state-success transition-orb">
+        <div class="core-aura-glow"></div>
+        <div class="core-orbit-ring ring-latitude"></div>
+        <div class="core-orbit-ring ring-longitude"></div>
+        <div class="core-orb-sphere">
+          <div class="core-inner-light"></div>
+          <svg class="core-harmonic-wave" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+            <path class="wave-path wave-secondary" d="M0 30 C 20 18, 35 42, 50 30 C 65 18, 80 42, 100 30"/>
+            <path class="wave-path wave-primary" d="M0 30 C 25 12, 35 48, 50 30 C 65 12, 75 48, 100 30"/>
+          </svg>
+          <div class="core-neural-particles">
+            <span class="neural-node n1"></span>
+            <span class="neural-node n2"></span>
+            <span class="neural-node n3"></span>
+          </div>
+          <div class="core-focus-nexus"></div>
+        </div>
+      </div>
+      <p class="success-status-text">Đang mở Không gian Sức khỏe...</p>
+    </div>
+  </div>
+
   <div class="auth-toast hidden" id="authToast" role="status" aria-live="polite"></div>
 
-  <script src="{{ url_for('static', filename='auth.js') }}"></script>
+  <!-- Unified Cinematic Engine & Auth Script -->
+  <script src="{{ url_for('static', filename='cinematic_engine.js', v='20260920-apex-v3') }}"></script>
+  <script src="{{ url_for('static', filename='auth.js', v='20260920-apex-v3') }}"></script>
 </body>
 </html>

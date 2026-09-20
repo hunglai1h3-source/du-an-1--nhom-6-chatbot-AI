@@ -3,33 +3,74 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="MediCare AI - Nền tảng trợ lý sức khỏe cá nhân thông minh, thấu hiểu và đồng hành y tế an toàn theo thời gian.">
+  <meta name="description" content="MediCare AI — Trợ lý sức khỏe cá nhân thông minh, thấu hiểu và đồng hành y tế an toàn theo thời gian.">
   <title>MediCare AI — Sức khỏe của bạn. Được hiểu theo thời gian.</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css', v='20260917-ultimate-v1') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='landing.css', v='20260917-ultimate-v1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css', v='20260920-apex-v3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='landing.css', v='20260920-apex-v3') }}">
 </head>
 <body class="landing-body">
-  <!-- Cinematic Intro (Plays on first visit ~1.2s, skippable) -->
-  <div id="cinematicIntro" class="cinematic-intro-overlay" aria-hidden="true">
-    <div class="intro-pulse-core">
-      <div class="intro-core-orb"></div>
-      <div class="intro-brand-name">MediCare <span>AI</span></div>
-      <div class="intro-tagline">Sức khỏe của bạn. Được hiểu theo thời gian.</div>
+  <!-- 1. CINEMATIC INTRO (Plays ~1.4s on first visit, sessionStorage cached, reduced-motion bypass) -->
+  <div id="cinematicIntro" class="cinematic-intro-overlay" role="dialog" aria-label="Khởi động MediCare AI" aria-modal="true">
+    <div class="intro-viewport">
+      <!-- Deep Health Space Ambient Core Formation -->
+      <div class="intro-formation-stage">
+        <div class="intro-light-point"></div>
+        <div class="intro-pulse-ring ring-1"></div>
+        <div class="intro-pulse-ring ring-2"></div>
+        <div class="intro-neural-constellation">
+          <span class="intro-node in-1"></span>
+          <span class="intro-node in-2"></span>
+          <span class="intro-node in-3"></span>
+          <span class="intro-node in-4"></span>
+        </div>
+        
+        <!-- MEDICARE CORE FORMING -->
+        <div class="intro-core-wrap">
+          <div class="medicare-core-v2 state-idle intro-core-element">
+            <div class="core-aura-glow"></div>
+            <div class="core-orbit-ring ring-latitude"></div>
+            <div class="core-orbit-ring ring-longitude"></div>
+            <div class="core-orb-sphere">
+              <div class="core-inner-light"></div>
+              <svg class="core-harmonic-wave" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+                <path class="wave-path wave-secondary" d="M0 30 C 20 18, 35 42, 50 30 C 65 18, 80 42, 100 30"/>
+                <path class="wave-path wave-primary" d="M0 30 C 25 12, 35 48, 50 30 C 65 12, 75 48, 100 30"/>
+              </svg>
+              <div class="core-neural-particles">
+                <span class="neural-node n1"></span>
+                <span class="neural-node n2"></span>
+                <span class="neural-node n3"></span>
+              </div>
+              <div class="core-focus-nexus"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="intro-brand-block">
+        <div class="intro-brand-name">MediCare <span>AI</span></div>
+        <p class="intro-tagline">Hiểu bạn. Theo dõi bạn. Đồng hành cùng bạn.</p>
+      </div>
+
+      <button type="button" class="intro-skip-btn" id="introSkipBtn" aria-label="Bỏ qua phần giới thiệu">
+        Bỏ qua ✕
+      </button>
     </div>
   </div>
 
-  <!-- Interactive Biometric Signal Canvas Background -->
+  <!-- 2. INTERACTIVE LIVING BIOMETRIC ENVIRONMENT (Canvas 2D GPU-aware) -->
   <div class="landing-visual-environment" aria-hidden="true">
     <canvas id="landingCanvas" class="landing-canvas"></canvas>
     <div class="landing-ambient-glow"></div>
+    <div class="landing-ambient-mesh"></div>
   </div>
 
-  <!-- Public Navigation Header -->
-  <header class="public-nav-header">
+  <!-- 3. PUBLIC NAVIGATION HEADER -->
+  <header class="public-nav-header" id="publicNavHeader">
     <div class="nav-container">
       <a href="/" class="brand-link" aria-label="MediCare AI Trang chủ">
         <span class="brand-orb" aria-hidden="true">
@@ -41,35 +82,62 @@
         <span class="brand-name">MediCare <em>AI</em></span>
       </a>
 
-      <nav class="public-menu" aria-label="Điều hướng công cộng">
-        <a href="#about" class="nav-item">MediCare AI là gì</a>
+      <nav class="public-menu" aria-label="Điều hướng chính">
+        <a href="#about" class="nav-item">Tổng quan</a>
         <a href="#companion" class="nav-item">Đồng hành y tế</a>
-        <a href="#pillars" class="nav-item">3 Trụ cột cốt lõi</a>
-        <a href="#preview" class="nav-item">Trải nghiệm</a>
+        <a href="#safety" class="nav-item">An toàn</a>
+        <a href="#trust" class="nav-item">Đáng tin cậy</a>
+        <a href="#family" class="nav-item">Hồ sơ gia đình</a>
       </nav>
 
       <div class="public-nav-actions">
         <button type="button" class="theme-switch-btn" id="themeToggleBtn" aria-label="Chuyển chế độ sáng/tối" title="Đổi giao diện">
-          <svg class="sun-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="sun-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
           </svg>
-          <svg class="moon-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="moon-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
         </button>
-        <a href="/login" class="nav-btn-secondary">Đăng nhập</a>
-        <a href="/register" class="nav-btn-primary">Bắt đầu ngay</a>
+
+        <div class="nav-auth-group" id="navAuthGroup">
+          <a href="/login" class="nav-btn-secondary" id="navLoginBtn">Đăng nhập</a>
+          <a href="/register" class="nav-btn-primary" id="navRegisterBtn">Bắt đầu ngay</a>
+        </div>
       </div>
     </div>
   </header>
 
-  <!-- Hero Section -->
-  <main>
-    <section class="landing-hero" aria-label="Giới thiệu MediCare AI">
+  <!-- 4. MAIN CINEMATIC STORYTELLING -->
+  <main id="mainContent">
+    <!-- SCENE 01: HERO WITH SIGNATURE MEDICARE CORE -->
+    <section class="landing-hero" id="hero" aria-label="Giới thiệu MediCare AI">
       <div class="hero-container">
+        <!-- Centerpiece: Signature Living MEDICARE CORE -->
+        <div class="hero-core-stage">
+          <div class="medicare-core-v2 state-idle hero-center-core" id="heroMedicareCore" role="img" aria-label="Biểu tượng trí tuệ nhân tạo y tế MediCare Core">
+            <div class="core-aura-glow"></div>
+            <div class="core-orbit-ring ring-latitude"></div>
+            <div class="core-orbit-ring ring-longitude"></div>
+            <div class="core-orb-sphere">
+              <div class="core-inner-light"></div>
+              <svg class="core-harmonic-wave" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+                <path class="wave-path wave-secondary" d="M0 30 C 20 18, 35 42, 50 30 C 65 18, 80 42, 100 30"/>
+                <path class="wave-path wave-primary" d="M0 30 C 25 12, 35 48, 50 30 C 65 12, 75 48, 100 30"/>
+              </svg>
+              <div class="core-neural-particles">
+                <span class="neural-node n1"></span>
+                <span class="neural-node n2"></span>
+                <span class="neural-node n3"></span>
+              </div>
+              <div class="core-focus-nexus"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="hero-badge">
           <span class="badge-dot"></span>
-          <span>NỀN TẢNG Y TẾ SỐ THẾ HỆ MỚI</span>
+          <span>HỆ ĐIỀU HÀNH SỨC KHỎE CÁ NHÂN &amp; GIA ĐÌNH</span>
         </div>
 
         <h1 class="hero-headline">
@@ -78,42 +146,43 @@
         </h1>
 
         <p class="hero-subtext">
-          MediCare AI là trợ lý sức khỏe cá nhân thông minh giúp lắng nghe, ghi nhớ, theo dõi triệu chứng và đồng hành y tế an toàn cùng bạn và từng thành viên gia đình suốt hành trình chăm sóc.
+          MediCare AI là trợ lý sức khỏe cá nhân thông minh giúp bạn hiểu, ghi nhớ và theo dõi hành trình sức khỏe theo thời gian.
         </p>
 
-        <div class="hero-cta-group">
-          <a href="/register" class="cta-primary">
-            <span>Bắt đầu trải nghiệm</span>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <!-- Dynamic Primary / Secondary CTAs -->
+        <div class="hero-cta-group" id="heroCtaGroup">
+          <a href="/register" class="cta-primary" id="primaryActionBtn">
+            <span>Bắt đầu với MediCare AI</span>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
           </a>
-          <a href="/login" class="cta-secondary">
-            <span>Đăng nhập tài khoản</span>
+          <a href="/login" class="cta-secondary" id="secondaryActionBtn">
+            <span>Đăng nhập</span>
           </a>
-          <a href="#about" class="cta-tertiary">
-            <span>Khám phá MediCare AI ↓</span>
+          <a href="#companion" class="cta-tertiary">
+            <span>Khám phá hành trình y tế ↓</span>
           </a>
         </div>
 
-        <!-- Biometric Telemetry Strip -->
+        <!-- Telemetry Ribbon (Core Platform Verification Pillars) -->
         <div class="telemetry-strip" role="region" aria-label="Chỉ số hệ thống an toàn">
           <div class="telemetry-item">
-            <span class="telemetry-icon">🛡️</span>
+            <span class="telemetry-icon" aria-hidden="true">🛡️</span>
             <div>
               <strong>Medical Safety V2</strong>
               <small>Phản ứng cấp cứu 115 trong &lt;50ms</small>
             </div>
           </div>
           <div class="telemetry-item">
-            <span class="telemetry-icon">📚</span>
+            <span class="telemetry-icon" aria-hidden="true">📚</span>
             <div>
               <strong>Medical RAG Chuẩn hóa</strong>
               <small>11,000+ tài liệu Bộ Y tế &amp; Vinmec</small>
             </div>
           </div>
           <div class="telemetry-item">
-            <span class="telemetry-icon">🧠</span>
+            <span class="telemetry-icon" aria-hidden="true">🧠</span>
             <div>
               <strong>Long-term Health Context</strong>
               <small>Ghi nhớ diễn tiến sức khỏe dài hạn</small>
@@ -123,79 +192,74 @@
       </div>
     </section>
 
-    <!-- Section: MediCare AI là gì -->
-    <section id="about" class="landing-section section-about">
+    <!-- SCENE 02: ĐỒNG HÀNH Y TẾ (INTAKE ENGINE & LONGITUDINAL CONTEXT) -->
+    <section id="companion" class="landing-section section-companion" aria-label="Khả năng đồng hành y tế">
       <div class="section-container">
-        <div class="section-header">
-          <p class="section-tag">ĐỊNH NGHĨA MỚI VỀ CHĂM SÓC SỨC KHỎE SỐ</p>
-          <h2>Không chỉ là chatbot trả lời câu hỏi —<br>MediCare AI là một không gian y tế thông minh</h2>
-          <p class="section-desc">
-            Khác với các AI trò chuyện thông thường quên sạch triệu chứng sau mỗi phiên hỏi đáp, MediCare AI xây dựng ngữ cảnh y tế liên tục, kết nối tiền sử, diễn biến bệnh và thói quen sinh hoạt.
-          </p>
-        </div>
-
-        <div class="features-grid">
-          <div class="feature-card">
-            <div class="card-icon-wrap">🩺</div>
-            <h3>Hỏi bệnh theo chuẩn lâm sàng (Intake Engine)</h3>
-            <p>Không vội vàng đưa kết luận đoán mò. MediCare AI từng bước hỏi làm rõ vị trí đau, thời gian, mức độ và triệu chứng kèm theo.</p>
-          </div>
-
-          <div class="feature-card">
-            <div class="card-icon-wrap">⚡</div>
-            <h3>Nhận diện báo động đỏ tức thì</h3>
-            <p>Tự động phát hiện các dấu hiệu khẩn cấp (nhồi máu cơ tim, sốc phản vệ, tai biến F.A.S.T) để hướng dẫn gọi ngay 115.</p>
-          </div>
-
-          <div class="feature-card">
-            <div class="card-icon-wrap">📖</div>
-            <h3>Truy xuất kiến thức có trích dẫn minh bạch</h3>
-            <p>Mỗi khuyến nghị đều đối chiếu trực tiếp từ kho tri thức y khoa được Bộ Y tế và các cơ sở đầu ngành ban hành.</p>
-          </div>
-
-          <div class="feature-card">
-            <div class="card-icon-wrap">👨‍👩‍👧‍👦</div>
-            <h3>Cô lập hồ sơ từng người thân trong gia đình</h3>
-            <p>Quản lý riêng biệt cho bố mẹ già, con nhỏ và bản thân. Không bao giờ nhầm lẫn tiền sử dị ứng hay bệnh nền giữa các hồ sơ.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Section: Đồng hành y tế -->
-    <section id="companion" class="landing-section section-companion">
-      <div class="section-container">
-        <div class="companion-layout">
-          <div class="companion-text">
-            <p class="section-tag">TRỢ LÝ Y TẾ CỦA TỪNG GIA ĐÌNH</p>
-            <h2>Thấu hiểu triệu chứng theo chiều dài thời gian</h2>
-            <p>
-              Khi bạn than phiền <em>"hôm nay tôi lại đau bụng dưới"</em>, MediCare AI tự động liên hệ với cơn đau tương tự của tuần trước, nhận biết sự tiến triển và đưa ra cảnh báo kịp thời trước khi bệnh chuyển biến nặng.
+        <div class="section-grid-2col">
+          <div class="scene-narrative">
+            <div class="scene-indicator">SCENE 02 — ĐỒNG HÀNH</div>
+            <h2>Không chỉ trả lời câu hỏi.<br><span class="accent-span">MediCare ghi nhớ và theo dõi hành trình.</span></h2>
+            <p class="scene-lead">
+              Khác với các công cụ chatbot thông thường chỉ phản hồi rời rạc rồi lãng quên, MediCare AI xây dựng ngữ cảnh y tế liên tục qua thời gian.
             </p>
-            <ul class="companion-points">
-              <li><span>✓</span> <strong>Trích xuất tóm tắt y tế tự động:</strong> Cô đọng các thông tin quan trọng qua từng lượt hội thoại.</li>
-              <li><span>✓</span> <strong>Chống kê đơn bừa bãi:</strong> Luôn đặt an toàn lên hàng đầu, từ chối kê đơn thuốc nguy hiểm.</li>
-              <li><span>✓</span> <strong>Đa phương thức:</strong> Phân tích hình ảnh tổn thương da, đơn thuốc hoặc chỉ số xét nghiệm.</li>
-            </ul>
+            <div class="scene-features-list">
+              <div class="feature-bullet">
+                <span class="bullet-icon">✓</span>
+                <div>
+                  <strong>Hỏi bệnh theo chuẩn lâm sàng (Intake Engine):</strong>
+                  <p>Không suy đoán vội vã. Từng bước khai thác vị trí, thời gian khởi phát, mức độ đau và triệu chứng kèm theo.</p>
+                </div>
+              </div>
+              <div class="feature-bullet">
+                <span class="bullet-icon">✓</span>
+                <div>
+                  <strong>Kết nối tiền sử &amp; triệu chứng cũ:</strong>
+                  <p>Khi bạn mô tả cơn đau mới, hệ thống tự động đối chiếu với ghi nhận của tuần trước để phát hiện xu hướng diễn biến.</p>
+                </div>
+              </div>
+              <div class="feature-bullet">
+                <span class="bullet-icon">✓</span>
+                <div>
+                  <strong>Tóm tắt y tế cấu trúc:</strong>
+                  <p>Tự động chắt lọc thông tin quan trọng vào hồ sơ mà không lưu trữ lan man hay làm rò rỉ dữ liệu nhạy cảm.</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="companion-visual">
-            <div class="clinical-mock-card">
-              <div class="mock-header">
-                <span class="mock-pulse"></span>
-                <span>Hồ sơ diễn biến: Đau đầu căng thẳng (Bản thân)</span>
-              </div>
-              <div class="mock-timeline">
-                <div class="timeline-turn">
-                  <span class="timeline-date">3 ngày trước</span>
-                  <p>"Đau nửa đầu âm ỉ sau giờ làm việc, kèm hoa mắt nhẹ."</p>
-                </div>
-                <div class="timeline-turn active">
-                  <span class="timeline-date">Hôm nay</span>
-                  <p>"Cơn đau lan xuống gáy, uống giảm đau thông thường không đỡ."</p>
+
+          <div class="scene-visual-col">
+            <!-- Living Health Timeline Interactive Card -->
+            <div class="clinical-timeline-card">
+              <div class="card-ambient-aura"></div>
+              <div class="timeline-header">
+                <div class="status-orb-mini"></div>
+                <div class="timeline-title-wrap">
+                  <span class="timeline-subject">Theo dõi diễn tiến: Đau nửa đầu &amp; Căng thẳng</span>
+                  <span class="timeline-badge">Hồ sơ cá nhân</span>
                 </div>
               </div>
-              <div class="mock-ai-note">
-                <strong>Nhận định MediCare AI:</strong> Cơn đau có xu hướng tăng dần và không đáp ứng thuốc sơ khởi. Khuyến nghị thăm khám chuyên khoa Nội thần kinh sớm.
+              <div class="timeline-body">
+                <div class="timeline-step">
+                  <div class="step-point"></div>
+                  <div class="step-content">
+                    <span class="step-time">4 ngày trước</span>
+                    <p class="step-text">"Đau âm ỉ vùng thái dương sau 8 giờ làm việc với máy tính, kèm mỏi mắt."</p>
+                  </div>
+                </div>
+                <div class="timeline-step current">
+                  <div class="step-point active"></div>
+                  <div class="step-content">
+                    <span class="step-time">Hôm nay · 08:30</span>
+                    <p class="step-text">"Cơn đau lan xuống gáy, uống thuốc giảm đau thông thường chưa thuyên giảm."</p>
+                  </div>
+                </div>
+              </div>
+              <div class="timeline-insight-box">
+                <div class="insight-label">
+                  <span class="sparkle-icon">✨</span>
+                  <span>Nhận định MediCare AI:</span>
+                </div>
+                <p>Cơn đau có xu hướng lan rộng và không đáp ứng giảm đau sơ cấp. Khuyến nghị bạn nghỉ ngơi trong phòng tối, đo lại huyết áp và thu xếp khám chuyên khoa Nội thần kinh nếu triệu chứng kéo dài qua 48h.</p>
               </div>
             </div>
           </div>
@@ -203,106 +267,208 @@
       </div>
     </section>
 
-    <!-- Section: 3 Trụ cột cốt lõi -->
-    <section id="pillars" class="landing-section section-pillars">
+    <!-- SCENE 03: AN TOÀN Y KHOA (SAFETY GUARD V2 & EMERGENCY AWARENESS) -->
+    <section id="safety" class="landing-section section-safety" aria-label="Hệ thống an toàn y khoa">
       <div class="section-container">
-        <div class="section-header">
-          <p class="section-tag">CAM KẾT CHUYÊN MÔN</p>
-          <h2>3 Trụ cột xây dựng niềm tin y tế</h2>
+        <div class="section-header center">
+          <div class="scene-indicator">SCENE 03 — AN TOÀN</div>
+          <h2>Medical Safety Guard V2<br><span class="accent-span">An toàn là ưu tiên bất biến</span></h2>
+          <p class="section-desc">
+            Quy trình bảo vệ y tế đa tầng chạy song song, phân loại rủi ro tức thì và ưu tiên tính mạng người dùng trong mọi tình huống.
+          </p>
         </div>
 
         <div class="pillars-grid">
           <div class="pillar-box">
-            <span class="pillar-num">01</span>
-            <h3>AN TOÀN</h3>
-            <p>Hệ thống Safety Guard V2 độc lập chạy song song, quét đa tầng rủi ro, phân loại từ NORMAL đến EMERGENCY và kiên quyết ngăn ngừa hành vi nguy hại.</p>
+            <div class="pillar-top">
+              <span class="pillar-num">01</span>
+              <span class="pillar-badge red">Phản ứng &lt;50ms</span>
+            </div>
+            <h3>Báo động đỏ khẩn cấp</h3>
+            <p>Tự động nhận diện các dấu hiệu nguy kịch như đau thắt ngực nhồi máu, tai biến mạch máu não F.A.S.T, sốc phản vệ để hướng dẫn gọi ngay 115.</p>
           </div>
+
           <div class="pillar-box">
-            <span class="pillar-num">02</span>
-            <h3>ĐÁNG TIN</h3>
-            <p>Mô hình RAG liên tục đối chiếu với cơ sở dữ liệu y khoa chuẩn hóa, loại bỏ hoàn toàn hiện tượng suy đoán hay ảo tưởng thông tin.</p>
+            <div class="pillar-top">
+              <span class="pillar-num">02</span>
+              <span class="pillar-badge amber">Kiểm soát nghiêm ngặt</span>
+            </div>
+            <h3>Chống kê đơn bừa bãi</h3>
+            <p>Kiên quyết từ chối kê toa thuốc đặc trị kê đơn (kháng sinh, thuốc tim mạch, an thần), bảo vệ người dùng khỏi nguy cơ tương tác và ngộ độc thuốc.</p>
           </div>
+
           <div class="pillar-box">
-            <span class="pillar-num">03</span>
-            <h3>ĐỒNG HÀNH</h3>
-            <p>Không gian lưu trữ lâu dài trên nền tảng cơ sở dữ liệu bảo mật, đồng hành cùng sức khỏe gia đình qua từng giai đoạn cuộc sống.</p>
+            <div class="pillar-top">
+              <span class="pillar-num">03</span>
+              <span class="pillar-badge teal">Giám sát song song</span>
+            </div>
+            <h3>Lightweight Output Guard</h3>
+            <p>Bộ lọc an toàn độc lập rà soát lại toàn bộ phản hồi trước khi gửi tới giao diện, đảm bảo văn phong thận trọng và không khẳng định chẩn đoán thay bác sĩ.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Section: Trải nghiệm sản phẩm -->
-    <section id="preview" class="landing-section section-preview">
+    <!-- SCENE 04: ĐÁNG TIN CẬY (EVIDENCE-BASED MEDICAL RAG) -->
+    <section id="trust" class="landing-section section-trust" aria-label="Nguồn kiến thức y tế chuẩn hóa">
       <div class="section-container">
-        <div class="section-header">
-          <p class="section-tag">GIAO DIỆN HIỆN ĐẠI</p>
-          <h2>Không gian làm việc y tế chuyên nghiệp</h2>
-          <p class="section-desc">Được tối ưu cho mọi kích thước màn hình từ điện thoại di động đến màn hình 4K siêu rộng.</p>
-        </div>
-
-        <div class="preview-mockup">
-          <div class="mockup-window">
-            <div class="window-bar">
-              <span class="w-dot red"></span>
-              <span class="w-dot yellow"></span>
-              <span class="w-dot green"></span>
-              <span class="window-title">MediCare AI — Consultation Workspace</span>
-            </div>
-            <div class="window-body">
-              <div class="mockup-chat-preview">
-                <div class="mockup-msg user">
-                  <p>Tôi bị trào ngược dạ dày thực quản tái phát 2 hôm nay, thấy nghẹn cổ họng.</p>
+        <div class="section-grid-2col reverse">
+          <div class="scene-visual-col">
+            <!-- Simulated Knowledge Graph & Citation Card -->
+            <div class="citation-glass-card">
+              <div class="citation-header">
+                <span class="citation-icon">📖</span>
+                <div>
+                  <strong>Truy xuất tri thức y khoa chuẩn mực</strong>
+                  <small>Medical RAG Evidence Verification</small>
                 </div>
-                <div class="mockup-msg bot">
-                  <div class="mockup-bot-head">
-                    <span class="bot-badge">MediCare AI</span>
-                    <span class="bot-status">Đã đối chiếu 3 tài liệu Vinmec &amp; Bộ Y tế</span>
+              </div>
+              <div class="citation-body">
+                <div class="source-item verified">
+                  <span class="source-check">✓</span>
+                  <div class="source-info">
+                    <span class="source-name">Hướng dẫn chẩn đoán và điều trị bệnh Nội khoa</span>
+                    <span class="source-meta">Bộ Y tế Việt Nam · Quyết định ban hành chính thức</span>
                   </div>
-                  <p>Chào bạn, trào ngược kèm cảm giác nghẹn là triệu chứng thường gặp do acid dịch vị kích ứng niêm mạc thực quản. Bạn hãy lưu ý:</p>
-                  <div class="mockup-points">
-                    <span>1. Tránh nằm ngay sau ăn ít nhất 2–3 giờ.</span>
-                    <span>2. Hạn chế đồ cay nóng, cà phê, chất có gas.</span>
-                    <span>3. Kê cao đầu giường 15–20cm khi ngủ.</span>
+                </div>
+                <div class="source-item verified">
+                  <span class="source-check">✓</span>
+                  <div class="source-info">
+                    <span class="source-name">Cẩm nang Chăm sóc Sức khỏe Tiêu hóa &amp; Dinh dưỡng</span>
+                    <span class="source-meta">Hệ thống Y tế Vinmec · Cập nhật lâm sàng 2025–2026</span>
+                  </div>
+                </div>
+                <div class="source-item verified">
+                  <span class="source-check">✓</span>
+                  <div class="source-info">
+                    <span class="source-name">Chuyên mục Sức khỏe Y học Thường thức</span>
+                    <span class="source-meta">VnExpress Sức khỏe · Đối soát chuyên gia biên tập</span>
                   </div>
                 </div>
               </div>
+              <div class="citation-footer">
+                <span>11,000+ đoạn văn bản chuyên ngành được số hóa &amp; lập chỉ mục vector</span>
+              </div>
             </div>
+          </div>
+
+          <div class="scene-narrative">
+            <div class="scene-indicator">SCENE 04 — ĐÁNG TIN</div>
+            <h2>Không suy đoán hoang tưởng.<br><span class="accent-span">Mọi câu trả lời đều dựa trên chứng cứ.</span></h2>
+            <p class="scene-lead">
+              MediCare AI ứng dụng công nghệ RAG (Retrieval-Augmented Generation) kết hợp Vector Search, đối chiếu trực tiếp với tài liệu y tế chuẩn mực trước khi phản hồi.
+            </p>
+            <ul class="trust-highlights">
+              <li><strong>Trích dẫn minh bạch:</strong> Bạn luôn có thể bấm xem nguồn tài liệu được dùng để đối chiếu câu trả lời.</li>
+              <li><strong>Loại bỏ ảo tưởng AI:</strong> Nếu câu hỏi ngoài phạm vi y văn đã kiểm chứng, hệ thống trung thực từ chối phỏng đoán.</li>
+              <li><strong>Ngôn ngữ có trách nhiệm:</strong> Định vị rõ vai trò hỗ trợ tham khảo sơ khởi, tôn trọng ý kiến bác sĩ chuyên khoa.</li>
+            </ul>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Section: CTA Cuối Trang -->
-    <section class="landing-cta-banner">
+    <!-- SCENE 05: CÁ NHÂN HÓA & GIA ĐÌNH (FAMILY HEALTH SPACES) -->
+    <section id="family" class="landing-section section-family" aria-label="Quản lý hồ sơ sức khỏe gia đình">
+      <div class="section-container">
+        <div class="section-header center">
+          <div class="scene-indicator">SCENE 05 — CÁ NHÂN HÓA</div>
+          <h2>Bảo vệ toàn diện sức khỏe gia đình<br><span class="accent-span">Cô lập hồ sơ riêng biệt cho từng người thân</span></h2>
+          <p class="section-desc">
+            Không còn nỗi lo nhầm lẫn dị ứng thuốc hay lịch sử bệnh án khi chăm sóc bố mẹ cao tuổi, trẻ nhỏ và bạn đời.
+          </p>
+        </div>
+
+        <div class="family-profiles-display">
+          <div class="family-member-card active">
+            <div class="member-avatar">Tôi</div>
+            <div class="member-details">
+              <h4>Bản thân</h4>
+              <p>Nhóm máu O+ · Theo dõi đau đầu &amp; giấc ngủ</p>
+            </div>
+            <span class="member-tag">Đang chọn</span>
+          </div>
+
+          <div class="family-member-card">
+            <div class="member-avatar senior">Mẹ</div>
+            <div class="member-details">
+              <h4>Mẹ (62 tuổi)</h4>
+              <p>Tăng huyết áp vô căn · Dị ứng Aspirin</p>
+            </div>
+            <span class="member-tag muted">Riêng biệt</span>
+          </div>
+
+          <div class="family-member-card">
+            <div class="member-avatar child">Con</div>
+            <div class="member-details">
+              <h4>Bé Bắp (4 tuổi)</h4>
+              <p>Lịch tiêm chủng mở rộng · Dị ứng hải sản</p>
+            </div>
+            <span class="member-tag muted">Riêng biệt</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCENE 06: FINAL CALL TO ACTION WITH RETURNING CORE -->
+    <section class="landing-cta-banner" aria-label="Bắt đầu hành trình">
       <div class="banner-container">
-        <h2>Sẵn sàng chăm sóc sức khỏe chủ động cho bạn và gia đình?</h2>
-        <p>Tạo tài khoản miễn phí để bắt đầu quản lý hồ sơ và trải nghiệm trợ lý y tế số ngay bây giờ.</p>
-        <div class="banner-actions">
-          <a href="/register" class="cta-primary large">Tạo tài khoản miễn phí →</a>
-          <a href="/login" class="cta-secondary large">Đăng nhập tài khoản</a>
+        <!-- Focal MEDICARE Core Reappears at Final Stage -->
+        <div class="banner-core-wrap">
+          <div class="medicare-core-v2 state-idle banner-core">
+            <div class="core-aura-glow"></div>
+            <div class="core-orb-sphere">
+              <div class="core-inner-light"></div>
+              <svg class="core-harmonic-wave" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+                <path class="wave-path wave-primary" d="M0 30 C 25 12, 35 48, 50 30 C 65 12, 75 48, 100 30"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <h2>Bắt đầu hành trình chăm sóc sức khỏe của bạn</h2>
+        <p>Gia nhập không gian y tế số thấu hiểu, an toàn và đồng hành cùng bạn trên mọi chặng đường.</p>
+
+        <div class="banner-actions" id="bannerActions">
+          <a href="/register" class="cta-primary large" id="bannerRegisterBtn">Tạo tài khoản miễn phí →</a>
+          <a href="/login" class="cta-secondary large" id="bannerLoginBtn">Đăng nhập tài khoản</a>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- Public Footer -->
+  <!-- 5. PUBLIC FOOTER -->
   <footer class="public-footer">
     <div class="footer-container">
       <div class="footer-brand">
         <span class="brand-name">MediCare <em>AI</em></span>
-        <p>Nền tảng trợ lý sức khỏe cá nhân thông minh và an toàn.</p>
-        <small>© 2026 MediCare AI. Mọi thông tin chỉ mang tính tham khảo y tế sơ khởi.</small>
+        <p>Hệ điều hành Trợ lý Sức khỏe Cá nhân &amp; Gia đình Thông minh.</p>
+        <small class="medical-disclaimer">
+          ⚠️ Khuyến cáo: MediCare AI cung cấp thông tin tham khảo y tế sơ khởi dựa trên y văn đã công bố, không thay thế chẩn đoán hoặc phác đồ điều trị của bác sĩ chuyên khoa. Trong trường hợp khẩn cấp, vui lòng gọi ngay 115 hoặc đến cơ sở y tế gần nhất.
+        </small>
       </div>
       <div class="footer-links">
-        <a href="/login">Đăng nhập</a>
-        <a href="/register">Đăng ký</a>
-        <a href="/kien-thuc">Kho kiến thức</a>
-        <a href="/ban-tin-suc-khoe">Bản tin sức khỏe</a>
+        <div class="link-col">
+          <strong>Trải nghiệm</strong>
+          <a href="/login">Đăng nhập</a>
+          <a href="/register">Tạo tài khoản</a>
+          <a href="/tu-van">Tư vấn AI</a>
+        </div>
+        <div class="link-col">
+          <strong>Tiện ích</strong>
+          <a href="/kien-thuc">Kho kiến thức</a>
+          <a href="/ban-tin-suc-khoe">Bản tin y khoa</a>
+          <a href="/nha-thuoc">Bản đồ nhà thuốc</a>
+        </div>
       </div>
+    </div>
+    <div class="footer-bottom">
+      <small>© 2026 MediCare AI. Mọi quyền được bảo lưu. Thiết kế theo tiêu chuẩn an toàn y tế số.</small>
     </div>
   </footer>
 
-  <script src="{{ url_for('static', filename='cinematic_engine.js') }}"></script>
-  <script src="{{ url_for('static', filename='landing.js') }}"></script>
+  <!-- Unified Scripts -->
+  <script src="{{ url_for('static', filename='cinematic_engine.js', v='20260920-apex-v3') }}"></script>
+  <script src="{{ url_for('static', filename='landing.js', v='20260920-apex-v3') }}"></script>
 </body>
 </html>

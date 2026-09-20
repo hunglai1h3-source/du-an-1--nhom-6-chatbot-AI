@@ -688,6 +688,16 @@
       syncOrbitData();
       syncProfileDrawer();
       hydrateScheduleDrawer();
+ 
+      // Seamless Login-Success Transition Continuity
+      if (sessionStorage.getItem("medicare_login_transition") === "1") {
+        sessionStorage.removeItem("medicare_login_transition");
+        const core = document.getElementById("medicareCore");
+        if (core) {
+          core.classList.add("transition-bloom");
+          setTimeout(() => core.classList.remove("transition-bloom"), 850);
+        }
+      }
 
       // Periodic gentle sync
       setTimeout(syncOrbitData, 300);

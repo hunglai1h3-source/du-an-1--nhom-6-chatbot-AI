@@ -3264,6 +3264,15 @@ html[data-theme="dark"] .ambient-glow-core {
   transform: scale(1.06);
 }
 
+.medicare-core-v2.transition-bloom {
+  animation: coreTransitionBloom 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes coreTransitionBloom {
+  0% { transform: scale(1.18); filter: drop-shadow(0 0 28px rgba(20, 184, 166, 0.85)); }
+  100% { transform: scale(1); filter: none; }
+}
+
 /* Controlled Volumetric Aura Glow */
 .core-aura-glow,
 .core-breathing-halo {
