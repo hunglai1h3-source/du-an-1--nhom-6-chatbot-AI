@@ -60,25 +60,34 @@ html, body {
 }
 
 /* ==========================================================================
-   2. CINEMATIC INTRO OVERLAY (1.4s Brand Awakening)
+   2. CINEMATIC INTRO OVERLAY (4.8s Brand Awakening / 0.7s Mini Return)
    ========================================================================== */
 .cinematic-intro-overlay {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: #070b12;
+  background: radial-gradient(circle at 50% 50%, #0d1424 0%, #070b12 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 1;
   visibility: visible;
-  transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), visibility 600ms;
+  transition: opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), visibility 700ms;
 }
 
 .cinematic-intro-overlay.dismissed {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+}
+
+.cinematic-intro-overlay.mini-intro {
+  transition: opacity 350ms ease;
+}
+
+.cinematic-intro-overlay.mini-intro * {
+  animation-duration: 0.4s !important;
+  animation-delay: 0s !important;
 }
 
 .intro-viewport {
@@ -101,7 +110,7 @@ html, body {
   margin-bottom: 24px;
 }
 
-/* Light Point appears first */
+/* Stage 1: Light Point appears (0.0s - 1.0s) */
 .intro-light-point {
   position: absolute;
   width: 8px;
@@ -109,7 +118,7 @@ html, body {
   border-radius: 50%;
   background: #ffffff;
   box-shadow: 0 0 24px #2dd4bf, 0 0 50px #06b6d4;
-  animation: introPointIgnite 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: introPointIgnite 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes introPointIgnite {
@@ -118,7 +127,7 @@ html, body {
   100% { transform: scale(1); opacity: 0.8; }
 }
 
-/* Biometric Pulse Rings radiate */
+/* Stage 2: Biometric Pulse Rings radiate (0.8s - 2.0s) */
 .intro-pulse-ring {
   position: absolute;
   border-radius: 50%;
@@ -130,13 +139,13 @@ html, body {
 .intro-pulse-ring.ring-1 {
   width: 60px;
   height: 60px;
-  animation: introRingExpand 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s infinite;
+  animation: introRingExpand 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.8s infinite;
 }
 
 .intro-pulse-ring.ring-2 {
   width: 100px;
   height: 100px;
-  animation: introRingExpand 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.6s infinite;
+  animation: introRingExpand 1.6s cubic-bezier(0.16, 1, 0.3, 1) 1.2s infinite;
 }
 
 @keyframes introRingExpand {
@@ -144,7 +153,7 @@ html, body {
   100% { transform: scale(2.2); opacity: 0; }
 }
 
-/* Neural Constellation Nodes */
+/* Stage 3: Neural Constellation Nodes (1.4s - 2.5s) */
 .intro-neural-constellation {
   position: absolute;
   inset: 0;
@@ -153,13 +162,13 @@ html, body {
 
 .intro-node {
   position: absolute;
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #38bdf8;
-  box-shadow: 0 0 8px #38bdf8;
+  box-shadow: 0 0 10px #38bdf8;
   opacity: 0;
-  animation: introNodeBlink 1s ease-in-out 0.4s forwards;
+  animation: introNodeBlink 1.4s ease-in-out 1.4s forwards;
 }
 
 .intro-node.in-1 { top: 25%; left: 20%; }
@@ -170,12 +179,12 @@ html, body {
 @keyframes introNodeBlink {
   0% { opacity: 0; transform: scale(0.2); }
   60% { opacity: 1; transform: scale(1.4); }
-  100% { opacity: 0.7; transform: scale(1); }
+  100% { opacity: 0.75; transform: scale(1); }
 }
 
-/* Core Wrap pop */
+/* Stage 4: MEDICARE Core Forms (2.0s - 3.2s) */
 .intro-core-wrap {
-  animation: introCoreForm 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.35s forwards;
+  animation: introCoreForm 1.4s cubic-bezier(0.16, 1, 0.3, 1) 2.0s forwards;
   opacity: 0;
   transform: scale(0.65);
 }
@@ -186,8 +195,9 @@ html, body {
   100% { opacity: 1; transform: scale(1); }
 }
 
+/* Stage 5: Brand Reveal (3.0s - 4.2s) */
 .intro-brand-block {
-  animation: introTextReveal 0.8s ease-out 0.6s forwards;
+  animation: introTextReveal 1.0s ease-out 3.0s forwards;
   opacity: 0;
   transform: translateY(14px);
 }

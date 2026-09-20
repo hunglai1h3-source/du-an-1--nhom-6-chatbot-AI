@@ -29,7 +29,7 @@
   }
 
   // ==========================================================================
-  // 2. CINEMATIC INTRO LIFECYCLE (~1.4s on first session, skippable)
+  // 2. CINEMATIC INTRO LIFECYCLE (4.8s first visit, 0.75s return visit, reduced-motion bypass)
   // ==========================================================================
   function initIntro() {
     const introEl = document.getElementById("cinematicIntro");
@@ -43,17 +43,27 @@
       sessionStorage.setItem("medicareIntroSeen", "1");
       setTimeout(() => {
         introEl.style.display = "none";
-      }, 600);
+      }, 700);
     }
 
-    if (introSeen || prefersReducedMotion) {
+    if (prefersReducedMotion) {
       introEl.style.display = "none";
-    } else {
-      // Run the 1.4s intro sequence then dismiss
-      const timer = setTimeout(() => {
-        dismissIntro();
-      }, 1400);
+      return;
+    }
 
+    if (introSeen) {
+      // Same session refresh: mini intro 750ms
+      introEl.classList.add("mini-intro");
+      const miniTimer = setTimeout(dismissIntro, 750);
+      if (skipBtn) {
+        skipBtn.addEventListener("click", () => {
+          clearTimeout(miniTimer);
+          dismissIntro();
+        });
+      }
+    } else {
+      // First visit: full 4.8s cinematic sequence
+      const timer = setTimeout(dismissIntro, 4800);
       if (skipBtn) {
         skipBtn.addEventListener("click", () => {
           clearTimeout(timer);
