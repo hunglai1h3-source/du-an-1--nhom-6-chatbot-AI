@@ -1,231 +1,1000 @@
 /**
- * MediCare AI — Personal Health Space & Utilities (APEX Master Pass)
- * Profile, Family Isolation, Symptom Logs, Vitals & Health Reports
+ * MediCare AI — Personal Health Space & Utilities (APEX 100 System Pass)
+ * Complete elimination of legacy right rail, white card dominance & old pill styling.
+ * Unified with APEX Health OS Spatial Glassmorphism, Identity Module & Signals Bar.
  */
 
-body.page-health-v2 {
+/* ==========================================================================
+   1. PAGE ROOT & AMBIENT VOLUMETRIC LIGHTING
+   ========================================================================== */
+
+body.page-personal-health-space {
   min-width: 320px;
-  background-color: var(--bg-l0, #f8fafc);
-  background-image: 
-    radial-gradient(at 10% 12%, rgba(13, 148, 136, 0.08) 0px, transparent 45%),
-    radial-gradient(at 90% 18%, rgba(56, 189, 248, 0.07) 0px, transparent 45%),
-    radial-gradient(at 50% 85%, rgba(99, 102, 241, 0.05) 0px, transparent 55%);
-  background-attachment: fixed;
-  color: var(--text-primary);
+  background-color: var(--bg-l0, #0a0e17);
+  color: var(--text-primary, #f1f5f9);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.5;
   overflow-x: hidden;
+  margin: 0;
+  padding: 0;
 }
 
-/* Spatial Health Shell Layout */
-.health-app-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 28px;
+/* Ambient Volumetric Backdrop Mesh */
+.health-ambient-field {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ambient-glow-mesh {
+  position: absolute;
+  inset: -20%;
+  background: 
+    radial-gradient(ellipse at 15% 15%, rgba(13, 148, 136, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 20%, rgba(2, 132, 199, 0.10) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 80%, rgba(99, 102, 241, 0.06) 0%, transparent 60%);
+  filter: blur(40px);
+  will-change: transform;
+}
+
+html[data-theme="light"] body.page-personal-health-space {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+html[data-theme="light"] .ambient-glow-mesh {
+  background: 
+    radial-gradient(ellipse at 15% 15%, rgba(13, 148, 136, 0.07) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 20%, rgba(2, 132, 199, 0.06) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 80%, rgba(99, 102, 241, 0.04) 0%, transparent 60%);
+}
+
+/* ==========================================================================
+   2. SPATIAL STAGE LAYOUT (SINGLE FOCAL STAGE, ZERO 340PX RIGHT RAIL)
+   ========================================================================== */
+
+.personal-health-stage {
   margin-left: var(--nav-rail-width, 76px);
   width: calc(100% - var(--nav-rail-width, 76px));
-  max-width: var(--content-wide-max, 1680px);
-  padding: 28px 32px 80px;
+  min-height: 100vh;
+  padding: 24px 36px 100px;
   box-sizing: border-box;
-  align-items: start;
+  position: relative;
+  z-index: 1;
 }
 
-/* Health Page Main Focal Space */
-.health-tools-main {
+.health-stage-container {
+  max-width: 1440px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  width: 100%;
-  min-width: 0;
+  gap: 28px;
 }
 
-.health-page-heading {
-  padding: 8px 0;
+/* ==========================================================================
+   3. HEALTH HERO STAGE
+   ========================================================================== */
+
+.health-hero-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 
-.health-page-heading .eyebrow {
+.health-hero-head {
+  padding: 4px 0 2px;
+}
+
+.hero-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: var(--radius-full);
-  background: var(--accent-light, #ccfbf1);
+  gap: 8px;
+  padding: 5px 14px;
+  border-radius: var(--radius-full, 9999px);
+  background: rgba(13, 148, 136, 0.12);
+  border: 1px solid rgba(13, 148, 136, 0.25);
   color: var(--accent-primary, #0d9488);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
-.health-page-heading h1 {
-  font-size: clamp(1.8rem, 3vw, 2.3rem);
+.eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.7);
+  animation: heroPulseDot 2.2s infinite ease-in-out;
+}
+
+@keyframes heroPulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
+.hero-stage-title {
+  font-size: clamp(2rem, 3.2vw, 2.6rem);
   font-weight: 850;
-  letter-spacing: -0.025em;
-  color: var(--text-primary);
-  margin-bottom: 6px;
+  letter-spacing: -0.03em;
+  color: var(--text-primary, #f1f5f9);
+  margin: 0 0 8px;
+  line-height: 1.15;
 }
 
-.health-page-heading p {
+.hero-stage-subtitle {
   font-size: 0.95rem;
-  color: var(--text-secondary);
+  color: var(--text-secondary, #94a3b8);
+  max-width: 760px;
+  line-height: 1.6;
+  margin: 0;
 }
 
-/* Floating Navigation Section Tabs */
-.health-section-tabs {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 4px 2px 14px;
-  scrollbar-width: none;
-}
+/* ==========================================================================
+   4. ACTIVE HEALTH IDENTITY MODULE (REPLACES GIANT LEGACY WHITE CARD)
+   ========================================================================== */
 
-.health-section-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.health-section-tabs button {
-  padding: 10px 18px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-subtle);
-  background: var(--glass-card-bg, rgba(255, 255, 255, 0.75));
-  backdrop-filter: blur(12px);
-  color: var(--text-secondary);
-  font-size: 0.84rem;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: all var(--motion-fast);
-  cursor: pointer;
-}
-
-.health-section-tabs button:hover {
-  background: var(--bg-l2);
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-}
-
-.health-section-tabs button.active {
-  background: var(--accent-primary, #0d9488);
-  color: #ffffff;
-  border-color: var(--accent-primary);
-  box-shadow: 0 4px 14px var(--accent-glow);
-}
-
-/* Translucent Glass Panels */
-.page-health-v2 .panel {
-  background: var(--glass-card-bg, rgba(255, 255, 255, 0.75));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
+.health-identity-module {
+  border-radius: var(--radius-xl, 20px);
+  background: var(--glass-card-bg, rgba(15, 23, 42, 0.65));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
   padding: 24px 28px;
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
-  transition: border-color var(--motion-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transition: border-color var(--motion-fast, 180ms ease), box-shadow var(--motion-fast, 180ms ease);
 }
 
-html[data-theme="dark"] .page-health-v2 .panel {
-  background: rgba(15, 23, 42, 0.65);
-  border-color: rgba(255, 255, 255, 0.08);
+html[data-theme="light"] .health-identity-module {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
 
-/* Family Profile Zone */
-.profile-only-panel {
-  width: 100%;
+.health-identity-module:hover {
+  border-color: rgba(13, 148, 136, 0.35);
+  box-shadow: 0 16px 44px rgba(13, 148, 136, 0.12);
 }
 
-.profile-only-panel .profile-zone {
-  width: 100%;
-  min-width: 0;
-}
-
-.profile-only-panel .subsection-heading {
+.identity-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
-.profile-only-panel .subsection-heading h2 {
-  font-size: 1.2rem;
+.identity-lead-wrap {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.identity-avatar-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+
+.identity-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary, #0d9488), #0284c7);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
   font-weight: 800;
-  color: var(--text-primary);
-  margin-bottom: 4px;
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.35);
 }
 
-.profile-only-panel .subsection-heading p {
+.avatar-pulse-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(13, 148, 136, 0.45);
+  animation: ringPulse 2.8s infinite ease-in-out;
+}
+
+@keyframes ringPulse {
+  0% { transform: scale(0.98); opacity: 0.8; }
+  50% { transform: scale(1.10); opacity: 0.2; }
+  100% { transform: scale(0.98); opacity: 0.8; }
+}
+
+.identity-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.identity-name-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.identity-name-line h2 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-primary, #f1f5f9);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.identity-completeness-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.identity-details p {
   font-size: 0.85rem;
-  color: var(--text-secondary);
+  color: var(--text-secondary, #94a3b8);
+  margin: 0;
 }
 
-.profile-only-panel .subsection-heading button {
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-l2);
-  color: var(--text-primary);
+.identity-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-identity-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: var(--bg-l2, rgba(30, 41, 59, 0.6));
+  color: var(--text-primary, #f1f5f9);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+html[data-theme="light"] .btn-identity-edit {
+  background: rgba(241, 245, 249, 0.8);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #0f172a;
+}
+
+.btn-identity-edit:hover {
+  background: var(--accent-light, rgba(13, 148, 136, 0.15));
+  color: var(--accent-primary, #0d9488);
+  border-color: var(--accent-primary, #0d9488);
+}
+
+.btn-identity-consult {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 20px;
+  border-radius: var(--radius-md, 10px);
+  background: linear-gradient(135deg, var(--accent-primary, #0d9488), var(--accent-secondary, #0284c7));
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 750;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.32);
+  transition: transform var(--motion-fast, 180ms ease), box-shadow var(--motion-fast, 180ms ease);
+}
+
+.btn-identity-consult:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.45);
+}
+
+/* Identity Vitals Strip (Real Data Only, No Fake Placeholders) */
+.identity-vitals-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  border-radius: var(--radius-lg, 14px);
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-wrap: wrap;
+}
+
+html[data-theme="light"] .identity-vitals-strip {
+  background: rgba(248, 250, 252, 0.85);
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.vital-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 120px;
+  flex: 1;
+}
+
+.vital-label {
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary, #64748b);
+}
+
+.vital-item strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary, #f1f5f9);
+}
+
+html[data-theme="light"] .vital-item strong {
+  color: #0f172a;
+}
+
+.vital-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
+}
+
+html[data-theme="light"] .vital-divider {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+/* ==========================================================================
+   5. COMPACT SPATIAL FAMILY SWITCHER (REPLACES GIANT "+ THÊM THÀNH VIÊN" CARD)
+   ========================================================================== */
+
+.compact-family-switcher {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-radius: var(--radius-lg, 14px);
+  background: var(--glass-card-bg, rgba(15, 23, 42, 0.55));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  flex-wrap: wrap;
+}
+
+html[data-theme="light"] .compact-family-switcher {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.family-switcher-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.switcher-label {
+  font-size: 0.82rem;
+  font-weight: 750;
+  color: var(--text-secondary, #94a3b8);
+}
+
+#familyCountMini {
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: rgba(30, 41, 59, 0.8);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-tertiary, #64748b);
+}
+
+html[data-theme="light"] #familyCountMini {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+.family-pill-scroll-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.family-pill-scroll-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.family-pill-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 8px;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(30, 41, 59, 0.6);
+  color: var(--text-primary, #f1f5f9);
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  transition: all var(--motion-fast);
+  white-space: nowrap;
+  transition: all var(--motion-fast, 180ms ease);
 }
 
-.profile-only-panel .subsection-heading button:hover {
-  background: var(--accent-light);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
+html[data-theme="light"] .family-pill-item {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
 }
 
-.profile-only-family-grid {
+.family-pill-item:hover {
+  border-color: var(--accent-primary, #0d9488);
+  transform: translateY(-1px);
+}
+
+.family-pill-item.active {
+  background: var(--accent-primary, #0d9488);
+  color: #ffffff;
+  border-color: var(--accent-primary, #0d9488);
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35);
+}
+
+.family-pill-item .pill-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.btn-add-family-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 14px;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px dashed var(--accent-primary, #0d9488);
+  background: transparent;
+  color: var(--accent-primary, #0d9488);
+  font-size: 0.8rem;
+  font-weight: 750;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+.btn-add-family-pill:hover {
+  background: var(--accent-light, rgba(13, 148, 136, 0.12));
+}
+
+/* ==========================================================================
+   6. CONTEXTUAL HEALTH SIGNALS BAR (REPLACES FIXED RIGHT SIDEBAR CARDS)
+   ========================================================================== */
+
+.health-signals-bar {
+  display: grid;
+  grid-template-columns: 1.25fr 1.25fr 1fr;
+  gap: 16px;
+}
+
+.signal-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg, 14px);
+  background: var(--glass-card-bg, rgba(15, 23, 42, 0.6));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--motion-fast, 180ms ease);
+  position: relative;
+  text-decoration: none;
+  color: inherit;
+}
+
+html[data-theme="light"] .signal-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.signal-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-primary, #0d9488);
+  box-shadow: 0 8px 24px rgba(13, 148, 136, 0.12);
+}
+
+.signal-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.signal-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.signal-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.signal-category {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary, #64748b);
+}
+
+.signal-badge {
+  padding: 1px 8px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.7rem;
+  font-weight: 750;
+  background: rgba(13, 148, 136, 0.15);
+  color: var(--accent-primary, #0d9488);
+  border: 1px solid rgba(13, 148, 136, 0.25);
+}
+
+.signal-body strong {
+  font-size: 0.88rem;
+  font-weight: 750;
+  color: var(--text-primary, #f1f5f9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-theme="light"] .signal-body strong {
+  color: #0f172a;
+}
+
+.signal-chevron {
+  font-size: 1.1rem;
+  color: var(--text-tertiary, #64748b);
+  transition: transform var(--motion-fast, 180ms ease);
+}
+
+.signal-card:hover .signal-chevron {
+  transform: translateX(4px);
+  color: var(--accent-primary, #0d9488);
+}
+
+/* Signal 3: Support & Emergency action group */
+.signal-support-card {
+  cursor: default;
+  padding: 12px 14px;
+}
+
+.signal-support-card:hover {
+  transform: none;
+  border-color: var(--border-subtle, rgba(255, 255, 255, 0.06));
+  box-shadow: none;
+}
+
+.support-action-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.btn-support-pill {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 10px);
+  background: rgba(0, 104, 255, 0.1);
+  border: 1px solid rgba(0, 104, 255, 0.25);
+  color: #0068ff;
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-decoration: none;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+.btn-support-pill:hover {
+  background: #0068ff;
+  color: #ffffff;
+}
+
+.zalo-glyph {
+  font-weight: 900;
+  font-size: 0.82rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: currentColor;
+  color: #ffffff;
+}
+
+.btn-support-pill:hover .zalo-glyph {
+  background: #ffffff;
+  color: #0068ff;
+}
+
+.btn-emergency-pill {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 10px);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+.btn-emergency-pill:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   7. APEX SEGMENTED CONTEXT NAVIGATION (REPLACES OLD TAB BAR)
+   ========================================================================== */
+
+.health-segmented-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--glass-card-bg, rgba(15, 23, 42, 0.5));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+html[data-theme="light"] .health-segmented-nav {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.health-segmented-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.segmented-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: var(--radius-full, 9999px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.84rem;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+.segmented-pill:hover {
+  color: var(--text-primary, #f1f5f9);
+  background: rgba(30, 41, 59, 0.6);
+}
+
+html[data-theme="light"] .segmented-pill:hover {
+  color: #0f172a;
+  background: rgba(241, 245, 249, 0.8);
+}
+
+.segmented-pill.active {
+  background: var(--accent-primary, #0d9488);
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.35);
+}
+
+.pill-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   8. SPATIAL MODULE PANELS (CLEAN TRANSLUCENT GLASS, ZERO WHITE-CARD DOMINANCE)
+   ========================================================================== */
+
+.spatial-module-panel {
+  padding: 28px 32px;
+  border-radius: var(--radius-xl, 20px);
+  background: var(--glass-card-bg, rgba(15, 23, 42, 0.65));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+html[data-theme="light"] .spatial-module-panel {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.05);
+}
+
+.module-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.module-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-primary, #0d9488);
+  margin-bottom: 4px;
+}
+
+.module-panel-head h2 {
+  font-size: 1.35rem;
+  font-weight: 850;
+  color: var(--text-primary, #f1f5f9);
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+html[data-theme="light"] .module-panel-head h2 {
+  color: #0f172a;
+}
+
+.module-panel-head p {
+  font-size: 0.88rem;
+  color: var(--text-secondary, #94a3b8);
+  margin: 0;
+  max-width: 720px;
+}
+
+.btn-module-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: var(--bg-l2, rgba(30, 41, 59, 0.6));
+  color: var(--text-primary, #f1f5f9);
+  font-size: 0.84rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+html[data-theme="light"] .btn-module-action {
+  background: rgba(241, 245, 249, 0.8);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #0f172a;
+}
+
+.btn-module-action:hover {
+  background: var(--accent-light, rgba(13, 148, 136, 0.12));
+  color: var(--accent-primary, #0d9488);
+  border-color: var(--accent-primary, #0d9488);
+}
+
+.btn-module-action.primary {
+  background: linear-gradient(135deg, var(--accent-primary, #0d9488), var(--accent-secondary, #0284c7));
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35);
+}
+
+.btn-module-action.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.45);
+}
+
+.btn-subtle-refresh {
+  padding: 6px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--motion-fast, 180ms ease);
+  margin-left: auto;
+}
+
+.btn-subtle-refresh:hover {
+  color: var(--text-primary, #f1f5f9);
+  border-color: var(--accent-primary, #0d9488);
+}
+
+/* ==========================================================================
+   9. FAMILY MEMBERS GRID MODULE (APEX CARDS)
+   ========================================================================== */
+
+.family-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
   gap: 16px;
   align-items: stretch;
 }
 
-.profile-only-family-grid .family-card,
-.profile-only-family-grid .add-family-card {
-  width: 100%;
-  border-radius: var(--radius-lg);
-  transition: transform var(--motion-fast), box-shadow var(--motion-fast);
-}
-
-.profile-only-family-grid .family-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 25px rgba(13, 148, 136, 0.12);
-}
-
-/* Symptom Tracking Panel */
-.symptom-tracking-heading {
+.family-card {
+  padding: 20px;
+  border-radius: var(--radius-lg, 14px);
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.symptom-tracking-heading h2 {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.symptom-tracking-heading button {
-  padding: 9px 18px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.85rem;
-  border: none;
+  flex-direction: column;
+  gap: 14px;
+  transition: all var(--motion-fast, 180ms ease);
+  position: relative;
   cursor: pointer;
-  box-shadow: 0 4px 14px var(--accent-glow);
-  transition: transform var(--motion-fast);
 }
 
-.symptom-tracking-heading button:hover {
-  transform: translateY(-2px);
+html[data-theme="light"] .family-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(15, 23, 42, 0.08);
 }
+
+.family-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent-primary, #0d9488);
+  box-shadow: 0 10px 25px rgba(13, 148, 136, 0.15);
+}
+
+.family-card.active {
+  border-color: var(--accent-primary, #0d9488);
+  box-shadow: 0 0 0 2px var(--accent-primary, #0d9488);
+}
+
+.family-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.family-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary, #0d9488), #0284c7);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.family-card-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.family-card-name {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--text-primary, #f1f5f9);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-theme="light"] .family-card-name {
+  color: #0f172a;
+}
+
+.family-card-relation {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--accent-primary, #0d9488);
+}
+
+.family-card-vitals {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(15, 23, 42, 0.4);
+  font-size: 0.78rem;
+}
+
+html[data-theme="light"] .family-card-vitals {
+  background: rgba(241, 245, 249, 0.8);
+}
+
+.family-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="light"] .family-card-actions {
+  border-top-color: rgba(15, 23, 42, 0.06);
+}
+
+.btn-select-profile {
+  padding: 6px 14px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--accent-primary, #0d9488);
+  background: transparent;
+  color: var(--accent-primary, #0d9488);
+  font-size: 0.78rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+.btn-select-profile:hover {
+  background: var(--accent-primary, #0d9488);
+  color: #ffffff;
+}
+
+.btn-edit-profile {
+  padding: 6px 10px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+.btn-edit-profile:hover {
+  color: var(--text-primary, #f1f5f9);
+}
+
+/* ==========================================================================
+   10. SYMPTOM TRACKING MODULE
+   ========================================================================== */
 
 .symptom-profile-strip,
 .metric-profile-strip {
@@ -233,19 +1002,23 @@ html[data-theme="dark"] .page-health-v2 .panel {
   align-items: center;
   gap: 14px;
   padding: 14px 18px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-l2, rgba(241, 245, 249, 0.6));
-  border: 1px solid var(--border-subtle);
-  margin-bottom: 18px;
+  border-radius: var(--radius-lg, 14px);
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="light"] .symptom-profile-strip,
+html[data-theme="light"] .metric-profile-strip {
+  background: rgba(241, 245, 249, 0.8);
+  border-color: rgba(15, 23, 42, 0.06);
 }
 
 .symptom-profile-avatar,
-#metricProfileAvatar,
-#reportProfileAvatar {
-  width: 42px;
-  height: 42px;
+.metric-profile-avatar {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  background: linear-gradient(135deg, var(--accent-primary, #0d9488), #0284c7);
   color: #ffffff;
   display: grid;
   place-items: center;
@@ -254,303 +1027,581 @@ html[data-theme="dark"] .page-health-v2 .panel {
   flex-shrink: 0;
 }
 
+.symptom-profile-strip small,
+.metric-profile-strip small {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary, #64748b);
+  text-transform: uppercase;
+}
+
+.symptom-profile-strip strong,
+.metric-profile-strip strong {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary, #f1f5f9);
+}
+
+html[data-theme="light"] .symptom-profile-strip strong,
+html[data-theme="light"] .metric-profile-strip strong {
+  color: #0f172a;
+}
+
+.symptom-profile-strip em,
+.metric-profile-strip em {
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #94a3b8);
+}
+
 .symptom-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
-  margin-bottom: 20px;
 }
 
-.symptom-summary-grid article,
-.metric-latest-grid article {
+.stat-mini-card {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-l1, #ffffff);
-  border: 1px solid var(--border-subtle);
-  transition: transform var(--motion-fast), border-color var(--motion-fast);
-}
-
-html[data-theme="dark"] .symptom-summary-grid article,
-html[data-theme="dark"] .metric-latest-grid article {
+  border-radius: var(--radius-lg, 14px);
   background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform var(--motion-fast, 180ms ease), border-color var(--motion-fast, 180ms ease);
 }
 
-.symptom-summary-grid article:hover,
-.metric-latest-grid article:hover {
-  border-color: var(--accent-primary);
+html[data-theme="light"] .stat-mini-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.stat-mini-card:hover {
+  border-color: var(--accent-primary, #0d9488);
   transform: translateY(-2px);
 }
 
-/* Health Metrics & Vitals */
-.health-metrics-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+.stat-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
-.health-metrics-heading h2 {
-  font-size: 1.25rem;
+.stat-mini-card small {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-secondary, #94a3b8);
+  margin-bottom: 2px;
+}
+
+.stat-mini-card strong {
+  font-size: 1.05rem;
   font-weight: 800;
-  color: var(--text-primary);
+  color: var(--text-primary, #f1f5f9);
+}
+
+html[data-theme="light"] .stat-mini-card strong {
+  color: #0f172a;
+}
+
+.symptom-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.symptom-empty {
+  padding: 40px 20px;
+  border-radius: var(--radius-lg, 14px);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+html[data-theme="light"] .symptom-empty {
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.symptom-empty span {
+  font-size: 2rem;
   margin-bottom: 4px;
 }
 
-.health-metrics-heading button {
-  padding: 9px 18px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.85rem;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 14px var(--accent-glow);
-  transition: transform var(--motion-fast);
+.symptom-empty strong {
+  font-size: 0.95rem;
+  color: var(--text-primary, #f1f5f9);
 }
 
-.health-metrics-heading button:hover {
-  transform: translateY(-2px);
+html[data-theme="light"] .symptom-empty strong {
+  color: #0f172a;
 }
 
-.metric-latest-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
+.symptom-empty small {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #94a3b8);
 }
 
-.metric-dashboard-grid {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 18px;
-}
+/* ==========================================================================
+   11. HEALTH METRICS DASHBOARD MODULE
+   ========================================================================== */
 
-.metric-chart-card,
-.metric-history-card {
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-l1, #ffffff);
-  border: 1px solid var(--border-subtle);
-}
-
-html[data-theme="dark"] .metric-chart-card,
-html[data-theme="dark"] .metric-history-card {
-  background: rgba(30, 41, 59, 0.5);
-}
-
-/* Auto Health Report */
-.wide-health-report {
-  width: 100%;
-  padding: 24px;
-}
-
-.report-horizontal-layout {
-  display: grid;
-  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 3fr);
-  gap: 16px;
-  align-items: stretch;
-}
-
-.wide-health-report .report-profile-line {
-  margin: 0;
-  min-height: 96px;
-  padding: 18px;
-  background: var(--bg-l1);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-html[data-theme="dark"] .wide-health-report .report-profile-line {
-  background: rgba(30, 41, 59, 0.5);
-}
-
-.wide-health-report .report-metric-list {
+.health-metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0;
+  gap: 16px;
 }
 
-.wide-health-report .report-metric-list article {
-  min-width: 0;
-  min-height: 96px;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-content: center;
-  gap: 10px;
-  padding: 14px;
-  background: var(--bg-l1);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  transition: border-color var(--motion-fast);
-}
-
-html[data-theme="dark"] .wide-health-report .report-metric-list article {
+.metric-card {
+  padding: 20px;
+  border-radius: var(--radius-lg, 14px);
   background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all var(--motion-fast, 180ms ease);
 }
 
-.wide-health-report .report-metric-list article:hover {
-  border-color: var(--accent-primary);
+html[data-theme="light"] .metric-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(15, 23, 42, 0.06);
 }
 
-.wide-health-report .report-metric-list article > em {
-  grid-column: 1 / -1;
-  text-align: right;
-  font-style: normal;
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-}
-
-.report-footer-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 14px;
-  align-items: stretch;
-  margin-top: 14px;
-}
-
-.wide-health-report .report-notes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.wide-health-report .report-detail-button {
-  width: 100%;
-  height: 100%;
-  min-height: 44px;
-  margin-top: 0;
-  border-radius: var(--radius-md);
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  color: #ffffff;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 14px var(--accent-glow);
-  transition: transform var(--motion-fast);
-}
-
-.wide-health-report .report-detail-button:hover {
+.metric-card:hover {
+  border-color: var(--accent-primary, #0d9488);
   transform: translateY(-2px);
 }
 
-/* Context Rail (Right Sidebar) */
-.health-context-rail {
+.metric-card-top {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  gap: 8px;
 }
 
-.health-context-rail .side-panel,
-.health-context-rail .emergency-panel,
-.health-context-rail .zalo-support-card {
-  padding: 22px;
-  border-radius: var(--radius-xl);
-  background: var(--glass-card-bg, rgba(255, 255, 255, 0.75));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+.metric-card-top span:first-child {
+  font-size: 1.3rem;
+  line-height: 1;
 }
 
-html[data-theme="dark"] .health-context-rail .side-panel,
-html[data-theme="dark"] .health-context-rail .emergency-panel,
-html[data-theme="dark"] .health-context-rail .zalo-support-card {
-  background: rgba(15, 23, 42, 0.65);
-  border-color: rgba(255, 255, 255, 0.08);
+.metric-title {
+  font-size: 0.82rem;
+  font-weight: 750;
+  color: var(--text-secondary, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.health-context-rail .side-panel-heading {
+.metric-value {
+  font-size: 1.45rem;
+  font-weight: 850;
+  color: var(--text-primary, #f1f5f9);
+  letter-spacing: -0.02em;
+}
+
+html[data-theme="light"] .metric-value {
+  color: #0f172a;
+}
+
+.metric-meta {
+  font-size: 0.74rem;
+  color: var(--text-tertiary, #64748b);
+}
+
+/* ==========================================================================
+   12. HEALTH REPORT PREVIEW MODULE
+   ========================================================================== */
+
+.health-report-preview-box {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  gap: 20px;
+  padding: 24px;
+  border-radius: var(--radius-lg, 14px);
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
 }
 
-.health-context-rail .side-panel-heading h2 {
-  font-size: 0.98rem;
-  font-weight: 800;
-  color: var(--text-primary);
+html[data-theme="light"] .health-report-preview-box {
+  background: rgba(248, 250, 252, 0.85);
+  border-color: rgba(15, 23, 42, 0.06);
 }
 
-.health-context-rail .emergency-panel {
-  border-color: rgba(239, 68, 68, 0.3);
-  background: radial-gradient(circle at 90% 10%, rgba(239, 68, 68, 0.08), transparent 65%),
-              var(--glass-card-bg, rgba(255, 255, 255, 0.75));
-}
-
-.health-context-rail .emergency-panel strong {
+.report-preview-text strong {
   display: block;
-  font-size: 1rem;
-  color: #ef4444;
-  margin-bottom: 6px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary, #f1f5f9);
+  margin-bottom: 4px;
 }
 
-.health-context-rail .emergency-panel a {
-  display: inline-flex;
+html[data-theme="light"] .report-preview-text strong {
+  color: #0f172a;
+}
+
+.report-preview-text p {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #94a3b8);
+  margin: 0;
+}
+
+/* ==========================================================================
+   13. SHARED MODALS & DRAWERS (APEX GLASS)
+   ========================================================================== */
+
+.shared-modal,
+.modal-backdrop,
+.premium-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 14px;
-  padding: 10px 18px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  color: #ffffff;
-  font-weight: 800;
-  text-decoration: none;
-  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
-  transition: transform var(--motion-fast);
+  padding: 20px;
+  box-sizing: border-box;
 }
 
-.health-context-rail .emergency-panel a:hover {
+.shared-modal.hidden,
+.modal-backdrop.hidden,
+.premium-modal.hidden {
+  display: none !important;
+}
+
+.shared-modal-card,
+.modal-card,
+.premium-modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 32px;
+  border-radius: var(--radius-xl, 20px);
+  background: var(--bg-l1, #0f172a);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  box-sizing: border-box;
+}
+
+html[data-theme="light"] .shared-modal-card,
+html[data-theme="light"] .modal-card,
+html[data-theme="light"] .premium-modal-card {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.15);
+}
+
+.shared-modal-close,
+.modal-close,
+.premium-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 1.3rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all var(--motion-fast, 180ms ease);
+}
+
+.shared-modal-close:hover,
+.modal-close:hover,
+.premium-modal-close:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.modal-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-primary, #0d9488);
+  margin: 0 0 6px;
+}
+
+.shared-modal-card h2,
+.modal-card h2 {
+  font-size: 1.4rem;
+  font-weight: 850;
+  color: var(--text-primary, #f1f5f9);
+  margin: 0 0 8px;
+}
+
+html[data-theme="light"] .shared-modal-card h2,
+html[data-theme="light"] .modal-card h2 {
+  color: #0f172a;
+}
+
+.metric-modal-help,
+.symptom-modal-help,
+.family-modal-description,
+.self-health-help {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #94a3b8);
+  margin: 0 0 20px;
+}
+
+/* Modal Form Styles */
+.metric-form,
+.symptom-form,
+#familyForm,
+.self-health-form,
+.reminder-form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.metric-form label,
+.symptom-form label,
+#familyForm label,
+.self-health-form label,
+.reminder-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.metric-form label.full,
+.symptom-form label.full,
+#familyForm label:not(.family-form-grid label),
+.self-health-form label:not(.self-health-grid label),
+.reminder-form label {
+  grid-column: 1 / -1;
+}
+
+.family-form-grid,
+.self-health-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.metric-form input,
+.metric-form select,
+.metric-form textarea,
+.symptom-form input,
+.symptom-form select,
+.symptom-form textarea,
+#familyForm input,
+#familyForm select,
+#familyForm textarea,
+.self-health-form input,
+.self-health-form select,
+.self-health-form textarea,
+.reminder-form input,
+.reminder-form select,
+.reminder-form textarea {
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: rgba(30, 41, 59, 0.6);
+  color: var(--text-primary, #f1f5f9);
+  font-family: inherit;
+  font-size: 0.88rem;
+  box-sizing: border-box;
+}
+
+html[data-theme="light"] .metric-form input,
+html[data-theme="light"] .metric-form select,
+html[data-theme="light"] .metric-form textarea,
+html[data-theme="light"] .symptom-form input,
+html[data-theme="light"] .symptom-form select,
+html[data-theme="light"] .symptom-form textarea,
+html[data-theme="light"] #familyForm input,
+html[data-theme="light"] #familyForm select,
+html[data-theme="light"] #familyForm textarea,
+html[data-theme="light"] .self-health-form input,
+html[data-theme="light"] .self-health-form select,
+html[data-theme="light"] .self-health-form textarea,
+html[data-theme="light"] .reminder-form input,
+html[data-theme="light"] .reminder-form select,
+html[data-theme="light"] .reminder-form textarea {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.15);
+  color: #0f172a;
+}
+
+.metric-form-actions,
+.symptom-form-actions,
+.family-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.family-save-button,
+.primary-button {
+  padding: 10px 22px;
+  border-radius: var(--radius-md, 8px);
+  background: linear-gradient(135deg, var(--accent-primary, #0d9488), var(--accent-secondary, #0284c7));
+  color: #ffffff;
+  font-weight: 750;
+  font-size: 0.86rem;
+  border: none;
+  cursor: pointer;
+  transition: transform var(--motion-fast, 180ms ease);
+}
+
+.family-save-button:hover,
+.primary-button:hover {
   transform: translateY(-2px);
 }
 
-/* Responsive Rules */
+.secondary-button {
+  padding: 10px 18px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-weight: 700;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.family-delete-button {
+  padding: 10px 18px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 0.86rem;
+  cursor: pointer;
+  margin-right: auto;
+}
+
+/* ==========================================================================
+   14. HIDDEN COMPATIBILITY CONTAINERS
+   ========================================================================== */
+
+.health-hidden-environment {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+}
+
+/* ==========================================================================
+   15. RESPONSIVE DESIGN & RETINA OPTIMIZATIONS
+   ========================================================================== */
+
 @media (max-width: 1200px) {
-  .health-app-shell {
-    grid-template-columns: 1fr;
-    gap: 24px;
-    padding: 20px 20px 80px;
+  .health-signals-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .signal-support-card {
+    grid-column: 1 / -1;
+  }
+  .health-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   .symptom-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .metric-latest-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .metric-dashboard-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 768px) {
-  .health-app-shell {
+  .personal-health-stage {
     margin-left: 0;
     width: 100%;
-    padding: 16px 14px 84px;
+    padding: 16px 14px 90px;
   }
-  .profile-only-family-grid {
+
+  .health-stage-container {
+    gap: 20px;
+  }
+
+  .health-identity-module {
+    padding: 18px 16px;
+  }
+
+  .identity-top-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .identity-actions {
+    width: 100%;
+  }
+
+  .btn-identity-edit,
+  .btn-identity-consult {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .identity-vitals-strip {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .vital-divider {
+    display: none;
+  }
+
+  .health-signals-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .family-grid {
     grid-template-columns: 1fr !important;
   }
-  .report-horizontal-layout,
-  .report-footer-row,
-  .wide-health-report .report-notes {
-    grid-template-columns: 1fr;
+
+  .spatial-module-panel {
+    padding: 20px 16px;
   }
-  .wide-health-report .report-metric-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+
   .symptom-summary-grid,
-  .metric-latest-grid {
+  .health-metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .metric-form,
+  .symptom-form,
+  .family-form-grid,
+  .self-health-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 4K Retina Displays */
+@media (min-width: 2560px) {
+  .health-stage-container {
+    max-width: 1800px;
+  }
+
+  .hero-stage-title {
+    font-size: 3.2rem;
   }
 }
 
@@ -562,4 +1613,3 @@ html[data-theme="dark"] .health-context-rail .zalo-support-card {
     scroll-behavior: auto !important;
   }
 }
-

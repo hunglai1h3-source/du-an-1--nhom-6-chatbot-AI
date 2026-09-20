@@ -637,14 +637,14 @@
         profile_type: "family",
         profile_ref: String(profile.serverId),
         name: profile.name,
-        meta: `${profile.relationship || "Thành viên"} · ${profile.age || "--"} tuổi`
+        meta: `${profile.relationship || "Thành viên"} · ${profile.age ? `${profile.age} tuổi` : "Chưa cập nhật tuổi"}`
       };
     }
     return {
       profile_type: "self",
       profile_ref: "self",
       name: profile.name,
-      meta: `Bản thân · ${profile.age || "--"} tuổi`
+      meta: `Bản thân · ${profile.age ? `${profile.age} tuổi` : "Chưa cập nhật tuổi"}`
     };
   }
 

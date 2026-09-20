@@ -110,9 +110,9 @@
  
          <p><span>Dị ứng</span><b>${M.escapeHTML(profile.allergies || "Không")}</b></p>
  
-         <p><span>Chiều cao</span><b>${profile.height || "--"} cm</b></p>
+         <p><span>Chiều cao</span><b>${profile.height && profile.height !== "--" ? `${profile.height} cm` : "Chưa cập nhật"}</b></p>
  
-         <p><span>Cân nặng</span><b>${profile.weight || "--"} kg</b></p>
+         <p><span>Cân nặng</span><b>${profile.weight && profile.weight !== "--" ? `${profile.weight} kg` : "Chưa cập nhật"}</b></p>
  
        </div>
  
@@ -151,6 +151,74 @@
      ? `${selected.age} tuổi · ${selected.gender}`
      : "Đăng nhập để quản lý";
    if (sidebarAvatar) sidebarAvatar.textContent = selected ? M.initials(selected.name) : "--";
+
+    // APEX Health Identity Module & Compact Family Switcher Hydration
+    const heroAvatar = $("#heroIdentityAvatar");
+    const heroName = $("#heroIdentityName");
+    const heroMeta = $("#heroIdentityMeta");
+    const heroHeight = $("#heroHeightValue");
+    const heroWeight = $("#heroWeightValue");
+    const heroCondition = $("#heroConditionValue");
+    const heroAllergy = $("#heroAllergyValue");
+
+    if (heroAvatar) heroAvatar.textContent = selected ? M.initials(selected.name) : "K";
+    if (heroName) heroName.textContent = selected?.name || "Chưa chọn hồ sơ";
+    if (heroMeta) heroMeta.textContent = selected
+      ? `${selected.relationship || "Bản thân"} · ${selected.age ? `${selected.age} tuổi` : "Chưa cập nhật tuổi"} · ${selected.gender || "Chưa rõ giới tính"}`
+      : "Vui lòng chọn hồ sơ để quản lý";
+    if (heroHeight) heroHeight.textContent = selected?.height ? `${selected.height} cm` : "Chưa cập nhật";
+    if (heroWeight) heroWeight.textContent = selected?.weight ? `${selected.weight} kg` : "Chưa cập nhật";
+    if (heroCondition) heroCondition.textContent = selected?.condition || "Không ghi nhận";
+    if (heroAllergy) heroAllergy.textContent = selected?.allergies || "Không ghi nhận";
+
+    const familyCountMini = $("#familyCountMini");
+    if (familyCountMini) familyCountMini.textContent = `${profiles.length} hồ sơ`;
+
+    const editActiveBtn = $("#editActiveProfileBtn");
+    if (editActiveBtn) {
+      editActiveBtn.onclick = () => {
+        if (!selected) return;
+        if (selected.isSelf || selected.id === "self") {
+          window.openSelfHealthModal?.();
+        } else {
+          const member = window.familyMembersCache?.find(m => String(m.id) === String(selected.serverId));
+          if (member) window.openFamilyEditor?.(member);
+          else window.openSelfHealthModal?.();
+        }
+      };
+    }
+
+    const compactAddBtn = $("#compactAddMemberBtn");
+    if (compactAddBtn) {
+      compactAddBtn.onclick = async () => {
+        const auth = await M.currentUser();
+        if (!auth.logged_in) {
+          $("#accountButton")?.click();
+          return;
+        }
+        window.openFamilyCreateModal?.();
+      };
+    }
+
+    const pillList = $("#compactFamilyPillList");
+    if (pillList) {
+      pillList.innerHTML = profiles.map(p => `
+        <button type="button" class="family-pill-item ${p.id === selected?.id ? "active" : ""}" data-profile-pill-id="${M.escapeHTML(p.id)}">
+          <span class="pill-avatar">${M.escapeHTML(M.initials(p.name))}</span>
+          <span class="pill-name">${M.escapeHTML(p.name)}</span>
+          <small class="pill-rel">${M.escapeHTML(p.relationship || "Thành viên")}</small>
+        </button>
+      `).join("");
+
+      $$('[data-profile-pill-id]', pillList).forEach(pill => {
+        pill.addEventListener("click", () => {
+          M.selectProfile(pill.dataset.profilePillId);
+          renderProfiles();
+          renderRecommendations(M.readJSON(M.KEYS.locationContext, null));
+          M.showToast(`Đã chọn hồ sơ ${M.getSelectedProfile().name}.`, "success");
+        });
+      });
+    }
 
    if (!grid) return;
  
@@ -1072,6 +1140,11 @@
    $("#sideAqiText").textContent = `AQI ${Number.isFinite(Number(context.aqi)) ? Math.round(context.aqi) : "--"} · Mức ${aqi.text.toLowerCase()} tại ${context.short_address || "vị trí hiện tại"}.`;
  
    $("#sideAqiBadge").textContent = `AQI ${Number.isFinite(Number(context.aqi)) ? Math.round(context.aqi) : "--"}`;
+
+   const signalAqiBadge = $("#signalAqiBadge");
+   const signalEnvironmentText = $("#signalEnvironmentText");
+   if (signalAqiBadge) signalAqiBadge.textContent = `AQI ${Number.isFinite(Number(context.aqi)) ? Math.round(context.aqi) : "--"} · ${aqi.text}`;
+   if (signalEnvironmentText) signalEnvironmentText.textContent = `${weather.icon} ${Number.isFinite(Number(context.temperature)) ? `${Math.round(context.temperature)}°C` : "--°C"} · ${context.short_address || "Vị trí hiện tại"}`;
  
  
  
@@ -1378,15 +1451,20 @@
  
    const auth = await M.currentUser();
  
-   if (!auth.logged_in) {
- 
-     preview.innerHTML = '<article class="reminder-empty"><span>🔐</span><div><strong>Đăng nhập để xem lịch nhắc</strong><small>Lịch nhắc được lưu riêng theo tài khoản.</small></div></article>';
- 
-     if (openModal) $("#accountButton")?.click();
- 
-     return [];
- 
-   }
+    if (!auth.logged_in) {
+
+      preview.innerHTML = '<article class="reminder-empty"><span>🔐</span><div><strong>Đăng nhập để xem lịch nhắc</strong><small>Lịch nhắc được lưu riêng theo tài khoản.</small></div></article>';
+
+      const signalReminderBadge = $("#signalReminderBadge");
+      const signalReminderText = $("#signalReminderText");
+      if (signalReminderBadge) signalReminderBadge.textContent = "Chưa có";
+      if (signalReminderText) signalReminderText.textContent = "Đăng nhập để xem lịch nhắc";
+
+      if (openModal) $("#accountButton")?.click();
+
+      return [];
+
+    }
  
  
  
@@ -1435,6 +1513,32 @@
            </article>`).join("")
  
        : '<p class="modal-empty">Chưa có lịch nhắc nào.</p>';
+ 
+ 
+ 
+     const signalReminderBadge = $("#signalReminderBadge");
+ 
+     const signalReminderText = $("#signalReminderText");
+ 
+     if (signalReminderBadge && signalReminderText) {
+ 
+       if (items.length > 0) {
+ 
+         const activeCount = items.filter((i) => i.is_active).length;
+ 
+         signalReminderBadge.textContent = `${activeCount} đang bật`;
+ 
+         signalReminderText.textContent = `${items[0].title} (${items[0].time_of_day})`;
+ 
+       } else {
+ 
+         signalReminderBadge.textContent = "Chưa có";
+ 
+         signalReminderText.textContent = "Tạo lịch nhắc sức khỏe";
+ 
+       }
+ 
+     }
  
  
  
@@ -1812,6 +1916,11 @@
    $("#viewAirQualityButton")?.addEventListener("click", () => focusPanel("#utilities"));
  
    $("#showRemindersButton")?.addEventListener("click", () => loadReminders({ openModal: true }));
+   $("#signalReminderCard")?.addEventListener("click", () => loadReminders({ openModal: true }));
+   $("#signalEnvironmentCard")?.addEventListener("click", () => {
+     const aqiText = $("#sideAqiText")?.textContent || "Đang cập nhật chỉ số môi trường";
+     M.showToast(aqiText, "info");
+   });
 
    $("#addReminderQuickButton")?.addEventListener("click", async () => {
      await loadReminders({ openModal: true });

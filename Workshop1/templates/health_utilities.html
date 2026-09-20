@@ -1,17 +1,27 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <meta name="description" content="MediCare AI - Hồ sơ sức khỏe, tiện ích và báo cáo sức khỏe">
+  <meta name="description" content="MediCare AI - Không gian Sức khỏe Cá nhân &amp; Gia đình">
+  <title>Không gian Sức khỏe | MediCare AI</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css', v='20260917-ultimate-v1') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260917-ultimate-v1') }}">
-
-  <link rel="stylesheet" href="{{ url_for('static', filename='health_utilities.css', v='20260918-apex-v1') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css', v='20260920-apex-v3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css', v='20260920-apex-v3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='health_utilities.css', v='20260920-apex-v3') }}">
+  <script>
+    if (new URLSearchParams(window.location.search).get("theme") === "light" || localStorage.getItem("medicareThemeV4") === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
+    } else {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  </script>
 </head>
-<body class="page-health-v2 has-nav-rail">
-  <!-- SLIM NAVIGATION RAIL (DESKTOP) -->
+<body class="page-personal-health-space has-nav-rail">
+  <!-- 1. SLIM NAVIGATION RAIL (DESKTOP) -->
   <aside class="app-nav-rail" id="appNavRail" aria-label="Điều hướng hệ thống">
     <a class="rail-brand" href="/" title="MediCare AI">
       <span class="brand-mark">+</span>
@@ -23,7 +33,7 @@
       <a class="rail-item" href="/tu-van" data-tooltip="Tư vấn AI" aria-label="Tư vấn AI">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </a>
-      <a class="rail-item active" href="/suc-khoe-tien-ich" data-tooltip="Sức khỏe &amp; Tiện ích" aria-label="Sức khỏe">
+      <a class="rail-item active" href="/suc-khoe-tien-ich" data-tooltip="Không gian Sức khỏe" aria-label="Sức khỏe">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
       </a>
       <a class="rail-item" href="/ban-tin-suc-khoe" data-tooltip="Bản tin Y khoa" aria-label="Bản tin">
@@ -44,18 +54,18 @@
     </div>
   </aside>
 
-  <!-- TOP CONTEXT BAR (PERSONAL HEALTH OS HEADER) -->
+  <!-- 2. TOP CONTEXT BAR (PERSONAL HEALTH OS HEADER) -->
   <header class="topbar os-topbar">
     <div class="topbar-left">
       <a class="brand os-brand" href="/" aria-label="MediCare AI">
         <span class="brand-mark">+</span>
-        <span><strong>MediCare <em>AI</em></strong><small>Hồ sơ &amp; Tiện ích</small></span>
+        <span><strong>MediCare <em>OS</em></strong><small>Không gian Sức khỏe</small></span>
       </a>
     </div>
     <div class="topbar-center">
       <span class="os-context-pill">
         <span class="pill-dot"></span>
-        Hồ sơ sức khỏe gia đình &amp; Chỉ số sinh trắc
+        Personal Health Space &amp; Family Orbit
       </span>
     </div>
     <div class="top-actions">
@@ -67,160 +77,330 @@
       <button class="icon-button" data-action="toggle-theme" type="button" title="Đổi giao diện">☾</button>
       <button class="account-button" type="button" id="accountButton">
         <span class="account-avatar" id="accountAvatar">K</span>
-        <span><strong id="accountName" data-account-name>Khách</strong><small>Tài khoản của tôi</small></span>
+        <span><strong id="accountName" data-account-name>Khách</strong><small>Tài khoản</small></span>
       </button>
+      <!-- Discreet 115 Emergency Affordance (Unified across OS) -->
       <button class="safety-affordance-btn" id="openEmergencySheet" type="button" title="Hỗ trợ y tế khẩn cấp 115" onclick="window.location.assign('tel:115')">
         <span class="safety-pulse-dot"></span>
         <span>115</span>
       </button>
     </div>
   </header>
-  <div class="app-shell health-app-shell">
-    <div id="recentList" class="hidden" aria-hidden="true"></div>
-    <button type="button" id="upgradeButton" class="hidden" aria-hidden="true"></button>
-    <button type="button" id="openSettings" class="hidden" aria-hidden="true"></button>
-    <button type="button" id="sidebarAuthButton" class="hidden" aria-hidden="true"></button>
-    <main class="dashboard-main health-tools-main">
-      <span id="welcomeName" class="hidden">Khách</span>
-      <section class="health-page-heading"><div><p class="eyebrow">TRUNG TÂM SỨC KHỎE</p><h1>Sức khỏe &amp; Tiện ích</h1><p>Quản lý hồ sơ sức khỏe gia đình và xem báo cáo được tổng hợp tự động.</p></div></section>
-      <nav class="health-section-tabs" aria-label="Các phần sức khỏe và tiện ích">
-        <button class="active" type="button" data-section-target="family-health">▣ Hồ sơ sức khỏe</button>
-        <button type="button" data-section-target="symptom-tracking">🩺 Diễn biến bệnh</button>
-        <button type="button" data-section-target="health-metrics">❤️ Chỉ số sức khỏe</button>
-        <button type="button" data-section-target="health-report">▤ Báo cáo sức khỏe</button>
-      </nav>
 
-      <section class="panel combined-health-panel profile-only-panel">
-        <div class="profile-zone" id="family-health">
-          <div class="subsection-heading">
-            <div>
-              <h2>Hồ sơ đang tư vấn</h2>
-              <p>Chọn đúng thành viên để AI sử dụng thông tin phù hợp.</p>
-            </div>
-            <button type="button" id="showAllProfiles">Quản lý tất cả hồ sơ →</button>
+  <!-- 3. LIVING PERSONAL HEALTH SPACE MAIN CONTAINER (NO 2-COLUMN SIDEBAR) -->
+  <main class="personal-health-stage">
+    <!-- Ambient Volumetric Health Lighting -->
+    <div class="health-ambient-field" aria-hidden="true">
+      <div class="ambient-glow-mesh"></div>
+    </div>
+
+    <div class="health-stage-container">
+      <!-- A. HEALTH HERO STAGE -->
+      <section class="health-hero-stage">
+        <div class="health-hero-head">
+          <div class="hero-eyebrow">
+            <span class="eyebrow-dot"></span>
+            <span>HỆ ĐIỀU HÀNH SỨC KHỎE CÁ NHÂN &amp; GIA ĐÌNH</span>
           </div>
-          <div class="family-grid health-page-family-grid profile-only-family-grid" id="familyGrid"></div>
+          <h1 class="hero-stage-title">Không gian Sức khỏe</h1>
+          <p class="hero-stage-subtitle">
+            Quản lý hồ sơ y tế, theo dõi diễn tiến lâm sàng và đồng bộ chỉ số sinh học của từng thành viên gia đình.
+          </p>
+        </div>
+
+        <!-- B. ACTIVE HEALTH IDENTITY MODULE (REPLACES GIANT LEGACY WHITE CARD) -->
+        <div class="health-identity-module" id="activeHealthIdentityModule">
+          <div class="identity-top-row">
+            <div class="identity-lead-wrap">
+              <div class="identity-avatar-wrap">
+                <span class="identity-avatar" id="heroIdentityAvatar">K</span>
+                <span class="avatar-pulse-ring" aria-hidden="true"></span>
+              </div>
+              <div class="identity-details">
+                <div class="identity-name-line">
+                  <h2 id="heroIdentityName">Chưa chọn hồ sơ</h2>
+                  <span class="identity-completeness-badge" id="heroCompletenessBadge">✓ Hồ sơ sẵn sàng</span>
+                </div>
+                <p id="heroIdentityMeta">Vui lòng chọn hồ sơ để bắt đầu quản lý sức khỏe cá nhân</p>
+              </div>
+            </div>
+
+            <div class="identity-actions">
+              <button type="button" class="btn-identity-edit" id="editActiveProfileBtn">
+                <span>✏ Cập nhật hồ sơ</span>
+              </button>
+              <a href="/tu-van" class="btn-identity-consult">
+                <span>✦ Tư vấn AI →</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Identity Vitals & Clinical Context Strip (Real Data Only, No Fake Placeholders) -->
+          <div class="identity-vitals-strip">
+            <div class="vital-item">
+              <span class="vital-label">Chiều cao</span>
+              <strong id="heroHeightValue">Chưa cập nhật</strong>
+            </div>
+            <div class="vital-divider" aria-hidden="true"></div>
+            <div class="vital-item">
+              <span class="vital-label">Cân nặng</span>
+              <strong id="heroWeightValue">Chưa cập nhật</strong>
+            </div>
+            <div class="vital-divider" aria-hidden="true"></div>
+            <div class="vital-item">
+              <span class="vital-label">Bệnh nền</span>
+              <strong id="heroConditionValue">Không ghi nhận</strong>
+            </div>
+            <div class="vital-divider" aria-hidden="true"></div>
+            <div class="vital-item">
+              <span class="vital-label">Dị ứng</span>
+              <strong id="heroAllergyValue">Không ghi nhận</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- C. COMPACT SPATIAL FAMILY SWITCHER (REPLACES GIANT "+ THÊM THÀNH VIÊN" CARD) -->
+        <div class="compact-family-switcher" id="compactFamilySwitcher">
+          <div class="family-switcher-header">
+            <span class="switcher-label">Hồ sơ người thân:</span>
+            <small id="familyCountMini">0 hồ sơ</small>
+          </div>
+          <div class="family-pill-scroll-strip" id="compactFamilyPillList">
+            <!-- Dynamically populated with active profile pills -->
+          </div>
+          <button type="button" class="btn-add-family-pill" id="compactAddMemberBtn">
+            <span>＋ Thêm thành viên</span>
+          </button>
+        </div>
+
+        <!-- D. CONTEXTUAL HEALTH SIGNALS BAR (REPLACES PERMANENT FIXED RIGHT SIDEBAR CARDS) -->
+        <div class="health-signals-bar" id="healthSignalsBar" role="region" aria-label="Tín hiệu sức khỏe ngữ cảnh">
+          <!-- Signal 1: Lịch nhắc (Temporal / Reminders) -->
+          <button type="button" class="signal-card signal-reminder" id="signalReminderCard" title="Nhấn để xem toàn bộ lịch nhắc">
+            <span class="signal-icon">⏰</span>
+            <div class="signal-body">
+              <div class="signal-top">
+                <small class="signal-category">LỊCH NHẮC</small>
+                <span class="signal-badge" id="signalReminderBadge">Đang đồng bộ</span>
+              </div>
+              <strong id="signalReminderText">Xem danh sách lịch nhắc sức khỏe</strong>
+            </div>
+            <span class="signal-chevron" aria-hidden="true">→</span>
+          </button>
+
+          <!-- Signal 2: Môi trường & Thời tiết (Environment & AQI) -->
+          <button type="button" class="signal-card signal-environment" id="signalEnvironmentCard" title="Nhấn để xem chỉ số môi trường">
+            <span class="signal-icon">🌤️</span>
+            <div class="signal-body">
+              <div class="signal-top">
+                <small class="signal-category">MÔI TRƯỜNG &amp; AQI</small>
+                <span class="signal-badge" id="signalAqiBadge">Đang lấy vị trí</span>
+              </div>
+              <strong id="signalEnvironmentText">Theo dõi chất lượng không khí</strong>
+            </div>
+            <span class="signal-chevron" aria-hidden="true">→</span>
+          </button>
+
+          <!-- Signal 3: Hỗ trợ & Khẩn cấp (Support & 115) -->
+          <div class="signal-card signal-support-card">
+            <div class="support-action-group">
+              <a href="https://zalo.me/0869585139" target="_blank" rel="noopener noreferrer" class="btn-support-pill" title="Hỗ trợ trực tuyến qua Zalo">
+                <span class="zalo-glyph">Z</span>
+                <span>Hỗ trợ Zalo</span>
+              </a>
+              <a href="tel:115" class="btn-emergency-pill" title="Gọi cấp cứu khẩn cấp 115">
+                <span>🚨 Gọi 115</span>
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 
+      <!-- E. APEX SEGMENTED CONTEXT NAVIGATION (REPLACES OLD TAB BAR) -->
+      <nav class="health-segmented-nav" id="healthSegmentedNav" aria-label="Điều hướng các phân hệ sức khỏe">
+        <button class="segmented-pill active" type="button" data-section-target="family-health">
+          <span class="pill-icon">👥</span>
+          <span>Tất cả hồ sơ gia đình</span>
+        </button>
+        <button class="segmented-pill" type="button" data-section-target="symptom-tracking">
+          <span class="pill-icon">🩺</span>
+          <span>Diễn biến triệu chứng</span>
+        </button>
+        <button class="segmented-pill" type="button" data-section-target="health-metrics">
+          <span class="pill-icon">📊</span>
+          <span>Dashboard chỉ số đo</span>
+        </button>
+        <button class="segmented-pill" type="button" data-section-target="health-report">
+          <span class="pill-icon">📑</span>
+          <span>Báo cáo y tế</span>
+        </button>
+      </nav>
 
-      <section class="panel symptom-tracking-panel" id="symptom-tracking">
-        <div class="symptom-tracking-heading">
+      <!-- F. SPATIAL CONTENT SECTIONS (NO WHITE-CARD DOMINANCE) -->
+      <!-- 1. HỒ SƠ GIA ĐÌNH -->
+      <section class="spatial-module-panel" id="family-health">
+        <div class="module-panel-head">
           <div>
-            <p class="eyebrow">NHẬT KÝ THEO DÕI</p>
-            <h2>Diễn biến bệnh &amp; triệu chứng</h2>
-            <p>Ghi lại từng thay đổi theo đúng hồ sơ đang chọn để xem xu hướng theo thời gian và giúp AI có thêm ngữ cảnh khi tư vấn.</p>
+            <span class="module-tag">HỒ SƠ Y TẾ</span>
+            <h2>Danh sách thành viên gia đình</h2>
+            <p>Hồ sơ được cô lập hoàn toàn giữa các thành viên để AI cá nhân hóa câu trả lời chuẩn xác.</p>
           </div>
-          <button type="button" id="openSymptomForm">＋ Ghi nhận diễn biến</button>
+          <button type="button" class="btn-module-action" id="showAllProfiles">Quản lý nâng cao →</button>
+        </div>
+        <div class="family-grid health-page-family-grid profile-only-family-grid" id="familyGrid"></div>
+      </section>
+
+      <!-- 2. DIỄN BIẾN BỆNH -->
+      <section class="spatial-module-panel" id="symptom-tracking">
+        <div class="module-panel-head">
+          <div>
+            <span class="module-tag">NHẬT KÝ LÂM SÀNG</span>
+            <h2>Diễn biến bệnh &amp; triệu chứng</h2>
+            <p>Ghi nhận tiến triển theo hồ sơ đang chọn để hỗ trợ bác sĩ và AI đối chiếu theo chiều dài thời gian.</p>
+          </div>
+          <button type="button" class="btn-module-action primary" id="openSymptomForm">＋ Ghi nhận diễn biến</button>
         </div>
 
         <div class="symptom-profile-strip">
           <span class="symptom-profile-avatar" id="symptomProfileAvatar">K</span>
-          <div><small>ĐANG THEO DÕI CHO</small><strong id="symptomProfileName">Chưa có hồ sơ</strong><em id="symptomProfileMeta">Hãy chọn hồ sơ sức khỏe</em></div>
-          <button type="button" id="refreshSymptomTimeline">↻ Làm mới</button>
+          <div>
+            <small>ĐANG THEO DÕI CHO</small>
+            <strong id="symptomProfileName">Chưa có hồ sơ</strong>
+            <em id="symptomProfileMeta">Hãy chọn hồ sơ sức khỏe</em>
+          </div>
+          <button type="button" class="btn-subtle-refresh" id="refreshSymptomTimeline">↻ Làm mới</button>
         </div>
 
         <div class="symptom-summary-grid">
-          <article><span>📝</span><div><small>Bản ghi gần đây</small><strong id="symptomLogCount">0</strong></div></article>
-          <article><span>📈</span><div><small>Xu hướng mới nhất</small><strong id="symptomLatestTrend">Chưa có</strong></div></article>
-          <article><span>🌡</span><div><small>Nhiệt độ gần nhất</small><strong id="symptomLatestTemp">--</strong></div></article>
-          <article><span>⚡</span><div><small>Mức độ gần nhất</small><strong id="symptomLatestSeverity">--</strong></div></article>
+          <article class="stat-mini-card">
+            <span class="stat-icon">📝</span>
+            <div><small>Bản ghi gần đây</small><strong id="symptomLogCount">0</strong></div>
+          </article>
+          <article class="stat-mini-card">
+            <span class="stat-icon">📈</span>
+            <div><small>Xu hướng</small><strong id="symptomLatestTrend">Chưa có</strong></div>
+          </article>
+          <article class="stat-mini-card">
+            <span class="stat-icon">🌡️</span>
+            <div><small>Nhiệt độ gần nhất</small><strong id="symptomLatestTemp">Chưa cập nhật</strong></div>
+          </article>
+          <article class="stat-mini-card">
+            <span class="stat-icon">⚡</span>
+            <div><small>Mức độ</small><strong id="symptomLatestSeverity">Chưa cập nhật</strong></div>
+          </article>
         </div>
 
         <div class="symptom-timeline" id="symptomTimeline">
-          <div class="symptom-empty"><span>🩺</span><strong>Chưa có diễn biến nào được ghi</strong><small>Bấm “Ghi nhận diễn biến” để bắt đầu theo dõi.</small></div>
+          <div class="symptom-empty">
+            <span>🩺</span>
+            <strong>Chưa có diễn biến nào được ghi nhận</strong>
+            <small>Bấm "Ghi nhận diễn biến" để bắt đầu lưu trữ lịch sử triệu chứng.</small>
+          </div>
         </div>
       </section>
 
-      <section class="panel health-metrics-panel" id="health-metrics">
-        <div class="health-metrics-heading">
+      <!-- 3. CHỈ SỐ SỨC KHỎE -->
+      <section class="spatial-module-panel" id="health-metrics">
+        <div class="module-panel-head">
           <div>
-            <p class="eyebrow">THEO DÕI CHỈ SỐ</p>
+            <span class="module-tag">CHỈ SỐ SINH HỌC</span>
             <h2>Dashboard chỉ số sức khỏe</h2>
-            <p>Lưu các lần đo theo đúng hồ sơ đang chọn và xem xu hướng gần đây. Số liệu tự nhập chỉ dùng để theo dõi, không tự thay thế đánh giá của bác sĩ.</p>
+            <p>Lưu lại các lần đo huyết áp, nhịp tim, đường huyết và SpO₂ thực tế để theo dõi xu hướng.</p>
           </div>
-          <button type="button" id="openMetricForm">＋ Thêm lần đo</button>
+          <button type="button" class="btn-module-action primary" id="openMetricForm">＋ Thêm lần đo</button>
         </div>
 
         <div class="metric-profile-strip">
-          <span id="metricProfileAvatar">K</span>
-          <div><small>ĐANG XEM CHỈ SỐ CỦA</small><strong id="metricProfileName">Chưa có hồ sơ</strong><em id="metricProfileMeta">Hãy chọn hồ sơ sức khỏe</em></div>
-          <button type="button" id="refreshHealthMetrics">↻ Làm mới</button>
+          <span class="metric-profile-avatar" id="metricProfileAvatar">K</span>
+          <div>
+            <small>ĐANG XEM CHỈ SỐ CỦA</small>
+            <strong id="metricProfileName">Chưa có hồ sơ</strong>
+            <em id="metricProfileMeta">Hãy chọn hồ sơ sức khỏe</em>
+          </div>
+          <button type="button" class="btn-subtle-refresh" id="refreshHealthMetrics">↻ Làm mới</button>
         </div>
 
-        <div class="metric-latest-grid">
-          <article><span>🩸</span><div><small>Huyết áp</small><strong id="metricBloodPressure">--/--</strong><em>mmHg</em></div></article>
-          <article><span>❤️</span><div><small>Nhịp tim</small><strong id="metricHeartRate">--</strong><em>bpm</em></div></article>
-          <article><span>🫁</span><div><small>SpO₂</small><strong id="metricSpo2">--</strong><em>%</em></div></article>
-          <article><span>🌡</span><div><small>Nhiệt độ</small><strong id="metricTemperature">--</strong><em>°C</em></div></article>
-          <article><span>🧪</span><div><small>Đường huyết</small><strong id="metricGlucose">--</strong><em>mg/dL</em></div></article>
-          <article><span>⚖</span><div><small>Cân nặng</small><strong id="metricWeight">--</strong><em>kg</em></div></article>
-        </div>
-
-        <div class="metric-dashboard-grid">
-          <section class="metric-chart-card">
-            <div class="metric-card-head"><div><h3>Xu hướng gần đây</h3><small>Chọn chỉ số để xem biểu đồ theo thời gian</small></div><select id="metricChartType"><option value="heart_rate_bpm">Nhịp tim</option><option value="systolic_mmhg">Huyết áp tâm thu</option><option value="diastolic_mmhg">Huyết áp tâm trương</option><option value="spo2_percent">SpO₂</option><option value="temperature_c">Nhiệt độ</option><option value="glucose_mg_dl">Đường huyết</option><option value="weight_kg">Cân nặng</option></select></div>
-            <div class="metric-chart" id="metricTrendChart"><div class="metric-chart-empty">Chưa có dữ liệu để vẽ biểu đồ.</div></div>
-          </section>
-          <section class="metric-history-card">
-            <div class="metric-card-head"><div><h3>Lịch sử đo</h3><small id="metricHistoryCount">0 bản ghi</small></div></div>
-            <div class="metric-history-list" id="metricHistoryList"><div class="metric-history-empty">Chưa có lần đo nào.</div></div>
-          </section>
+        <div class="health-metrics-grid" id="healthMetricsGrid">
+          <article class="metric-card">
+            <div class="metric-card-top"><span>🫀</span><span class="metric-title">Huyết áp</span></div>
+            <strong class="metric-value" id="metricBloodPressure">Chưa đo</strong>
+            <small class="metric-meta" id="metricBloodPressureTime">Tâm thu / Tâm trương</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-card-top"><span>💓</span><span class="metric-title">Nhịp tim</span></div>
+            <strong class="metric-value" id="metricHeartRate">Chưa đo</strong>
+            <small class="metric-meta" id="metricHeartRateTime">bpm (nhịp/phút)</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-card-top"><span>🫁</span><span class="metric-title">SpO₂</span></div>
+            <strong class="metric-value" id="metricSpo2">Chưa đo</strong>
+            <small class="metric-meta" id="metricSpo2Time">Độ bão hòa oxy máu</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-card-top"><span>🩸</span><span class="metric-title">Đường huyết</span></div>
+            <strong class="metric-value" id="metricBloodSugar">Chưa đo</strong>
+            <small class="metric-meta" id="metricBloodSugarTime">mg/dL</small>
+          </article>
         </div>
       </section>
 
-      <section class="panel auto-health-report wide-health-report" id="health-report">
-        <div class="report-heading">
-          <div><p>▤</p><span><h2>Báo cáo sức khỏe</h2><small>Tự động tổng hợp từ dữ liệu bạn đã cập nhật</small></span></div>
-          <button type="button" id="refreshHealthReport">Làm mới</button>
-        </div>
-
-        <div class="report-horizontal-layout">
-          <div class="report-profile-line">
-            <span id="reportProfileAvatar">K</span>
-            <div>
-              <strong id="reportProfileName">Chưa có hồ sơ</strong>
-              <small id="reportProfileMeta">Chọn hồ sơ để xem báo cáo</small>
-            </div>
-          </div>
-
-          <div class="report-metric-list">
-            <article><span>⚖</span><div><small>Cân nặng hiện tại</small><strong id="reportWeight">--</strong></div><em id="reportWeightTrend">Theo hồ sơ</em></article>
-            <article><span>BMI</span><div><small>BMI ước tính</small><strong id="reportBmi">--</strong></div><em id="reportBmiStatus">Chưa đủ dữ liệu</em></article>
-            <article><span>🗓</span><div><small>Lịch nhắc đang bật</small><strong id="reportReminder">--</strong></div><em>Tài khoản</em></article>
-            <article><span>☀</span><div><small>Chất lượng không khí</small><strong id="reportAqi">--</strong></div><em id="reportAqiStatus">Chưa có dữ liệu</em></article>
+      <!-- 4. BÁO CÁO SỨC KHỎE -->
+      <section class="spatial-module-panel" id="health-report">
+        <div class="module-panel-head">
+          <div>
+            <span class="module-tag">BÁO CÁO TỔNG HỢP</span>
+            <h2>Báo cáo sức khỏe cá nhân</h2>
+            <p>Báo cáo tự động được biên soạn từ các dữ liệu lâm sàng bạn đã khai báo.</p>
           </div>
         </div>
 
-        <div class="report-footer-row">
-          <div class="report-notes">
-            <p><b>Bệnh nền:</b> <span id="reportCondition">--</span></p>
-            <p><b>Dị ứng:</b> <span id="reportAllergy">--</span></p>
+        <div class="health-report-preview-box">
+          <div class="report-preview-text">
+            <strong>Báo cáo tóm tắt y tế</strong>
+            <p>Xuất báo cáo PDF hoặc sao chép để chuẩn bị cho buổi thăm khám trực tiếp với bác sĩ.</p>
           </div>
-          <button class="report-detail-button" id="openHealthReport" type="button">Xem báo cáo chi tiết</button>
+          <button class="btn-module-action primary" id="openHealthReport" type="button">Xem báo cáo chi tiết →</button>
         </div>
       </section>
-      <div class="health-hidden-environment" aria-hidden="true"><span id="weatherIcon"></span><span id="weatherDescription"></span><span id="temperatureValue"></span><span id="aqiValue"></span><span id="aqiLevel"></span><span id="pm25Value"></span><span id="humidityValue"></span><span id="windValue"></span><span id="feelsLikeValue"></span><span id="weatherLocation"></span><span id="pharmacyLocation"></span><span id="environmentUpdatedAt"></span><ul id="recommendationList"></ul></div>
-    </main>
-    <aside class="right-sidebar health-context-rail">
-      <section class="side-panel">
-        <div class="side-panel-heading"><h2>Lịch nhắc &amp; quản lý</h2><button type="button" id="showRemindersButton">Xem tất cả</button></div>
-        <div class="reminder-list"><article class="reminder-empty"><span>⌛</span><div><strong>Đang tải lịch nhắc</strong><small>Dữ liệu theo tài khoản đăng nhập.</small></div></article></div>
-      </section>
-      <section class="side-panel alert-panel">
-        <div class="side-panel-heading"><h2>Cảnh báo &amp; khuyến nghị</h2></div>
+
+      <!-- HIDDEN REQUISITE HOOKS & ENVIRONMENT BINDINGS FOR JS COMPATIBILITY -->
+      <div class="health-hidden-environment" aria-hidden="true" style="display:none !important;">
+        <span id="welcomeName">Khách</span>
+        <div id="recentList"></div>
+        <button type="button" id="upgradeButton"></button>
+        <button type="button" id="openSettings"></button>
+        <button type="button" id="sidebarAuthButton"></button>
+        <button type="button" id="addFamilyButton"></button>
+        <button type="button" id="profileDetailButton"></button>
+        <button type="button" id="selectProfileTip"></button>
+        <button type="button" id="showRemindersButton"></button>
+        <div class="reminder-list"></div>
         <div id="alertList">
-          <article><span>☀</span><div><strong>Chất lượng không khí</strong><small id="sideAqiText">Đang chờ dữ liệu vị trí</small></div><em id="sideAqiBadge">AQI --</em></article>
-          <article><span>🩸</span><div><strong>Hồ sơ cần theo dõi</strong><small>Kiểm tra lại chiều cao, cân nặng và bệnh nền.</small></div><button type="button" id="profileDetailButton">Xem chi tiết</button></article>
-          <article><span>🧠</span><div><strong>Tư vấn cá nhân hóa</strong><small>AI dùng đúng hồ sơ đang chọn.</small></div><button id="selectProfileTip" type="button">Chọn hồ sơ</button></article>
+          <small id="sideAqiText"></small>
+          <em id="sideAqiBadge"></em>
         </div>
-      </section>
-      <section class="emergency-panel"><strong>Hỗ trợ khẩn cấp</strong><p>Trong trường hợp khó thở nặng, đau ngực, bất tỉnh hoặc phản vệ, hãy gọi ngay.</p><a href="tel:115">☎ 115</a></section>
-      <section class="zalo-support-card"><div class="zalo-card-heading"><span class="zalo-card-icon">Z</span><div><strong>Hỗ trợ qua Zalo</strong><p>Nhắn tin để được hỗ trợ nhanh.</p></div></div><a href="https://zalo.me/0869585139" target="_blank" rel="noopener noreferrer" class="zalo-support-button">Liên hệ Zalo</a></section>
-    </aside>
-  </div>
+        <span id="sidebarName"></span>
+        <span id="sidebarMeta"></span>
+        <span id="sidebarAvatar"></span>
+        <span id="weatherIcon"></span>
+        <span id="weatherDescription"></span>
+        <span id="temperatureValue"></span>
+        <span id="aqiValue"></span>
+        <span id="aqiLevel"></span>
+        <span id="pm25Value"></span>
+        <span id="humidityValue"></span>
+        <span id="windValue"></span>
+        <span id="feelsLikeValue"></span>
+        <span id="weatherLocation"></span>
+        <span id="pharmacyLocation"></span>
+        <span id="environmentUpdatedAt"></span>
+        <ul id="recommendationList"></ul>
+      </div>
+    </div>
+  </main>
 
-
+  <!-- 4. MODALS & SLIDE-IN DRAWERS -->
+  <!-- A. Metric Modal -->
   <div class="shared-modal hidden" id="metricModal" role="dialog" aria-modal="true" aria-labelledby="metricModalTitle">
     <section class="shared-modal-card metric-modal-card">
       <button class="shared-modal-close" id="closeMetricModal" type="button" aria-label="Đóng">×</button>
@@ -243,6 +423,7 @@
     </section>
   </div>
 
+  <!-- B. Symptom Modal -->
   <div class="shared-modal hidden" id="symptomModal" role="dialog" aria-modal="true" aria-labelledby="symptomModalTitle">
     <section class="shared-modal-card symptom-modal-card">
       <button class="shared-modal-close" id="closeSymptomModal" type="button" aria-label="Đóng">×</button>
@@ -284,6 +465,7 @@
     </section>
   </div>
 
+  <!-- C. Health Report Modal -->
   <div class="shared-modal hidden" id="healthReportModal" role="dialog" aria-modal="true" aria-labelledby="healthReportModalTitle">
     <section class="shared-modal-card health-report-modal-card">
       <button class="shared-modal-close" id="closeHealthReportModal" type="button" aria-label="Đóng">×</button>
@@ -294,217 +476,71 @@
     </section>
   </div>
 
-  <div
-  class="shared-modal hidden"
-  id="familyModal"
->
-  <div class="shared-modal-card family-modal-card">
-    <button
-      type="button"
-      class="shared-modal-close"
-      id="closeFamilyModal"
-      aria-label="Đóng"
-    >
-      ×
-    </button>
-
-    <h2 id="familyModalTitle">
-      Thêm thành viên gia đình
-    </h2>
-
-    <p class="family-modal-description">
-      Thông tin được lưu theo tài khoản đang đăng nhập
-      và không hiển thị cho tài khoản khác.
-    </p>
-
-    <form id="familyForm">
-      <!-- ID thành viên, để trống khi thêm mới -->
-      <input
-        type="hidden"
-        id="familyMemberId"
-        name="member_id"
-      >
-
-      <label>
-        Họ và tên
-
-        <input
-          type="text"
-          id="familyFullName"
-          name="full_name"
-          minlength="2"
-          maxlength="120"
-          required
-        >
-      </label>
-
-      <label>
-        Quan hệ
-
-        <select
-          id="familyRelationship"
-          name="relationship"
-          required
-        >
-          <option value="">
-            Chọn quan hệ
-          </option>
-
-          <option value="Vợ/Chồng">
-            Vợ/Chồng
-          </option>
-
-          <option value="Con">
-            Con
-          </option>
-
-          <option value="Bố">
-            Bố
-          </option>
-
-          <option value="Mẹ">
-            Mẹ
-          </option>
-
-          <option value="Anh/Chị">
-            Anh/Chị
-          </option>
-
-          <option value="Em">
-            Em
-          </option>
-
-          <option value="Ông/Bà">
-            Ông/Bà
-          </option>
-
-          <option value="Khác">
-            Khác
-          </option>
-        </select>
-      </label>
-
-      <div class="family-form-grid">
-        <label>
-          Tuổi
-
-          <input
-            type="number"
-            id="familyAge"
-            name="age"
-            min="0"
-            max="120"
-          >
+  <!-- D. Family Modal -->
+  <div class="shared-modal hidden" id="familyModal" role="dialog" aria-modal="true" aria-labelledby="familyModalTitle">
+    <div class="shared-modal-card family-modal-card">
+      <button type="button" class="shared-modal-close" id="closeFamilyModal" aria-label="Đóng">×</button>
+      <h2 id="familyModalTitle">Thêm thành viên gia đình</h2>
+      <p class="family-modal-description">Thông tin được lưu theo tài khoản đang đăng nhập và không hiển thị cho tài khoản khác.</p>
+      <form id="familyForm">
+        <input type="hidden" id="familyMemberId" name="member_id">
+        <label>Họ và tên
+          <input type="text" id="familyFullName" name="full_name" minlength="2" maxlength="120" required>
         </label>
-
-        <label>
-          Giới tính
-
-          <select
-            id="familyGender"
-            name="gender"
-          >
-            <option value="">
-              Chưa cập nhật
-            </option>
-
-            <option value="Nam">
-              Nam
-            </option>
-
-            <option value="Nữ">
-              Nữ
-            </option>
-
-            <option value="Khác">
-              Khác
-            </option>
+        <label>Quan hệ
+          <select id="familyRelationship" name="relationship" required>
+            <option value="">Chọn quan hệ</option>
+            <option value="Vợ/Chồng">Vợ/Chồng</option>
+            <option value="Con">Con</option>
+            <option value="Bố">Bố</option>
+            <option value="Mẹ">Mẹ</option>
+            <option value="Anh/Chị">Anh/Chị</option>
+            <option value="Em">Em</option>
+            <option value="Ông/Bà">Ông/Bà</option>
+            <option value="Khác">Khác</option>
           </select>
         </label>
-
-        <label>
-          Chiều cao (cm)
-
-          <input
-            type="number"
-            id="familyHeight"
-            name="height_cm"
-            min="30"
-            max="250"
-            step="0.1"
-          >
+        <div class="family-form-grid">
+          <label>Tuổi
+            <input type="number" id="familyAge" name="age" min="0" max="120">
+          </label>
+          <label>Giới tính
+            <select id="familyGender" name="gender">
+              <option value="">Chưa cập nhật</option>
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
+              <option value="Khác">Khác</option>
+            </select>
+          </label>
+          <label>Chiều cao (cm)
+            <input type="number" id="familyHeight" name="height_cm" min="30" max="250" step="0.1">
+          </label>
+          <label>Cân nặng (kg)
+            <input type="number" id="familyWeight" name="weight_kg" min="1" max="350" step="0.1">
+          </label>
+        </div>
+        <label>Bệnh nền / tình trạng sức khỏe
+          <input type="text" id="familyConditions" name="medical_conditions" maxlength="500" placeholder="Ví dụ: hen suyễn, tăng huyết áp...">
         </label>
-
-        <label>
-          Cân nặng (kg)
-
-          <input
-            type="number"
-            id="familyWeight"
-            name="weight_kg"
-            min="1"
-            max="350"
-            step="0.1"
-          >
+        <label>Dị ứng
+          <input type="text" id="familyAllergies" name="allergies" maxlength="500" placeholder="Ví dụ: paracetamol, tinh bột ngô...">
         </label>
-      </div>
-
-      <label>
-        Bệnh nền / tình trạng sức khỏe
-
-        <input
-          type="text"
-          id="familyConditions"
-          name="medical_conditions"
-          maxlength="500"
-          placeholder="Ví dụ: hen suyễn, tăng huyết áp..."
-        >
-      </label>
-
-      <label>
-        Dị ứng
-
-        <input
-          type="text"
-          id="familyAllergies"
-          name="allergies"
-          maxlength="500"
-          placeholder="Ví dụ: paracetamol, tinh bột ngô..."
-        >
-      </label>
-
-      <p
-        class="family-form-message"
-        id="familyFormMessage"
-      ></p>
-
-      <div class="family-form-actions">
-  <button
-    type="button"
-    class="family-delete-button hidden"
-    id="deleteFamilyButton"
-  >
-    Xóa hồ sơ
-  </button>
-
-  <button
-    type="submit"
-    class="family-save-button"
-    id="saveFamilyButton"
-  >
-    Lưu thành viên
-  </button>
-</div>
-    </form>
+        <p class="family-form-message" id="familyFormMessage"></p>
+        <div class="family-form-actions">
+          <button type="button" class="family-delete-button hidden" id="deleteFamilyButton">Xóa hồ sơ</button>
+          <button type="submit" class="family-save-button" id="saveFamilyButton">Lưu thành viên</button>
+        </div>
+      </form>
+    </div>
   </div>
-</div>
 
+  <!-- E. Self Health Modal -->
   <div class="shared-modal hidden" id="selfHealthModal" role="dialog" aria-modal="true" aria-labelledby="selfHealthTitle">
     <section class="shared-modal-card self-health-modal-card">
       <button class="shared-modal-close" id="closeSelfHealthModal" type="button" aria-label="Đóng">×</button>
       <p class="modal-eyebrow">HỒ SƠ BẢN THÂN</p>
       <h2 id="selfHealthTitle">Cập nhật hồ sơ sức khỏe</h2>
-      <p class="self-health-help">Thông tin được cập nhật ngay tại Trang chủ và dùng để cá nhân hóa tư vấn AI.</p>
+      <p class="self-health-help">Thông tin được cập nhật và dùng để cá nhân hóa các câu trả lời tư vấn AI.</p>
       <form class="self-health-form" id="selfHealthForm">
         <div class="self-health-grid">
           <label>Giới tính sinh học
@@ -542,6 +578,7 @@
     </section>
   </div>
 
+  <!-- F. Reminder Modal -->
   <div class="modal-backdrop hidden" id="reminderModal">
     <section class="modal-card reminder-modal-card" role="dialog" aria-modal="true" aria-labelledby="reminderModalTitle">
       <button class="modal-close" id="closeReminderModal" type="button">×</button>
@@ -551,7 +588,16 @@
       </div>
       <div class="reminder-modal-list" id="reminderModalList"></div>
       <form class="reminder-form hidden" id="reminderForm">
-        <label>Loại nhắc<select name="reminder_type"><option value="medicine">Uống thuốc</option><option value="water">Uống nước</option><option value="weight">Theo dõi cân nặng</option><option value="exercise">Vận động</option><option value="meal">Bữa ăn</option><option value="appointment">Lịch khám / tái khám</option></select></label>
+        <label>Loại nhắc
+          <select name="reminder_type">
+            <option value="medicine">Uống thuốc</option>
+            <option value="water">Uống nước</option>
+            <option value="weight">Theo dõi cân nặng</option>
+            <option value="exercise">Vận động</option>
+            <option value="meal">Bữa ăn</option>
+            <option value="appointment">Lịch khám / tái khám</option>
+          </select>
+        </label>
         <label>Tiêu đề<input name="title" required maxlength="150" placeholder="Ví dụ: Uống thuốc huyết áp"></label>
         <label>Tên thuốc (khi chọn uống thuốc)<input name="medicine_name" placeholder="Tên thuốc theo hướng dẫn bác sĩ/dược sĩ"></label>
         <label>Giờ nhắc<input name="time_of_day" type="time" required></label>
@@ -562,159 +608,50 @@
     </section>
   </div>
 
-  <div id="toastMessage"></div>
-<a
-  class="emergency-floating"
-  href="tel:115"
-  aria-label="Gọi cấp cứu 115"
-  title="Gọi cấp cứu 115"
->
-  <span class="emergency-floating-icon">🚨</span>
-  <span class="emergency-floating-text">
-    Gọi cấp cứu 115
-  </span>
-</a>
-
-  <!-- ===== MediCare AI: bong bóng tư vấn nhanh ===== -->
-  <div class="mcai-widget" id="mcaiWidget">
-    <div class="mcai-tip" id="mcaiTip" role="status">
-      <strong>Tư vấn AI</strong>
-      <span>Tôi có thể giúp gì cho bạn?</span>
-    </div>
-
-    <button
-      class="mcai-launcher"
-      id="mcaiLauncher"
-      type="button"
-      aria-label="Mở Tư vấn AI"
-      aria-controls="mcaiPanel"
-      aria-expanded="false"
-    >
-      <span class="mcai-ai-badge" aria-hidden="true">AI</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6.4 5.1h11.2A3.4 3.4 0 0 1 21 8.5v6.2a3.4 3.4 0 0 1-3.4 3.4h-6.1l-4.2 2.6.8-2.6H6.4A3.4 3.4 0 0 1 3 14.7V8.5a3.4 3.4 0 0 1 3.4-3.4Z"/>
-        <circle cx="8" cy="11.6" r="1.15"/>
-        <circle cx="12" cy="11.6" r="1.15"/>
-        <circle cx="16" cy="11.6" r="1.15"/>
-      </svg>
-    </button>
-
-    <section
-      class="mcai-panel"
-      id="mcaiPanel"
-      role="dialog"
-      aria-modal="false"
-      aria-labelledby="mcaiPanelTitle"
-      aria-hidden="true"
-    >
-      <header class="mcai-panel-header">
-        <div class="mcai-brand-dot" aria-hidden="true">+</div>
-        <div>
-          <strong id="mcaiPanelTitle">MediCare AI</strong>
-          <small><span class="mcai-online-dot"></span> Tư vấn nhanh</small>
-        </div>
-        <a class="mcai-full-link" href="/tu-van" title="Mở trang Tư vấn AI đầy đủ">↗</a>
-        <button class="mcai-close" id="mcaiClose" type="button" aria-label="Đóng Tư vấn AI">×</button>
+  <!-- G. Premium Modal -->
+  <div class="premium-modal hidden" id="premiumModal" aria-hidden="true">
+    <section class="premium-modal-card" role="dialog" aria-modal="true" aria-labelledby="premiumModalTitle">
+      <button type="button" class="premium-modal-close" id="closePremiumModal" aria-label="Đóng">×</button>
+      <header class="premium-modal-header">
+        <div class="premium-modal-icon" aria-hidden="true">💎</div>
+        <h3 id="premiumModalTitle">MediCare Premium</h3>
+        <p>Nâng cấp để mở rộng hạn mức và theo dõi sức khỏe chuyên sâu hơn.</p>
       </header>
-
-      <button
-        class="mcai-profile-bar"
-        id="mcaiProfileBar"
-        type="button"
-        title="Xem hồ sơ sức khỏe đang được dùng để tư vấn"
-        aria-label="Xem hồ sơ sức khỏe đang được dùng để tư vấn"
-      >
-        <span class="mcai-profile-avatar" id="mcaiProfileAvatar">K</span>
-        <span class="mcai-profile-copy">
-          <small>ĐANG TƯ VẤN THEO HỒ SƠ</small>
-          <strong id="mcaiProfileName">Khách</strong>
-        </span>
-        <span class="mcai-profile-open" aria-hidden="true">Xem hồ sơ ›</span>
-      </button>
-
-      <div class="mcai-messages" id="mcaiMessages" aria-live="polite"></div>
-
-      <div class="mcai-quick" id="mcaiQuick">
-        <button type="button" data-mcai-prompt="Hồ sơ sức khỏe của tôi">📋 Hồ sơ</button>
-        <button type="button" data-mcai-prompt="Tôi đang có triệu chứng và muốn được hướng dẫn ban đầu.">🩺 Triệu chứng</button>
-        <button type="button" data-mcai-prompt="Tôi muốn hỏi về thuốc và cách sử dụng an toàn.">💊 Thuốc</button>
-        <button type="button" data-mcai-prompt="Tôi muốn được tư vấn dinh dưỡng phù hợp.">🥗 Dinh dưỡng</button>
+      <div class="premium-price-box">
+        <div class="premium-price-main" id="premiumPriceText">20.000đ</div>
+        <div class="premium-price-sub">/ 30 ngày</div>
       </div>
-
-      <form class="mcai-form" id="mcaiForm">
-        <textarea
-          id="mcaiInput"
-          rows="1"
-          maxlength="4000"
-          placeholder="Nhập câu hỏi sức khỏe..."
-          aria-label="Câu hỏi cho MediCare AI"
-        ></textarea>
-        <button id="mcaiSend" type="submit" aria-label="Gửi câu hỏi">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 17 8-17 8 3-7 8-1-8-1-3-7Z"/></svg>
-        </button>
-      </form>
-
-      <p class="mcai-disclaimer">AI hỗ trợ thông tin ban đầu, không thay thế bác sĩ.</p>
+      <div class="premium-plan-comparison" aria-label="So sánh gói Free và Premium">
+        <article class="premium-tier">
+          <div class="premium-tier-heading"><span class="premium-tier-name">FREE</span><span class="premium-tier-tag">Mặc định</span></div>
+          <ul>
+            <li>20 lượt chat mỗi ngày</li>
+            <li>10 lần phân tích ảnh mỗi ngày</li>
+            <li>Tối đa 3 hồ sơ sức khỏe</li>
+            <li>Theo dõi 1 vấn đề sức khỏe</li>
+          </ul>
+        </article>
+        <article class="premium-tier featured">
+          <div class="premium-tier-heading"><span class="premium-tier-name">PREMIUM</span><span class="premium-tier-tag">Nâng cao</span></div>
+          <ul>
+            <li>200 lượt chat mỗi ngày</li>
+            <li>100 lần phân tích ảnh mỗi ngày</li>
+            <li>Không giới hạn hồ sơ ở mức hợp lý</li>
+            <li>Nhật ký diễn biến và báo cáo sức khỏe</li>
+          </ul>
+        </article>
+      </div>
+      <div id="premiumUsageArea" class="premium-usage-area"></div>
+      <div id="premiumOrderArea" class="premium-order-area">
+        <p class="premium-loading">Đang tải thông tin gói...</p>
+      </div>
+      <button type="button" class="premium-confirm-button" id="subscribePremiumButton">Tạo hóa đơn 20.000đ</button>
     </section>
   </div>
-  <!-- ===== /MediCare AI: bong bóng tư vấn nhanh ===== -->
 
-<div class="premium-modal hidden" id="premiumModal" aria-hidden="true">
-  <section class="premium-modal-card" role="dialog" aria-modal="true" aria-labelledby="premiumModalTitle">
-    <button type="button" class="premium-modal-close" id="closePremiumModal" aria-label="Đóng">×</button>
+  <div id="toastMessage"></div>
 
-    <header class="premium-modal-header">
-      <div class="premium-modal-icon" aria-hidden="true">💎</div>
-      <h3 id="premiumModalTitle">MediCare Premium</h3>
-      <p>Nâng cấp để mở rộng hạn mức và theo dõi sức khỏe chuyên sâu hơn.</p>
-    </header>
-
-    <div class="premium-price-box">
-      <div class="premium-price-main" id="premiumPriceText">20.000đ</div>
-      <div class="premium-price-sub">/ 30 ngày</div>
-    </div>
-
-    <div class="premium-plan-comparison" aria-label="So sánh gói Free và Premium">
-      <article class="premium-tier">
-        <div class="premium-tier-heading">
-          <span class="premium-tier-name">FREE</span>
-          <span class="premium-tier-tag">Mặc định</span>
-        </div>
-        <ul>
-          <li>20 lượt chat mỗi ngày</li>
-          <li>10 lần phân tích ảnh mỗi ngày</li>
-          <li>Tối đa 3 hồ sơ sức khỏe</li>
-          <li>Theo dõi 1 vấn đề sức khỏe</li>
-        </ul>
-      </article>
-
-      <article class="premium-tier featured">
-        <div class="premium-tier-heading">
-          <span class="premium-tier-name">PREMIUM</span>
-          <span class="premium-tier-tag">Nâng cao</span>
-        </div>
-        <ul>
-          <li>200 lượt chat mỗi ngày</li>
-          <li>100 lần phân tích ảnh mỗi ngày</li>
-          <li>Không giới hạn hồ sơ ở mức hợp lý</li>
-          <li>Nhật ký diễn biến và báo cáo sức khỏe</li>
-        </ul>
-      </article>
-    </div>
-
-    <div id="premiumUsageArea" class="premium-usage-area"></div>
-    <div id="premiumOrderArea" class="premium-order-area">
-      <p class="premium-loading">Đang tải thông tin gói...</p>
-    </div>
-
-    <button type="button" class="premium-confirm-button" id="subscribePremiumButton">
-      Tạo hóa đơn 20.000đ
-    </button>
-  </section>
-</div>
-
-
-  <!-- MOBILE BOTTOM NAVIGATION (5 TABS) -->
+  <!-- 5. MOBILE BOTTOM NAVIGATION -->
   <nav class="mobile-bottom-nav mobile-only" aria-label="Điều hướng di động">
     <a class="mobile-bottom-item" href="/">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -738,9 +675,58 @@
     </a>
   </nav>
 
-  <script src="{{ url_for('static', filename='common.js', v='20260811-settings-v4') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard.js', v='20260813-metrics-v2') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard-extra.js', v='20260813-metrics-v2') }}"></script>
-  <script src="{{ url_for('static', filename='premium.js', v='20260806-premium-qr-2') }}"></script>
+  <!-- Core Scripts -->
+  <script src="{{ url_for('static', filename='common.js', v='20260920-apex-v3') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard.js', v='20260920-apex-v3') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard-extra.js', v='20260920-apex-v3') }}"></script>
+  <script src="{{ url_for('static', filename='premium.js', v='20260920-apex-v3') }}"></script>
+
+  <!-- APEX Health Space Signals Wiring -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Wire Signal Cards
+      document.getElementById("signalReminderCard")?.addEventListener("click", () => {
+        document.getElementById("showRemindersButton")?.click();
+      });
+
+      document.getElementById("signalEnvironmentCard")?.addEventListener("click", () => {
+        const ctx = window.M?.readJSON ? window.M.readJSON("medicareLocationContext", null) : null;
+        if (ctx && ctx.weather) {
+          window.M?.showToast?.(`Thời tiết: ${ctx.weather.temp_c || 28}°C · ${ctx.weather.desc || "Bình thường"} · AQI ${ctx.weather.aqi || 50}`, "info");
+        } else {
+          window.M?.showToast?.("Dữ liệu môi trường đang được đồng bộ theo mạng vị trí an toàn.", "info");
+        }
+      });
+
+      document.getElementById("editActiveProfileBtn")?.addEventListener("click", () => {
+        const sel = window.M?.getSelectedProfile ? window.M.getSelectedProfile() : null;
+        if (sel && sel.serverId) {
+          // Open family modal for member
+          const editBtn = document.querySelector(`[data-edit-family="${sel.serverId}"]`);
+          if (editBtn) editBtn.click();
+          else document.getElementById("profileDetailButton")?.click();
+        } else {
+          document.getElementById("closeSelfHealthModal")?.parentElement?.parentElement?.classList.remove("hidden");
+          document.getElementById("selfHealthModal")?.classList.remove("hidden");
+        }
+      });
+
+      document.getElementById("compactAddMemberBtn")?.addEventListener("click", () => {
+        document.getElementById("addFamilyButton")?.click();
+      });
+
+      // Segmented Nav Smooth Scroll & Active Toggle
+      const pills = document.querySelectorAll(".segmented-pill");
+      pills.forEach(pill => {
+        pill.addEventListener("click", () => {
+          pills.forEach(p => p.classList.toggle("active", p === pill));
+          const target = document.getElementById(pill.dataset.sectionTarget);
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
+      });
+    });
+  </script>
 </body>
 </html>
