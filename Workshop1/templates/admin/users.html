@@ -1,25 +1,247 @@
 {% extends "admin/base.html" %}
-{% block title %}Người dùng | MediCare Admin{% endblock %}
-{% block page_title %}Quản lý tài khoản{% endblock %}
-{% block page_subtitle %}Tách riêng tài khoản User và Admin, tự đồng bộ mỗi 3 giây{% endblock %}
+{% block title %}Người dùng & Phân quyền | MediCare AI Control Center{% endblock %}
+{% block page_title %}Quản lý Người dùng & RBAC{% endblock %}
+{% block page_subtitle %}Kiểm soát tài khoản, phân quyền 5 vai trò và bảo vệ quyền riêng tư y tế (Privacy-by-Default){% endblock %}
+
 {% block content %}
-<div class="account-tabs" id="accountTabs">
- <button type="button" class="account-tab active" data-role-tab="user">Người dùng <span id="userCount">0</span></button>
- <button type="button" class="account-tab" data-role-tab="admin">Quản trị viên <span id="adminCount">0</span></button>
- <button type="button" class="account-tab" data-role-tab="">Tất cả <span id="allCount">0</span></button>
+<!-- ROLE TABS -->
+<div class="account-tabs-wrapper">
+  <div class="account-tabs" id="accountTabs" role="tablist">
+    <button type="button" class="account-tab active" data-role-tab="" role="tab" aria-selected="true">
+      Tất cả <span class="tab-count" id="allCount">0</span>
+    </button>
+    <button type="button" class="account-tab" data-role-tab="user" role="tab">
+      Người dùng <span class="tab-count" id="userCount">0</span>
+    </button>
+    <button type="button" class="account-tab" data-role-tab="super_admin" role="tab">
+      Super Admin <span class="tab-count" id="superAdminCount">0</span>
+    </button>
+    <button type="button" class="account-tab" data-role-tab="admin" role="tab">
+      Admin <span class="tab-count" id="adminCount">0</span>
+    </button>
+    <button type="button" class="account-tab" data-role-tab="content_editor" role="tab">
+      Biên tập <span class="tab-count" id="editorCount">0</span>
+    </button>
+    <button type="button" class="account-tab" data-role-tab="medical_reviewer" role="tab">
+      Thẩm định Y khoa <span class="tab-count" id="reviewerCount">0</span>
+    </button>
+    <button type="button" class="account-tab" data-role-tab="support" role="tab">
+      Hỗ trợ <span class="tab-count" id="supportCount">0</span>
+    </button>
+  </div>
 </div>
+
+<!-- FILTER BAR -->
 <form class="filter-bar" id="userFilters">
- <input name="q" value="{{keyword}}" placeholder="Tìm tên, email hoặc số điện thoại" autocomplete="off">
- <input type="hidden" name="role" id="roleFilter" value="user">
- <select name="status"><option value="">Tất cả trạng thái</option><option value="1">Hoạt động</option><option value="0">Đã khóa</option></select>
- <button class="btn" type="submit">Tìm kiếm</button>
- <button class="btn primary" type="button" id="refreshUsers">↻ Làm mới ngay</button>
- <button class="btn" type="button" id="clearUserFilters">Xóa lọc</button>
+  <div class="search-box">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input name="q" value="{{ keyword or '' }}" placeholder="Tìm theo họ tên, email hoặc số điện thoại..." autocomplete="off">
+  </div>
+  <input type="hidden" name="role" id="roleFilter" value="{{ role or '' }}">
+  <div class="filter-group">
+    <select name="status" class="filter-select">
+      <option value="">Tất cả trạng thái</option>
+      <option value="1" {{ 'selected' if status=='1' }}>Đang hoạt động</option>
+      <option value="0" {{ 'selected' if status=='0' }}>Đã bị khóa</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <select name="per_page" class="filter-select">
+      <option value="15">15 dòng / trang</option>
+      <option value="25" selected>25 dòng / trang</option>
+      <option value="50">50 dòng / trang</option>
+    </select>
+  </div>
+  <div class="filter-buttons">
+    <button class="btn btn-primary" type="submit">Tìm kiếm</button>
+    <button class="btn btn-secondary" type="button" id="refreshUsers" title="Tải lại dữ liệu">↻ Làm mới</button>
+    <button class="btn btn-ghost" type="button" id="clearUserFilters">Xóa lọc</button>
+  </div>
 </form>
+
+<!-- MAIN TABLE PANEL -->
 <div class="panel">
- <div class="panel-head"><div><h2 id="accountListTitle">Tài khoản người dùng</h2><p><b id="userTotal">0</b> kết quả · Đồng bộ <span id="usersSync">--:--:--</span> · ID mới nhất <b id="latestUserId">0</b></p><small id="databaseInfo" class="muted"></small></div><span class="badge success">Tự động 3 giây</span></div>
- <div class="table-wrap"><table><thead><tr><th>Người dùng</th><th>Liên hệ</th><th>Quyền</th><th>Trạng thái</th><th>Chat</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody id="usersBody"></tbody></table></div>
- <div class="pagination" id="usersPagination"></div>
+  <div class="panel-head">
+    <div>
+      <h2 class="panel-title" id="accountListTitle">Danh sách tài khoản</h2>
+      <p class="panel-subtitle">
+        <b id="userTotal">0</b> tài khoản · Đồng bộ lúc <span id="usersSync">--:--:--</span> · CSDL: <span class="text-success font-mono">PostgreSQL</span>
+      </p>
+    </div>
+    <div class="head-badges">
+      <span class="badge badge-neutral">Tự động đồng bộ 5s</span>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="data-table" id="usersTable">
+      <thead>
+        <tr>
+          <th>Người dùng</th>
+          <th>Liên hệ</th>
+          <th>Vai trò</th>
+          <th>Trạng thái</th>
+          <th>Hội thoại</th>
+          <th>Đăng ký</th>
+          <th class="text-right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="usersBody">
+        <tr>
+          <td colspan="7" class="table-loading">Đang tải danh sách người dùng...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination-footer">
+    <div class="pagination-info" id="paginationInfo">Đang hiển thị...</div>
+    <div class="pagination" id="usersPagination"></div>
+  </div>
+</div>
+
+<!-- USER DETAIL SLIDING DRAWER -->
+<div class="drawer-backdrop hidden" id="userDrawerBackdrop">
+  <div class="drawer-panel" id="userDrawerPanel" role="dialog" aria-modal="true" aria-labelledby="drawerUserName">
+    <div class="drawer-header">
+      <div class="drawer-user-meta">
+        <div class="drawer-avatar" id="drawerAvatar">U</div>
+        <div>
+          <h3 class="drawer-title" id="drawerUserName">Đang tải...</h3>
+          <p class="drawer-subtitle font-mono" id="drawerUserId">ID: #0</p>
+        </div>
+      </div>
+      <button type="button" class="drawer-close-btn" id="closeDrawerBtn" aria-label="Đóng bảng">✕</button>
+    </div>
+
+    <!-- DRAWER TABS -->
+    <div class="drawer-tabs">
+      <button type="button" class="drawer-tab active" data-drawer-tab="profile">Hồ sơ</button>
+      <button type="button" class="drawer-tab" data-drawer-tab="activity">Hoạt động</button>
+      <button type="button" class="drawer-tab" data-drawer-tab="security">Phân quyền & Bảo mật</button>
+      <button type="button" class="drawer-tab" data-drawer-tab="phi">Dữ liệu Y tế (PHI)</button>
+    </div>
+
+    <div class="drawer-body">
+      <!-- TAB 1: PROFILE -->
+      <div class="drawer-tab-content active" id="tabContentProfile">
+        <div class="spec-grid">
+          <div class="spec-item">
+            <span class="spec-k">Họ và tên</span>
+            <span class="spec-v" id="drawerFullName">--</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Email</span>
+            <span class="spec-v" id="drawerEmail">--</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Số điện thoại</span>
+            <span class="spec-v" id="drawerPhone">--</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Vai trò hệ thống</span>
+            <span class="spec-v"><span class="role-pill" id="drawerRolePill">User</span></span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Trạng thái</span>
+            <span class="spec-v" id="drawerStatusPill">--</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Ngày tạo tài khoản</span>
+            <span class="spec-v" id="drawerCreatedAt">--</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Token Version (Phiên)</span>
+            <span class="spec-v font-mono" id="drawerTokenVersion">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: ACTIVITY -->
+      <div class="drawer-tab-content" id="tabContentActivity">
+        <div class="spec-grid">
+          <div class="spec-item">
+            <span class="spec-k">Tổng lượt hội thoại</span>
+            <span class="spec-v font-bold" id="drawerChatCount">0</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Lần chat gần nhất</span>
+            <span class="spec-v" id="drawerLastActivity">Chưa có</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-k">Hồ sơ sức khỏe đã lập</span>
+            <span class="spec-v" id="drawerProfileCount">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: SECURITY & ACTIONS -->
+      <div class="drawer-tab-content" id="tabContentSecurity">
+        <div class="security-card">
+          <h4>Thay đổi vai trò (RBAC)</h4>
+          <p class="text-sm muted">Chỉ tài khoản có quyền <code>users.roles.manage</code> mới được phân quyền.</p>
+          <div class="role-change-control">
+            <select id="drawerRoleSelect" class="filter-select">
+              <option value="user">Người dùng (USER)</option>
+              <option value="support">Chăm sóc khách hàng (SUPPORT)</option>
+              <option value="medical_reviewer">Thẩm định Y khoa (MEDICAL_REVIEWER)</option>
+              <option value="content_editor">Biên tập viên (CONTENT_EDITOR)</option>
+              <option value="admin">Quản trị viên (ADMIN)</option>
+              <option value="super_admin">Quản trị tối cao (SUPER_ADMIN)</option>
+            </select>
+            <button type="button" class="btn btn-primary" id="saveRoleBtn">Cập nhật vai trò</button>
+          </div>
+        </div>
+
+        <div class="security-card mt-4">
+          <h4>Kiểm soát phiên & Trạng thái</h4>
+          <div class="action-buttons-stack">
+            <button type="button" class="btn btn-secondary" id="drawerToggleActiveBtn">Khóa / Mở tài khoản</button>
+            <button type="button" class="btn btn-danger" id="drawerForceLogoutBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+              <span>Thu hồi phiên đăng nhập (Force Logout)</span>
+            </button>
+          </div>
+          <p class="text-xs muted mt-2">Force Logout sẽ tăng <code>token_version</code>, ngay lập tức vô hiệu hóa phiên của tài khoản này trên tất cả thiết bị.</p>
+        </div>
+      </div>
+
+      <!-- TAB 4: PHI (PRIVACY PROTECTED) -->
+      <div class="drawer-tab-content" id="tabContentPhi">
+        <div class="phi-banner">
+          <div class="phi-banner-icon">🛡️</div>
+          <div>
+            <b>Bảo vệ Dữ liệu Y tế Cá nhân (Privacy-by-Default)</b>
+            <p class="text-xs">
+              Theo quy định bảo mật y tế HIPAA/GDPR, hồ sơ bệnh án, ghi chú lâm sàng và lịch sử hội thoại riêng tư được ẩn theo mặc định.
+              Mọi hành động truy xuất PHI đều được lưu trữ vĩnh viễn trong Nhật ký Kiểm toán (Audit Log).
+            </p>
+          </div>
+        </div>
+
+        <div id="phiLockedNotice" class="phi-action-box">
+          <button type="button" class="btn btn-warning" id="requestPhiAccessBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Yêu cầu mở dữ liệu PHI (Audit Logged)</span>
+          </button>
+          <span class="text-xs muted">Yêu cầu quyền <code>sensitive_data.access</code></span>
+        </div>
+
+        <div id="phiDataArea" class="hidden mt-4">
+          <div class="spec-grid" id="phiHealthGrid">
+            <!-- Dynamic PHI contents -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
-{% block scripts %}<script>window.AdminPage="users"; window.AdminCurrentUser={{session.get('user_id',0)}};</script>{% endblock %}
+
+{% block scripts %}
+<script>
+  window.AdminPage = "users";
+  window.AdminCurrentUser = {{ session.get('user_id', 0) }};
+  window.AdminPermissions = {{ permissions|tojson if permissions else '[]' }};
+</script>
+{% endblock %}

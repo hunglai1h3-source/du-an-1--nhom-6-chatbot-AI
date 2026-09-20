@@ -1,0 +1,138 @@
+{% extends "admin/base.html" %}
+{% block title %}RAG Operations | MediCare AI Control Center{% endblock %}
+{% block page_title %}RAG Operations & Radar{% endblock %}
+{% block page_subtitle %}Giám sát công cụ truy xuất tăng cường (Retrieval-Augmented Generation), phân tầng thẩm quyền và tính sẵn sàng{% endblock %}
+
+{% block content %}
+<!-- ENGINE STATUS RADAR -->
+<div class="stats-grid">
+  <article class="stat-card">
+    <div class="stat-icon-badge emerald">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Động cơ truy xuất chính</span>
+      <strong class="stat-value text-base" id="ragActiveEngine">Đang kiểm tra...</strong>
+      <span class="stat-trend positive" id="ragEngineSub">Tự động ưu tiên nguồn chính thống</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge blue">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M7 7h10v10H7z"></path></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Chỉ mục Knowledge V2</span>
+      <strong class="stat-value"><span id="ragV2Chunks">0</span> <small class="text-xs muted">chunks</small></strong>
+      <span class="stat-trend neutral">Dung lượng: <b id="ragV2Size">0</b> MB</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge cyan">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Chỉ mục RAG V1 (Dự phòng)</span>
+      <strong class="stat-value"><span id="ragV1Docs">0</span> <small class="text-xs muted">tài liệu</small></strong>
+      <span class="stat-trend neutral">Dung lượng: <b id="ragV1Size">0</b> MB</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge purple">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Lọc an toàn Y tế</span>
+      <strong class="stat-value text-base text-success">Đang kích hoạt</strong>
+      <span class="stat-trend positive">Phân tầng + Cảnh báo thu hồi thuốc</span>
+    </div>
+  </article>
+</div>
+
+<!-- ARCHITECTURE & PIPELINE INSPECTION -->
+<div class="dashboard-grid-2 mt-4">
+  <!-- PIPELINE FEATURES -->
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Các cơ chế phòng vệ truy xuất RAG</h2>
+        <p class="panel-subtitle">Quy tắc lọc tri thức trước khi đưa vào ngữ cảnh mô hình ngôn ngữ lớn (LLM)</p>
+      </div>
+      <span class="badge badge-success">Active</span>
+    </div>
+    <div class="status-spec-list">
+      <div class="spec-row">
+        <div>
+          <b>Ưu tiên thẩm quyền (Authority Tier Boost)</b>
+          <p class="text-xs muted">Trọng số TIER_1 (Bộ Y tế, WHO) được nhân hệ số cao nhất trong BM25 ranking</p>
+        </div>
+        <span class="badge badge-success">Kích hoạt ✓</span>
+      </div>
+      <div class="spec-row">
+        <div>
+          <b>Danh bạ nguồn tin cậy (Source Registry)</b>
+          <p class="text-xs muted">Chặn tuyệt đối tài liệu không rõ nguồn gốc hoặc chưa được thẩm định</p>
+        </div>
+        <span class="badge badge-success">Kích hoạt ✓</span>
+      </div>
+      <div class="spec-row">
+        <div>
+          <b>Chắn an toàn thu hồi thuốc (Drug Recalls Guard)</b>
+          <p class="text-xs muted">Cảnh báo tức thì nếu người dùng hỏi về thuốc có quyết định đình chỉ lưu hành</p>
+        </div>
+        <span class="badge badge-success">Kích hoạt ✓</span>
+      </div>
+      <div class="spec-row">
+        <div>
+          <b>Kiểm tra mẫu thuẫn (Contradiction Check)</b>
+          <p class="text-xs muted">Đối chiếu chéo giữa các hướng dẫn điều trị để loại bỏ chỉ định trái ngược</p>
+        </div>
+        <span class="badge badge-success">Kích hoạt ✓</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- RETRIEVAL ENGINE COMPARISON -->
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Kiến trúc 2 tầng RAG</h2>
+        <p class="panel-subtitle">Nguyên lý hoạt động và cơ chế dự phòng không gián đoạn</p>
+      </div>
+    </div>
+    <div class="engine-compare-box">
+      <div class="engine-card active-engine">
+        <div class="engine-head">
+          <span class="engine-pill primary">Tầng 1 (Ưu tiên số 1)</span>
+          <b>Knowledge V2 Hybrid BM25</b>
+        </div>
+        <ul class="engine-specs">
+          <li>Cơ sở dữ liệu: <code>medical_v2.db</code> (SQLite Read-Only mode)</li>
+          <li>Đặc điểm: Cắt đoạn chuẩn y tế, phân tầng thẩm quyền, gắn thẻ chỉ mục chuyên khoa.</li>
+          <li>Trạng thái: <span class="text-success font-bold" id="v2StatusBadge">Khả dụng</span></li>
+        </ul>
+      </div>
+
+      <div class="engine-card fallback-engine mt-3">
+        <div class="engine-head">
+          <span class="engine-pill">Tầng 2 (Dự phòng thông minh)</span>
+          <b>Medical RAG V1 Documents</b>
+        </div>
+        <ul class="engine-specs">
+          <li>Cơ sở dữ liệu: <code>medical.db</code></li>
+          <li>Đặc điểm: Lưu trữ tài liệu dạng nguyên văn, kích hoạt khi V2 vắng mặt hoặc đang cập nhật.</li>
+          <li>Trạng thái: <span class="text-success font-bold" id="v1StatusBadge">Sẵn sàng dự phòng</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.AdminPage = "rag";
+</script>
+{% endblock %}

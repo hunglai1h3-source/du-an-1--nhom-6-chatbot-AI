@@ -1,1 +1,81 @@
-{% extends "admin/base.html" %}{% block page_title %}Nhật ký quản trị{% endblock %}{% block content %}<div class="panel"><div class="table-wrap"><table><thead><tr><th>Thời gian</th><th>Admin</th><th>Hành động</th><th>Đối tượng</th><th>Chi tiết</th></tr></thead><tbody>{% for l in logs %}<tr><td>{{l['created_at']}}</td><td>{{l['admin_name']}}</td><td><span class="badge">{{l['action']}}</span></td><td>{{l['target_name'] or '-'}}</td><td>{{l['details'] or '-'}}</td></tr>{% else %}<tr><td colspan="5" class="empty">Chưa có nhật ký</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
+{% extends "admin/base.html" %}
+{% block title %}Nhật ký Kiểm toán | MediCare AI Control Center{% endblock %}
+{% block page_title %}Nhật ký Kiểm toán & An ninh (Audit Logs){% endblock %}
+{% block page_subtitle %}Ghi vết bất biến (Immutable) toàn bộ thao tác phân quyền, thu hồi phiên, duyệt tri thức và truy xuất PHI{% endblock %}
+
+{% block content %}
+<!-- FILTER BAR -->
+<form class="filter-bar" id="auditFilters">
+  <div class="search-box">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input name="q" id="auditQuery" placeholder="Tìm theo chi tiết, Target ID hoặc tên Admin..." autocomplete="off">
+  </div>
+  <div class="filter-group">
+    <select name="action" class="filter-select" id="auditAction">
+      <option value="">Tất cả hành động</option>
+      <option value="USER_ROLE_CHANGED">Đổi vai trò (USER_ROLE_CHANGED)</option>
+      <option value="USER_LOCKED">Khóa tài khoản (USER_LOCKED)</option>
+      <option value="USER_UNLOCKED">Mở khóa tài khoản (USER_UNLOCKED)</option>
+      <option value="USER_FORCE_LOGOUT">Thu hồi phiên (USER_FORCE_LOGOUT)</option>
+      <option value="KNOWLEDGE_DOC_REVIEWED">Thẩm định tri thức (KNOWLEDGE_DOC_REVIEWED)</option>
+      <option value="SENSITIVE_DATA_ACCESSED">Truy xuất PHI (SENSITIVE_DATA_ACCESSED)</option>
+      <option value="ADMIN_LOGIN">Đăng nhập Admin (ADMIN_LOGIN)</option>
+      <option value="ADMIN_LOGOUT">Đăng xuất Admin (ADMIN_LOGOUT)</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <select name="result" class="filter-select" id="auditResult">
+      <option value="">Tất cả kết quả</option>
+      <option value="SUCCESS">Thành công (SUCCESS)</option>
+      <option value="DENIED">Bị từ chối (DENIED)</option>
+      <option value="FAILED">Thất bại (FAILED)</option>
+    </select>
+  </div>
+  <div class="filter-buttons">
+    <button class="btn btn-primary" type="submit">Lọc nhật ký</button>
+    <button class="btn btn-secondary" type="button" id="refreshAudit">↻ Làm mới</button>
+    <button class="btn btn-ghost" type="button" id="clearAuditFilters">Xóa lọc</button>
+  </div>
+</form>
+
+<!-- AUDIT LOGS TABLE -->
+<div class="panel">
+  <div class="panel-head">
+    <div>
+      <h2 class="panel-title">Sổ nhật ký hoạt động hệ thống</h2>
+      <p class="panel-subtitle"><b id="auditTotal">0</b> bản ghi · Không thể sửa đổi hoặc xóa (Append-only policy)</p>
+    </div>
+    <span class="badge badge-neutral">Tự động đồng bộ 5s</span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="data-table" id="auditTable">
+      <thead>
+        <tr>
+          <th>Thời gian</th>
+          <th>Tài khoản thực hiện</th>
+          <th>Hành động</th>
+          <th>Đối tượng đích</th>
+          <th>Chi tiết thực thi</th>
+          <th>Kết quả</th>
+          <th>Request ID</th>
+        </tr>
+      </thead>
+      <tbody id="auditBody">
+        <tr><td colspan="7" class="table-loading">Đang tải nhật ký kiểm toán...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination-footer">
+    <div class="pagination-info" id="auditPaginationInfo">Đang hiển thị...</div>
+    <div class="pagination" id="auditPagination"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.AdminPage = "audit";
+</script>
+{% endblock %}

@@ -1,91 +1,213 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>{% block title %}MediCare Admin{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css') }}?v=20260811-feedback-notify-v1">
-  <script defer src="{{ url_for('static', filename='admin/admin.js') }}?v=20260811-feedback-notify-v1"></script>
+  <title>{% block title %}MediCare Admin APEX{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin/admin.css') }}?v=20260920-apex-max">
+  <script defer src="{{ url_for('static', filename='admin/admin.js') }}?v=20260920-apex-max"></script>
   {% block head %}{% endblock %}
 </head>
-<body>
-<div class="app-shell">
-  <aside class="sidebar" id="sidebar">
-    <a class="brand" href="{{ url_for('admin_dashboard') }}">
-      <span class="brand-mark">+</span>
-      <span><strong>MediCare</strong><small>Admin Console</small></span>
-    </a>
-    <nav>
-      <a class="{{ 'active' if request.endpoint=='admin_dashboard' }}" href="{{ url_for('admin_dashboard') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-        <span>Tổng quan</span>
+<body class="admin-body">
+<div class="app-shell" id="appShell">
+  <!-- SIDEBAR NAVIGATION RAIL -->
+  <aside class="sidebar" id="sidebar" aria-label="Thanh điều hướng Quản trị">
+    <div class="sidebar-header">
+      <a class="brand" href="{{ url_for('admin_dashboard') }}" title="MediCare AI Control Center">
+        <span class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M2 12h20"/>
+          </svg>
+        </span>
+        <div class="brand-text">
+          <strong>MediCare AI</strong>
+          <small class="brand-badge">APEX OS</small>
+        </div>
       </a>
-      <a class="{{ 'active' if request.endpoint in ['admin_users','admin_user_detail'] }}" href="{{ url_for('admin_users') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-        <span>Người dùng</span>
+      <button type="button" class="rail-toggle-btn" id="railToggleBtn" title="Thu gọn / Mở rộng thanh điều hướng" aria-label="Thu gọn / Mở rộng rail">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ROLE BADGE IN SIDEBAR -->
+    <div class="sidebar-user-card">
+      <div class="user-avatar-wrap">
+        <div class="sidebar-avatar">{{ (current_user.initial if current_user else 'A') }}</div>
+      </div>
+      <div class="sidebar-user-info">
+        <b class="sidebar-user-name">{{ (current_user.full_name if current_user else session.get('full_name', 'Quản trị viên')) }}</b>
+        <span class="role-pill role-{{ current_user.role if current_user else 'admin' }}">
+          {{ current_user.role_name if current_user else 'Admin' }}
+        </span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Menu chính">
+      <!-- CORE OVERVIEW -->
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_dashboard' }}" href="{{ url_for('admin_dashboard') }}" title="Tổng quan hệ thống">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        </span>
+        <span class="nav-label">Tổng quan</span>
       </a>
-      <a class="{{ 'active' if request.endpoint=='admin_chats' }}" href="{{ url_for('admin_chats') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-        <span>Lịch sử chat</span>
+
+      <!-- USERS & RBAC -->
+      {% if has_permission('users.view') %}
+      <a class="nav-item {{ 'active' if request.endpoint in ['admin_users', 'admin_user_detail'] }}" href="{{ url_for('admin_users') }}" title="Quản lý tài khoản & phân quyền">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        </span>
+        <span class="nav-label">Người dùng</span>
       </a>
-      <a class="{{ 'active' if request.endpoint=='admin_premium_orders' }}" href="{{ url_for('admin_premium_orders') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 18 3 22 9 12 22 2 9"></polygon></svg>
-        <span>Đăng ký Premium</span>
+      {% endif %}
+
+      <!-- KNOWLEDGE BASE V2 -->
+      {% if has_permission('knowledge.view') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_knowledge_page' }}" href="{{ url_for('admin_knowledge_page') }}" title="Tri thức y tế chính thống V2">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+        </span>
+        <span class="nav-label">Tri thức Y tế V2</span>
       </a>
-      <a class="{{ 'active' if request.endpoint=='admin_datasets' }}" href="{{ url_for('admin_datasets') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
-        <span>Dataset</span>
+      {% endif %}
+
+      <!-- RAG OPERATIONS -->
+      {% if has_permission('rag.view') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_rag_page' }}" href="{{ url_for('admin_rag_page') }}" title="Vận hành RAG & Indexing">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m4.93 4.93 4.24 4.24"></path><path d="m14.83 9.17 4.24-4.24"></path><path d="m14.83 14.83 4.24 4.24"></path><path d="m9.17 14.83-4.24 4.24"></path><circle cx="12" cy="12" r="4"></circle></svg>
+        </span>
+        <span class="nav-label">RAG Operations</span>
       </a>
-      <a class="{{ 'active' if request.endpoint=='admin_prompt' }}" href="{{ url_for('admin_prompt') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-        <span>Prompt</span>
+      {% endif %}
+
+      <!-- HEALTH NEWS -->
+      {% if has_permission('content.view') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_health_news_page' }}" href="{{ url_for('admin_health_news_page') }}" title="Bản tin Y tế & Khuyến cáo">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"></path><path d="M18 14h-8"></path><path d="M15 18h-5"></path><path d="M10 6h8v4h-8V6Z"></path></svg>
+        </span>
+        <span class="nav-label">Bản tin Y tế</span>
       </a>
-      <a class="{{ 'active' if request.endpoint=='admin_ai_settings' }}" href="{{ url_for('admin_ai_settings') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        <span>AI & API</span>
-      </a>
-      <a class="{{ 'active' if request.endpoint=='admin_audit_logs' }}" href="{{ url_for('admin_audit_logs') }}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-        <span>Nhật ký</span>
-      </a>
-      <a class="{{ 'active' if request.endpoint=='admin_health_news_page' }}" href="/admin/news">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"></path><path d="M18 14h-8"></path><path d="M15 18h-5"></path><path d="M10 6h8v4h-8V6Z"></path></svg>
-        <span>Bản tin sức khỏe</span>
-      </a>
-      <a class="{{ 'active' if request.endpoint=='admin_feedback_page' }}" href="/admin/feedback">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-        <span>Đánh giá AI</span>
+      {% endif %}
+
+      <!-- AI FEEDBACK & SUPPORT -->
+      {% if has_permission('support.view') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_feedback_page' }}" href="{{ url_for('admin_feedback_page') }}" title="Đánh giá & Phản hồi AI">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        </span>
+        <span class="nav-label">Đánh giá AI</span>
         <b class="side-feedback-badge hidden" id="sideFeedbackBadge">0</b>
       </a>
+      {% endif %}
+
+      <!-- CHAT CONVERSATIONS (PRIVACY PROTECTED) -->
+      {% if has_permission('support.view') or has_permission('sensitive_data.access') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_chats' }}" href="{{ url_for('admin_chats') }}" title="Lịch sử hội thoại ẩn danh">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        </span>
+        <span class="nav-label">Lịch sử hội thoại</span>
+      </a>
+      {% endif %}
+
+      <!-- PREMIUM ORDERS -->
+      {% if has_permission('users.manage') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_premium_orders' }}" href="{{ url_for('admin_premium_orders') }}" title="Đơn đăng ký gói Premium">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 18 3 22 9 12 22 2 9"></polygon></svg>
+        </span>
+        <span class="nav-label">Gói Premium</span>
+      </a>
+      {% endif %}
+
+      <!-- SYSTEM HEALTH -->
+      {% if has_permission('system.view') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_system_page' }}" href="{{ url_for('admin_system_page') }}" title="Trạng thái dịch vụ & Giám sát">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+        </span>
+        <span class="nav-label">Hệ thống</span>
+      </a>
+      {% endif %}
+
+      <!-- AUDIT LOGS -->
+      {% if has_permission('audit.view') %}
+      <a class="nav-item {{ 'active' if request.endpoint=='admin_audit_logs' }}" href="{{ url_for('admin_audit_logs') }}" title="Nhật ký bảo mật & kiểm toán">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        </span>
+        <span class="nav-label">Nhật ký kiểm toán</span>
+      </a>
+      {% endif %}
+
+      <!-- AI CONFIGURATION -->
+      {% if has_permission('system.manage') %}
+      <a class="nav-item {{ 'active' if request.endpoint in ['admin_ai_settings', 'admin_prompt', 'admin_datasets'] }}" href="{{ url_for('admin_ai_settings') }}" title="Cấu hình mô hình AI & Prompt">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </span>
+        <span class="nav-label">Cấu hình AI</span>
+      </a>
+      {% endif %}
     </nav>
+
+    <!-- SIDEBAR FOOTER ACTIONS -->
     <div class="sidebar-bottom">
-      <a href="{{ url_for('admin_backup_users_db') }}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        <span>Sao lưu DB</span>
+      <a class="bottom-item" href="{{ url_for('index') }}" title="Chuyển sang giao diện MediCare Health OS">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+        </span>
+        <span class="nav-label">Về Health OS</span>
       </a>
-      <a href="{{ url_for('index') }}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
-        <span>Về Chatbot</span>
-      </a>
-      <form action="{{ url_for('admin_logout') }}" method="post">
-        <button type="submit">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-          <span>Đăng xuất</span>
+      <form action="{{ url_for('admin_logout') }}" method="post" class="logout-form">
+        <button type="submit" class="bottom-item logout-btn" title="Đăng xuất khỏi phiên Quản trị">
+          <span class="nav-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </span>
+          <span class="nav-label">Đăng xuất</span>
         </button>
       </form>
     </div>
   </aside>
-  <main class="main">
-    <header class="topbar">
-      <button class="icon-btn mobile-menu" id="menuToggle" type="button" aria-label="Menu">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-      </button>
-      <div><h1>{% block page_title %}Admin{% endblock %}</h1><p>{% block page_subtitle %}Quản trị hệ thống MediCare AI{% endblock %}</p></div>
-      <div class="top-actions">
-        <span class="live-dot"></span>
-        <span id="syncLabel">Đang đồng bộ</span>
 
+  <!-- MAIN VIEWPORT -->
+  <div class="main-viewport">
+    <!-- TOP COMMAND BAR -->
+    <header class="topbar" id="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn mobile-menu-btn" id="menuToggle" type="button" aria-label="Mở menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        <div class="page-meta">
+          <h1 class="page-title">{% block page_title %}Admin APEX{% endblock %}</h1>
+          <p class="page-subtitle">{% block page_subtitle %}Hệ thống kiểm soát và điều hành MediCare AI{% endblock %}</p>
+        </div>
+      </div>
+
+      <!-- COMMAND PALETTE TRIGGER -->
+      <button type="button" class="command-palette-trigger" id="cmdPaletteTrigger" title="Tìm kiếm & Thao tác nhanh (Ctrl + K)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span>Tìm nhanh...</span>
+        <kbd class="kbd-shortcut">Ctrl K</kbd>
+      </button>
+
+      <!-- TOP ACTIONS RIGHT -->
+      <div class="top-actions">
+        <!-- LIVE SYNC STATUS -->
+        <div class="live-status-pill" id="liveStatusPill" title="Trạng thái kết nối thời gian thực">
+          <span class="live-dot"></span>
+          <span class="live-text" id="syncLabel">Đang đồng bộ</span>
+        </div>
+
+        <!-- FEEDBACK NOTIFICATION BELL -->
         <div class="admin-feedback-notify">
           <button class="icon-btn feedback-bell" id="feedbackBell" type="button"
                   title="Đánh giá AI cần xử lý" aria-label="Đánh giá AI cần xử lý"
@@ -108,16 +230,97 @@
           </section>
         </div>
 
-        <button class="icon-btn" id="themeToggle" type="button" title="Đổi giao diện" aria-label="Đổi giao diện">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        <!-- THEME TOGGLE -->
+        <button class="icon-btn theme-toggle-btn" id="themeToggle" type="button" title="Chuyển Dark / Light mode" aria-label="Chuyển chế độ sáng/tối">
+          <svg class="sun-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          <svg class="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
         </button>
-        <div class="avatar">{{ (session.get('full_name') or 'A')[0] }}</div>
+
+        <!-- TOP AVATAR DROPDOWN -->
+        <div class="user-menu-wrap" id="userMenuWrap">
+          <button type="button" class="avatar-trigger" id="userMenuTrigger" aria-label="Menu tài khoản" aria-expanded="false">
+            <span class="avatar-pill">{{ (current_user.initial if current_user else 'A') }}</span>
+          </button>
+          <div class="user-dropdown-menu hidden" id="userDropdownMenu">
+            <div class="user-dropdown-header">
+              <b>{{ (current_user.full_name if current_user else session.get('full_name', 'Admin')) }}</b>
+              <small>{{ (current_user.email if current_user else session.get('email', '')) }}</small>
+              <span class="role-pill role-{{ current_user.role if current_user else 'admin' }}">
+                {{ current_user.role_name if current_user else 'Admin' }}
+              </span>
+            </div>
+            <div class="user-dropdown-divider"></div>
+            <a class="user-dropdown-item" href="{{ url_for('index') }}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+              <span>Về Health OS Home</span>
+            </a>
+            {% if has_permission('system.view') %}
+            <a class="user-dropdown-item" href="{{ url_for('admin_system_page') }}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+              <span>Trạng thái Hệ thống</span>
+            </a>
+            {% endif %}
+            <div class="user-dropdown-divider"></div>
+            <form action="{{ url_for('admin_logout') }}" method="post" style="margin: 0; padding: 0;">
+              <button type="submit" class="user-dropdown-item logout-action">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                <span>Đăng xuất Quản trị</span>
+              </button>
+            </form>
+          </div>
+        </div>
       </div>
     </header>
-    <section class="content">{% block content %}{% endblock %}</section>
-  </main>
+
+    <!-- CONTENT BODY -->
+    <main class="content" id="mainContent">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 </div>
-<div class="toast" id="toast"></div>
+
+<!-- COMMAND PALETTE (CTRL+K) MODAL -->
+<div class="cmd-palette-backdrop hidden" id="cmdPaletteModal" role="dialog" aria-modal="true" aria-label="Command Palette">
+  <div class="cmd-palette-box">
+    <div class="cmd-input-wrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" id="cmdSearchInput" placeholder="Tìm trang, công cụ hoặc gõ lệnh..." autocomplete="off">
+      <kbd class="kbd-esc">ESC</kbd>
+    </div>
+    <div class="cmd-list" id="cmdList">
+      <div class="cmd-group-label">Điều hướng nhanh</div>
+      <a class="cmd-item" href="{{ url_for('admin_dashboard') }}"><span class="cmd-icon">📊</span><span class="cmd-title">Tổng quan hệ thống</span><span class="cmd-badge">Dashboard</span></a>
+      {% if has_permission('users.view') %}
+      <a class="cmd-item" href="{{ url_for('admin_users') }}"><span class="cmd-icon">👥</span><span class="cmd-title">Quản lý Người dùng & Phân quyền</span><span class="cmd-badge">Users</span></a>
+      {% endif %}
+      {% if has_permission('knowledge.view') %}
+      <a class="cmd-item" href="{{ url_for('admin_knowledge_page') }}"><span class="cmd-icon">📚</span><span class="cmd-title">Tri thức Y tế V2 (Thẩm định)</span><span class="cmd-badge">Knowledge</span></a>
+      {% endif %}
+      {% if has_permission('rag.view') %}
+      <a class="cmd-item" href="{{ url_for('admin_rag_page') }}"><span class="cmd-icon">🔍</span><span class="cmd-title">RAG Operations & Radar</span><span class="cmd-badge">RAG</span></a>
+      {% endif %}
+      {% if has_permission('content.view') %}
+      <a class="cmd-item" href="{{ url_for('admin_health_news_page') }}"><span class="cmd-icon">📰</span><span class="cmd-title">Bản tin Y tế Chính thống</span><span class="cmd-badge">News</span></a>
+      {% endif %}
+      {% if has_permission('support.view') %}
+      <a class="cmd-item" href="{{ url_for('admin_feedback_page') }}"><span class="cmd-icon">⭐</span><span class="cmd-title">Đánh giá & Phản hồi AI</span><span class="cmd-badge">Feedback</span></a>
+      {% endif %}
+      {% if has_permission('system.view') %}
+      <a class="cmd-item" href="{{ url_for('admin_system_page') }}"><span class="cmd-icon">⚡</span><span class="cmd-title">Giám sát Trạng thái Hệ thống</span><span class="cmd-badge">System</span></a>
+      {% endif %}
+      {% if has_permission('audit.view') %}
+      <a class="cmd-item" href="{{ url_for('admin_audit_logs') }}"><span class="cmd-icon">🛡️</span><span class="cmd-title">Nhật ký Kiểm toán (Audit Logs)</span><span class="cmd-badge">Audit</span></a>
+      {% endif %}
+      <div class="cmd-group-label">Thao tác hệ thống</div>
+      <button type="button" class="cmd-item" id="cmdToggleTheme"><span class="cmd-icon">🌓</span><span class="cmd-title">Chuyển Dark / Light mode</span><span class="cmd-badge">Theme</span></button>
+      <a class="cmd-item" href="{{ url_for('admin_logout') }}"><span class="cmd-icon">🚪</span><span class="cmd-title">Đăng xuất khỏi phiên Quản trị</span><span class="cmd-badge">Logout</span></a>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 {% block scripts %}{% endblock %}
 </body>
 </html>

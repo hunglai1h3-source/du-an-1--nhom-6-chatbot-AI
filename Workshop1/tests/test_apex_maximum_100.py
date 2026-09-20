@@ -154,6 +154,7 @@ class TestApexMaximum100Master(unittest.TestCase):
     # =========================================================================
     def test_11_admin_routes_unauthenticated_redirection(self):
         """Audit /admin sub-routes unauthenticated: Redirects safely with 302 to login."""
+        guest_client = self.app.test_client()
         admin_routes = [
             "/admin",
             "/admin/users",
@@ -163,7 +164,7 @@ class TestApexMaximum100Master(unittest.TestCase):
         ]
         for route in admin_routes:
             with self.subTest(route=route):
-                resp = self.client.get(route)
+                resp = guest_client.get(route)
                 self.assertEqual(resp.status_code, 302)
 
     # =========================================================================

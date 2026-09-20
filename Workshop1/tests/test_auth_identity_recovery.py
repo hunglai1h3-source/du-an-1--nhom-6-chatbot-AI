@@ -24,10 +24,7 @@ mock_db_conn.execute.return_value.fetchone.return_value = None
 mock_db_conn.execute.return_value.fetchall.return_value = []
 mock_db_conn.execute.return_value.lastrowid = 1
 
-with patch("psycopg_pool.ConnectionPool"):
-    import database
-    database.get_connection = MagicMock(return_value=mock_db_conn)
-    import app as flask_app
+import app as flask_app
 
 
 class TestAuthIdentityRecovery(unittest.TestCase):
@@ -38,6 +35,11 @@ class TestAuthIdentityRecovery(unittest.TestCase):
 
     def setUp(self):
         self.client = self.app.test_client()
+        self.patcher = patch("app.get_connection", return_value=mock_db_conn)
+        self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
 
     # =========================================================================
     # 1. SERVER-SIDE HYDRATION & CONTEXT PROCESSOR AUDIT

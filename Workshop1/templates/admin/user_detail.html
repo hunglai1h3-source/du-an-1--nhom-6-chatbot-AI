@@ -1,1 +1,138 @@
-{% extends "admin/base.html" %}{% block page_title %}Chi tiết người dùng{% endblock %}{% block content %}<div class="panel"><div class="profile-head"><div class="avatar lg">{{user['full_name'][0]}}</div><div><h2>{{user['full_name']}}</h2><p>{{user['email']}} · {{user['phone'] or 'Chưa có SĐT'}}</p></div><span class="badge {{'success' if user['is_active'] else 'danger'}}">{{'Hoạt động' if user['is_active'] else 'Đã khóa'}}</span></div></div><div class="grid-2"><section class="panel"><h2>Hồ sơ sức khỏe</h2>{% if profile %}<pre class="data-box">{{dict(profile)|tojson(indent=2)}}</pre>{% else %}<div class="empty">Chưa có hồ sơ sức khỏe</div>{% endif %}</section><section class="panel"><h2>50 hội thoại gần nhất</h2><div class="list">{% for c in chats %}<div class="list-item"><div><b>{{c['question'][:80]}}</b><small>{{c['created_at']}}</small></div><span class="badge">{{c['model']}}</span></div>{% else %}<div class="empty">Chưa có hội thoại</div>{% endfor %}</div></section></div>{% endblock %}
+{% extends "admin/base.html" %}
+{% block title %}Hồ sơ Người dùng #{{ user['id'] }} | MediCare Admin{% endblock %}
+{% block page_title %}Chi tiết Tài khoản{% endblock %}
+{% block page_subtitle %}Thông tin người dùng, trạng thái bảo mật và dữ liệu y tế tuân thủ Privacy-by-Default{% endblock %}
+
+{% block content %}
+<div class="user-detail-top-card">
+  <div class="user-detail-avatar-wrap">
+    <div class="user-detail-avatar">{{ user['full_name'][0]|upper if user['full_name'] else 'U' }}</div>
+  </div>
+  <div class="user-detail-info">
+    <div class="user-detail-title-row">
+      <h2>{{ user['full_name'] }}</h2>
+      <span class="role-pill role-{{ user['role'] }}">{{ role_info.get('name', user['role']) }}</span>
+      <span class="badge {{ 'badge-success' if user['is_active'] else 'badge-danger' }}">
+        {{ 'Hoạt động' if user['is_active'] else 'Đã khóa' }}
+      </span>
+    </div>
+    <p class="user-detail-contacts">
+      <span>✉ {{ user['email'] }}</span>
+      <span>📞 {{ user['phone'] or 'Chưa cập nhật SĐT' }}</span>
+      <span>🆔 ID: #{{ user['id'] }}</span>
+      <span>⏱ Tạo ngày: {{ user['created_at'] }}</span>
+    </p>
+  </div>
+  <div class="user-detail-actions">
+    <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">← Trở về danh sách</a>
+  </div>
+</div>
+
+<!-- SAFE SUMMARY STATS -->
+<div class="stats-grid mt-4">
+  <article class="stat-card">
+    <div class="stat-icon-badge blue">💬</div>
+    <div class="stat-content">
+      <span class="stat-label">Tổng hội thoại</span>
+      <strong class="stat-value">{{ chat_count }}</strong>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge emerald">📋</div>
+    <div class="stat-content">
+      <span class="stat-label">Hồ sơ sức khỏe</span>
+      <strong class="stat-value">{{ profile_count }}</strong>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge cyan">👨‍👩‍👧‍👦</div>
+    <div class="stat-content">
+      <span class="stat-label">Thành viên gia đình</span>
+      <strong class="stat-value">{{ family_count }}</strong>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge purple">⏰</div>
+    <div class="stat-content">
+      <span class="stat-label">Lịch nhắc nhở</span>
+      <strong class="stat-value">{{ reminders_count }}</strong>
+    </div>
+  </article>
+</div>
+
+<!-- SENSITIVE PHI SECTION (PRIVACY BY DEFAULT) -->
+<div class="panel mt-4">
+  <div class="panel-head">
+    <div>
+      <h2 class="panel-title">Dữ liệu Y tế & Lịch sử Lâm sàng (PHI)</h2>
+      <p class="panel-subtitle">Tuân thủ nguyên tắc Privacy-by-Default và ghi nhận nhật ký kiểm toán bắt buộc</p>
+    </div>
+    <span class="badge {{ 'badge-success' if has_sensitive_access else 'badge-neutral' }}">
+      {{ 'Đã giải mã PHI' if has_sensitive_access else 'Bảo mật (Đang khóa)' }}
+    </span>
+  </div>
+
+  {% if not has_sensitive_access %}
+  <div class="phi-locked-box">
+    <div class="phi-lock-icon">🔒</div>
+    <h3>Dữ liệu y tế được bảo vệ theo mặc định</h3>
+    <p class="muted max-w-xl">
+      Nội dung chi tiết hồ sơ bệnh lý, tiền sử dị ứng, thuốc đang dùng và tin nhắn hội thoại của bệnh nhân được bảo mật.
+      Chỉ quản trị viên có quyền <code>sensitive_data.access</code> mới được phép mở dữ liệu phục vụ thẩm định nghiệp vụ.
+    </p>
+    {% if can_access_sensitive %}
+    <a href="{{ url_for('admin_user_detail', user_id=user['id']) }}?include_sensitive=1" class="btn btn-warning mt-3">
+      🔓 Tôi xác nhận yêu cầu giải mã dữ liệu PHI này (Audit Logged)
+    </a>
+    {% else %}
+    <div class="shield-notice mt-3">
+      <small>Tài khoản của bạn không có quyền giải mã PHI (Cần quyền <code>sensitive_data.access</code>).</small>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="phi-audit-alert">
+    ⚠️ <b>CẢNH BÁO KIỂM TOÁN:</b> Yêu cầu truy cập dữ liệu PHI của bạn đã được ghi nhận vào Nhật ký Kiểm toán với ID của bạn, thời gian và địa chỉ IP.
+  </div>
+
+  <div class="dashboard-grid-2 mt-4">
+    <!-- HEALTH PROFILE DETAILS -->
+    <div class="phi-data-card">
+      <h3>Chi tiết Hồ sơ Sức khỏe</h3>
+      {% if profile_data %}
+      <div class="spec-grid mt-3">
+        {% for k, v in profile_data.items() %}
+        <div class="spec-item">
+          <span class="spec-k">{{ k }}</span>
+          <span class="spec-v">{{ v if v is not none else 'Trống' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted mt-3">Người dùng chưa cập nhật thông tin hồ sơ lâm sàng.</p>
+      {% endif %}
+    </div>
+
+    <!-- RECENT CONVERSATIONS -->
+    <div class="phi-data-card">
+      <h3>50 Hội thoại gần nhất</h3>
+      <div class="activity-feed mt-3">
+        {% for c in recent_chats %}
+        <div class="activity-item">
+          <div class="activity-body">
+            <b>{{ c['question'][:100] }}</b>
+            <small>{{ c['created_at'] }} · Model: {{ c['model'] or 'Gemini' }} · Status: {{ c['status'] }}</small>
+          </div>
+        </div>
+        {% else %}
+        <p class="muted">Chưa có hội thoại nào được ghi nhận.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

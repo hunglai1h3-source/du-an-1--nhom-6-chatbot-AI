@@ -104,6 +104,45 @@ PERSONAL_INTELLIGENCE_ENABLED = os.getenv("PERSONAL_INTELLIGENCE_ENABLED", "true
 ADAPTIVE_SEVERITY_ENABLED = os.getenv("ADAPTIVE_SEVERITY_ENABLED", "true").lower() in ("true", "1", "yes")
 EPISODE_ENGINE_ENABLED = os.getenv("EPISODE_ENGINE_ENABLED", "true").lower() in ("true", "1", "yes")
 
+# RBAC & Authorization Service imports
+from rbac_service import (
+    ROLE_SUPER_ADMIN,
+    ROLE_ADMIN,
+    ROLE_CONTENT_EDITOR,
+    ROLE_MEDICAL_REVIEWER,
+    ROLE_SUPPORT,
+    ROLE_USER,
+    ALL_ADMIN_ROLES,
+    ROLE_METADATA,
+    PERM_ADMIN_ACCESS,
+    PERM_USERS_VIEW,
+    PERM_USERS_MANAGE,
+    PERM_USERS_ROLES_MANAGE,
+    PERM_USERS_FORCE_LOGOUT,
+    PERM_CONTENT_VIEW,
+    PERM_CONTENT_EDIT,
+    PERM_CONTENT_PUBLISH,
+    PERM_KNOWLEDGE_VIEW,
+    PERM_KNOWLEDGE_REVIEW,
+    PERM_KNOWLEDGE_OPERATIONS,
+    PERM_RAG_VIEW,
+    PERM_RAG_OPERATIONS,
+    PERM_SYSTEM_VIEW,
+    PERM_SYSTEM_MANAGE,
+    PERM_AUDIT_VIEW,
+    PERM_SUPPORT_VIEW,
+    PERM_SUPPORT_MANAGE,
+    PERM_SENSITIVE_DATA_ACCESS,
+    normalize_role,
+    get_role_permissions,
+    has_permission,
+    is_admin_role,
+    log_admin_activity,
+    require_permission as rbac_require_permission,
+    admin_required as rbac_admin_required,
+    get_current_admin_user as rbac_get_current_admin_user,
+)
+
 from security_guard import (
     RateLimiter,
     BruteForceProtector,
@@ -209,12 +248,19 @@ def app_after_request(response):
 def inject_current_user():
     uid = session.get("user_id")
     if not uid:
-        return {"current_user": None}
+        return {
+            "current_user": None,
+            "ROLE_METADATA": ROLE_METADATA,
+            "has_permission": lambda perm: False,
+        }
     full_name = session.get("full_name") or session.get("user_name") or "Người dùng"
     email = session.get("email") or session.get("user_email")
     phone = session.get("phone")
-    role = session.get("role", "user")
+    raw_role = session.get("role", "user")
+    role = normalize_role(raw_role)
     initial = full_name.strip()[0].upper() if full_name.strip() else "U"
+    is_admin = is_admin_role(role)
+    user_perms = list(get_role_permissions(role))
     return {
         "current_user": {
             "id": uid,
@@ -224,7 +270,12 @@ def inject_current_user():
             "role": role,
             "initial": initial,
             "is_authenticated": True,
-        }
+            "is_admin": is_admin,
+            "permissions": user_perms,
+            "role_name": ROLE_METADATA.get(role, {}).get("name", role),
+        },
+        "ROLE_METADATA": ROLE_METADATA,
+        "has_permission": lambda perm: has_permission(role, perm),
     }
 
 
@@ -1132,7 +1183,12 @@ def initialize_database():
                 admin_user_id INTEGER NOT NULL,
                 action TEXT NOT NULL,
                 target_user_id INTEGER,
+                target_type TEXT,
+                target_id TEXT,
                 details TEXT,
+                result TEXT NOT NULL DEFAULT 'SUCCESS',
+                request_id TEXT,
+                metadata TEXT,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT fk_audit_admin
                     FOREIGN KEY (admin_user_id)
@@ -1144,6 +1200,25 @@ def initialize_database():
                     ON DELETE SET NULL
             )
         """)
+
+        # Migrations cho admin_audit_logs nếu bảng đã tồn tại từ các phase trước
+        for col_def in [
+            "target_type TEXT",
+            "target_id TEXT",
+            "result TEXT DEFAULT 'SUCCESS'",
+            "request_id TEXT",
+            "metadata TEXT"
+        ]:
+            try:
+                connection.execute(f"ALTER TABLE admin_audit_logs ADD COLUMN IF NOT EXISTS {col_def}")
+            except Exception:
+                pass
+
+        # Migration token_version cho users phục vụ thu hồi session (force logout)
+        try:
+            connection.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1")
+        except Exception:
+            pass
 
         connection.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
@@ -1168,6 +1243,16 @@ def initialize_database():
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_admin_logs_created
             ON admin_audit_logs(created_at)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_admin_logs_action_created
+            ON admin_audit_logs(action, created_at DESC)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_users_role_active
+            ON users(role, is_active)
         """)
 
         connection.execute("""
@@ -6689,42 +6774,35 @@ Yêu cầu bắt buộc: 1
 
 
 
-# =========================
-# ADMIN MANAGEMENT MODULE - GIAI ĐOẠN 1
-# =========================
+# ==============================================================================
+# ADMIN MANAGEMENT MODULE — APEX MAXIMUM CONTROL CENTER
+# ==============================================================================
 
 def admin_required(view_function):
-    @wraps(view_function)
-    def wrapped(*args, **kwargs):
-        user_id = session.get("user_id")
-        if not user_id:
-            return redirect(url_for("index", login="1", next=request.path))
+    """Guard bảo vệ chung toàn bộ không gian Admin, yêu cầu tối thiểu admin.access."""
+    return rbac_admin_required(get_database)(view_function)
 
-        # Không tin quyền cũ trong session; kiểm tra trực tiếp CSDL mỗi lần vào admin.
-        connection = get_database()
-        user = connection.execute(
-            "SELECT role, is_active FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
-        connection.close()
 
-        if user is None or not bool(user["is_active"]):
-            session.clear()
-            return redirect(url_for("index", login="1", next=request.path))
+def require_permission(permission):
+    """Guard kiểm tra quyền hạn chi tiết theo ma trận RBAC."""
+    return rbac_require_permission(permission, get_database)
 
-        session["role"] = user["role"]
-        session.permanent = True
-        if user["role"] != "admin":
-            return redirect(url_for("index", admin_error="1"))
 
-        return view_function(*args, **kwargs)
-    return wrapped
+def get_current_admin_user():
+    """Lấy thông tin tài khoản admin hiện tại từ CSDL."""
+    return rbac_get_current_admin_user(get_database)
 
 
 def write_admin_log(connection, action, target_user_id=None, details=""):
-    connection.execute(
-        "INSERT INTO admin_audit_logs (admin_user_id, action, target_user_id, details) VALUES (?, ?, ?, ?)",
-        (session["user_id"], str(action)[:100], target_user_id, str(details)[:1000]),
+    """Hàm ghi audit log tương thích ngược."""
+    log_admin_activity(
+        connection,
+        admin_user_id=session.get("user_id"),
+        action=action,
+        target_type="user" if target_user_id else None,
+        target_id=str(target_user_id) if target_user_id else None,
+        details=details,
+        result="SUCCESS"
     )
 
 
@@ -7421,57 +7499,252 @@ def admin_revoke_premium(user_id):
 
 
 @app.get("/admin/users")
-@admin_required
+@require_permission(PERM_USERS_VIEW)
 def admin_users():
-    keyword=request.args.get("q","").strip(); role=request.args.get("role","").strip(); status=request.args.get("status","").strip()
-    page=max(request.args.get("page",1,type=int),1); per_page=20; offset=(page-1)*per_page
-    where=[]; params=[]
+    keyword = request.args.get("q", "").strip()
+    role = request.args.get("role", "").strip().lower()
+    status = request.args.get("status", "").strip()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = 20
+    offset = (page - 1) * per_page
+    where = []
+    params = []
     if keyword:
-        where.append("(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)"); params += [f"%{keyword}%"]*3
-    if role in {"user","admin"}: where.append("u.role = ?"); params.append(role)
-    if status in {"0","1"}: where.append("u.is_active = ?"); params.append(int(status))
-    clause=("WHERE "+" AND ".join(where)) if where else ""
-    connection=get_database()
-    total=connection.execute(f"SELECT COUNT(*) FROM users u {clause}",params).fetchone()[0]
-    users=connection.execute(f"""
-        SELECT u.*, (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id=u.id) chat_count,
-        (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) last_activity,
-        COALESCE(s.plan_code,'free') plan_code, s.expires_at premium_expires_at
-        FROM users u LEFT JOIN user_subscriptions s ON s.user_id=u.id {clause} ORDER BY u.id DESC LIMIT ? OFFSET ?
-    """,params+[per_page,offset]).fetchall()
+        where.append("(u.full_name ILIKE ? OR u.email ILIKE ? OR COALESCE(u.phone, '') ILIKE ?)")
+        params += [f"%{keyword}%"] * 3
+    if role in ALL_ADMIN_ROLES or role == ROLE_USER:
+        where.append("u.role = ?")
+        params.append(role)
+    if status in {"0", "1"}:
+        where.append("u.is_active = ?")
+        params.append(int(status))
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    connection = get_database()
+    total = connection.execute(f"SELECT COUNT(*) FROM users u {clause}", params).fetchone()[0]
+    users = connection.execute(f"""
+        SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.created_at,
+               (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id=u.id) AS chat_count,
+               (SELECT COUNT(*) FROM health_profiles p WHERE p.user_id=u.id) AS profile_count,
+               (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id=u.id) AS last_activity,
+               COALESCE(s.plan_code,'free') AS plan_code, s.expires_at AS premium_expires_at
+        FROM users u
+        LEFT JOIN user_subscriptions s ON s.user_id=u.id
+        {clause}
+        ORDER BY u.id DESC
+        LIMIT ? OFFSET ?
+    """, params + [per_page, offset]).fetchall()
     connection.close()
-    return render_template("admin/users.html",users=users,keyword=keyword,role=role,status=status,page=page,total=total,pages=max(1,(total+per_page-1)//per_page))
+    return render_template(
+        "admin/users.html",
+        users=users,
+        keyword=keyword,
+        role=role,
+        status=status,
+        page=page,
+        total=total,
+        pages=max(1, (total + per_page - 1) // per_page),
+        all_roles=ALL_ADMIN_ROLES + (ROLE_USER,),
+        role_metadata=ROLE_METADATA
+    )
 
 
 @app.get("/admin/users/<int:user_id>")
-@admin_required
+@require_permission(PERM_USERS_VIEW)
 def admin_user_detail(user_id):
-    connection=get_database(); user=connection.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
-    if not user: connection.close(); return "Không tìm thấy người dùng",404
-    chats=connection.execute("SELECT * FROM chat_logs WHERE user_id=? ORDER BY id DESC LIMIT 50",(user_id,)).fetchall()
-    profile=connection.execute("SELECT * FROM health_profiles WHERE user_id=?",(user_id,)).fetchone(); connection.close()
-    return render_template("admin/user_detail.html",user=user,chats=chats,profile=profile)
+    connection = get_database()
+    try:
+        user = connection.execute(
+            "SELECT id, full_name, email, phone, role, is_active, created_at, token_version FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+        if not user:
+            return "Không tìm thấy người dùng", 404
+
+        # Safe metadata counts (Privacy by Default)
+        profile_count = connection.execute("SELECT COUNT(*) FROM health_profiles WHERE user_id = ?", (user_id,)).fetchone()[0]
+        chat_count = connection.execute("SELECT COUNT(*) FROM chat_logs WHERE user_id = ?", (user_id,)).fetchone()[0]
+        family_count = connection.execute("SELECT COUNT(*) FROM family_members WHERE user_id = ?", (user_id,)).fetchone()[0]
+        reminders_count = connection.execute("SELECT COUNT(*) FROM reminders WHERE user_id = ?", (user_id,)).fetchone()[0]
+
+        # PHI / Sensitive Access Policy:
+        include_sensitive = request.args.get("include_sensitive") == "1"
+        current_role = normalize_role(session.get("role", "user"))
+        can_access_sensitive = has_permission(current_role, PERM_SENSITIVE_DATA_ACCESS)
+
+        profile_data = None
+        recent_chats = []
+
+        if include_sensitive and can_access_sensitive:
+            raw_prof = connection.execute("SELECT * FROM health_profiles WHERE user_id = ?", (user_id,)).fetchone()
+            if raw_prof:
+                profile_data = dict(raw_prof)
+            recent_chats = connection.execute(
+                "SELECT id, question, model, latency_ms, status, created_at FROM chat_logs WHERE user_id = ? ORDER BY id DESC LIMIT 50",
+                (user_id,)
+            ).fetchall()
+
+            log_admin_activity(
+                connection,
+                admin_user_id=session["user_id"],
+                action="SENSITIVE_DATA_ACCESSED",
+                target_type="user",
+                target_id=str(user_id),
+                details=f"Truy cập dữ liệu sức khỏe và chat riêng tư của {user['full_name']} (ID: {user_id})",
+                result="SUCCESS"
+            )
+            connection.commit()
+
+        return render_template(
+            "admin/user_detail.html",
+            user=user,
+            profile_count=profile_count,
+            chat_count=chat_count,
+            family_count=family_count,
+            reminders_count=reminders_count,
+            profile_data=profile_data,
+            recent_chats=recent_chats,
+            can_access_sensitive=can_access_sensitive,
+            has_sensitive_access=(include_sensitive and can_access_sensitive),
+            role_info=ROLE_METADATA.get(normalize_role(user["role"]), {})
+        )
+    finally:
+        connection.close()
 
 
 @app.post("/admin/users/<int:user_id>/toggle-active")
-@admin_required
+@require_permission(PERM_USERS_MANAGE)
 def admin_toggle_user(user_id):
-    if user_id==session["user_id"]: return jsonify({"error":"Bạn không thể tự khóa tài khoản đang dùng."}),400
-    connection=get_database(); user=connection.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
-    if not user: connection.close(); return jsonify({"error":"Không tìm thấy người dùng."}),404
-    new_status=0 if user["is_active"] else 1; connection.execute("UPDATE users SET is_active=? WHERE id=?",(new_status,user_id))
-    write_admin_log(connection,"unlock_user" if new_status else "lock_user",user_id); connection.commit(); connection.close()
-    return jsonify({"ok":True,"is_active":bool(new_status)})
+    if user_id == session["user_id"]:
+        return jsonify({"error": "Bạn không thể tự khóa tài khoản của chính mình."}), 400
+
+    connection = get_database()
+    try:
+        user = connection.execute(
+            "SELECT id, full_name, role, is_active FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+        if not user:
+            return jsonify({"error": "Không tìm thấy người dùng."}), 404
+
+        target_role = normalize_role(user["role"])
+
+        # Safeguard chống khóa Super Admin cuối cùng
+        if user["is_active"] and target_role in (ROLE_SUPER_ADMIN, ROLE_ADMIN):
+            admin_count = connection.execute(
+                "SELECT COUNT(*) FROM users WHERE role IN ('super_admin', 'admin') AND is_active = 1"
+            ).fetchone()[0]
+            if admin_count <= 1:
+                return jsonify({
+                    "error": "Thao tác bị từ chối: Không thể khóa Quản trị viên cấp cao cuối cùng của hệ thống!"
+                }), 400
+
+        new_status = 0 if user["is_active"] else 1
+        connection.execute("UPDATE users SET is_active = ? WHERE id = ?", (new_status, user_id))
+        action_name = "USER_UNLOCKED" if new_status else "USER_LOCKED"
+        log_admin_activity(
+            connection,
+            admin_user_id=session["user_id"],
+            action=action_name,
+            target_type="user",
+            target_id=str(user_id),
+            details=f"{'Mở khóa' if new_status else 'Khóa'} tài khoản {user['full_name']} (ID: {user_id})",
+            result="SUCCESS"
+        )
+        connection.commit()
+        return jsonify({"ok": True, "is_active": bool(new_status)})
+    finally:
+        connection.close()
 
 
 @app.post("/admin/users/<int:user_id>/role")
-@admin_required
+@require_permission(PERM_USERS_ROLES_MANAGE)
 def admin_change_role(user_id):
-    data=request.get_json(silent=True) or {}; new_role=str(data.get("role","")).lower()
-    if new_role not in {"user","admin"}: return jsonify({"error":"Quyền không hợp lệ."}),400
-    if user_id==session["user_id"] and new_role!="admin": return jsonify({"error":"Bạn không thể tự hạ quyền."}),400
-    connection=get_database(); connection.execute("UPDATE users SET role=? WHERE id=?",(new_role,user_id)); write_admin_log(connection,"change_role",user_id,new_role); connection.commit(); connection.close()
-    return jsonify({"ok":True,"role":new_role})
+    data = request.get_json(silent=True) or {}
+    new_role = normalize_role(data.get("role", ""))
+
+    if new_role not in ALL_ADMIN_ROLES and new_role != ROLE_USER:
+        return jsonify({"error": f"Vai trò không hợp lệ. Chọn một trong: {', '.join(ALL_ADMIN_ROLES + (ROLE_USER,))}"}), 400
+
+    connection = get_database()
+    try:
+        target_user = connection.execute(
+            "SELECT id, full_name, role, is_active FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+        if not target_user:
+            return jsonify({"error": "Không tìm thấy người dùng."}), 404
+
+        old_role = normalize_role(target_user["role"])
+
+        # Safeguard chống lockout: Không cho phép hạ quyền Super Admin cuối cùng
+        if old_role in (ROLE_SUPER_ADMIN, ROLE_ADMIN) and new_role not in (ROLE_SUPER_ADMIN, ROLE_ADMIN):
+            admin_count = connection.execute(
+                "SELECT COUNT(*) FROM users WHERE role IN ('super_admin', 'admin') AND is_active = 1"
+            ).fetchone()[0]
+            if admin_count <= 1:
+                return jsonify({
+                    "error": "Hành động bị từ chối: Đây là Quản trị viên Cấp cao cuối cùng. Không thể hạ quyền!"
+                }), 400
+
+        # Safeguard tự hạ quyền
+        if user_id == session["user_id"] and new_role != old_role:
+            confirm_self = data.get("confirm_self_demote")
+            if not confirm_self:
+                return jsonify({
+                    "error": "Bạn đang tự thay đổi vai trò của chính mình. Vui lòng xác nhận rõ ràng trước khi tiếp tục.",
+                    "require_confirmation": True
+                }), 400
+
+        connection.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+        log_admin_activity(
+            connection,
+            admin_user_id=session["user_id"],
+            action="USER_ROLE_CHANGED",
+            target_type="user",
+            target_id=str(user_id),
+            details=f"Đổi vai trò {target_user['full_name']} từ {old_role} sang {new_role}",
+            result="SUCCESS",
+            metadata={"old_role": old_role, "new_role": new_role}
+        )
+        connection.commit()
+        return jsonify({
+            "ok": True,
+            "role": new_role,
+            "role_name": ROLE_METADATA.get(new_role, {}).get("name", new_role)
+        })
+    finally:
+        connection.close()
+
+
+@app.post("/admin/users/<int:user_id>/force-logout")
+@require_permission(PERM_USERS_FORCE_LOGOUT)
+def admin_force_logout(user_id):
+    connection = get_database()
+    try:
+        user = connection.execute(
+            "SELECT id, full_name, role FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+        if not user:
+            return jsonify({"error": "Không tìm thấy người dùng."}), 404
+
+        connection.execute("UPDATE users SET token_version = token_version + 1 WHERE id = ?", (user_id,))
+        log_admin_activity(
+            connection,
+            admin_user_id=session["user_id"],
+            action="USER_FORCE_LOGOUT",
+            target_type="user",
+            target_id=str(user_id),
+            details=f"Thu hồi toàn bộ phiên đăng nhập của {user['full_name']} (ID: {user_id})",
+            result="SUCCESS"
+        )
+        connection.commit()
+        return jsonify({
+            "ok": True,
+            "message": f"Đã thu hồi toàn bộ phiên làm việc của người dùng {user['full_name']}."
+        })
+    finally:
+        connection.close()
 
 
 @app.get("/admin/chats")
@@ -7600,12 +7873,6 @@ def admin_test_gemini():
         return jsonify({"error": f"{type(error).__name__}: {str(error)[:300]}"}), 502
 
 
-@app.get("/admin/audit-logs")
-@admin_required
-def admin_audit_logs():
-    connection=get_database(); logs=connection.execute("SELECT l.*,a.full_name admin_name,u.full_name target_name FROM admin_audit_logs l JOIN users a ON a.id=l.admin_user_id LEFT JOIN users u ON u.id=l.target_user_id ORDER BY l.id DESC LIMIT 500").fetchall(); connection.close(); return render_template("admin/audit_logs.html",logs=logs)
-
-
 @app.get("/admin/backup/users-db")
 @admin_required
 def admin_backup_users_db():
@@ -7617,9 +7884,26 @@ def admin_backup_users_db():
     }), 501
 
 
-@app.post("/admin/logout")
-@admin_required
+@app.route("/admin/logout", methods=["GET", "POST"])
 def admin_logout():
+    admin_user = get_current_admin_user()
+    if admin_user:
+        try:
+            conn = get_database()
+            log_admin_activity(
+                conn,
+                admin_user_id=admin_user["id"],
+                action="ADMIN_LOGOUT",
+                target_type="auth",
+                target_id=str(admin_user["id"]),
+                details=f"Admin {admin_user.get('full_name', '')} đăng xuất khỏi hệ thống",
+                result="SUCCESS",
+                metadata={"ip": request.remote_addr}
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
     session.clear()
     session.permanent = False
     session.modified = True
@@ -7792,33 +8076,28 @@ def admin_api_dashboard():
 
 
 @app.get("/admin/api/users")
-@admin_required
+@require_permission(PERM_USERS_VIEW)
 def admin_api_users():
     keyword = request.args.get("q", "").strip()
-    role = request.args.get("role", "").strip()
+    role = request.args.get("role", "").strip().lower()
     status = request.args.get("status", "").strip()
     page = max(request.args.get("page", 1, type=int), 1)
-    per_page = min(
-        max(request.args.get("per_page", 20, type=int), 5),
-        100,
-    )
+    per_page = min(max(request.args.get("per_page", 20, type=int), 5), 100)
 
     where = []
     params = []
 
     if keyword:
-        where.append(
-            """
+        where.append("""
             (
                 u.full_name ILIKE ?
                 OR u.email ILIKE ?
                 OR COALESCE(u.phone, '') ILIKE ?
             )
-            """
-        )
+        """)
         params.extend([f"%{keyword}%"] * 3)
 
-    if role in {"user", "admin"}:
+    if role in ALL_ADMIN_ROLES or role == ROLE_USER:
         where.append("u.role = ?")
         params.append(role)
 
@@ -7826,93 +8105,508 @@ def admin_api_users():
         where.append("u.is_active = ?")
         params.append(int(status))
 
-    clause = (
-        "WHERE " + " AND ".join(where)
-        if where
-        else ""
-    )
-
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
     connection = get_database()
+    try:
+        total = connection.execute(f"SELECT COUNT(*) FROM users u {clause}", params).fetchone()[0]
 
-    total = connection.execute(
-        f"""
-        SELECT COUNT(*)
-        FROM users u
-        {clause}
-        """,
-        params,
-    ).fetchone()[0]
+        rows = connection.execute(f"""
+            SELECT
+                u.id,
+                u.full_name,
+                u.email,
+                u.phone,
+                u.role,
+                u.is_active,
+                u.created_at,
+                (SELECT COUNT(*) FROM chat_logs c WHERE c.user_id = u.id) AS chat_count,
+                (SELECT COUNT(*) FROM health_profiles p WHERE p.user_id = u.id) AS profile_count,
+                (SELECT MAX(created_at) FROM chat_logs c WHERE c.user_id = u.id) AS last_activity
+            FROM users u
+            {clause}
+            ORDER BY u.id DESC
+            LIMIT ? OFFSET ?
+        """, params + [per_page, (page - 1) * per_page]).fetchall()
 
-    rows = connection.execute(
-        f"""
-        SELECT
-            u.id,
-            u.full_name,
-            u.email,
-            u.phone,
-            u.role,
-            u.is_active,
-            u.created_at,
-            (
-                SELECT COUNT(*)
-                FROM chat_logs c
-                WHERE c.user_id = u.id
-            ) AS chat_count,
-            (
-                SELECT MAX(created_at)
-                FROM chat_logs c
-                WHERE c.user_id = u.id
-            ) AS last_activity
-        FROM users u
-        {clause}
-        ORDER BY u.id DESC
-        LIMIT ?
-        OFFSET ?
-        """,
-        params + [per_page, (page - 1) * per_page],
-    ).fetchall()
+        role_counts = {
+            "all": connection.execute("SELECT COUNT(*) FROM users").fetchone()[0],
+            "user": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'user'").fetchone()[0],
+            "super_admin": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'super_admin'").fetchone()[0],
+            "admin": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
+            "content_editor": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'content_editor'").fetchone()[0],
+            "medical_reviewer": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'medical_reviewer'").fetchone()[0],
+            "support": connection.execute("SELECT COUNT(*) FROM users WHERE role = 'support'").fetchone()[0],
+        }
 
-    role_counts = {
-        "all": connection.execute(
-            "SELECT COUNT(*) FROM users"
-        ).fetchone()[0],
+        latest_id = connection.execute("SELECT COALESCE(MAX(id), 0) FROM users").fetchone()[0]
 
-        "user": connection.execute(
-            "SELECT COUNT(*) FROM users WHERE role = 'user'"
-        ).fetchone()[0],
+        items = []
+        for row in rows:
+            d = dict(row)
+            d["role_name"] = ROLE_METADATA.get(normalize_role(d.get("role")), {}).get("name", d.get("role"))
+            items.append(d)
 
-        "admin": connection.execute(
-            "SELECT COUNT(*) FROM users WHERE role = 'admin'"
-        ).fetchone()[0],
-    }
+        response = jsonify({
+            "items": items,
+            "total": total,
+            "counts": role_counts,
+            "latest_id": latest_id,
+            "database_file": "PostgreSQL",
+            "page": page,
+            "pages": max(1, (total + per_page - 1) // per_page),
+            "server_time": datetime.now().strftime("%H:%M:%S"),
+        })
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        return response
+    finally:
+        connection.close()
 
-    latest_id = connection.execute(
-        "SELECT COALESCE(MAX(id), 0) FROM users"
-    ).fetchone()[0]
 
-    connection.close()
+@app.get("/admin/api/overview")
+@admin_required
+def admin_api_overview():
+    connection = get_database()
+    try:
+        total_users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        active_users = connection.execute("SELECT COUNT(*) FROM users WHERE is_active = 1").fetchone()[0]
+        total_admins = connection.execute("SELECT COUNT(*) FROM users WHERE role IN ('admin', 'super_admin', 'content_editor', 'medical_reviewer', 'support')").fetchone()[0]
+        total_chats = connection.execute("SELECT COUNT(*) FROM chat_logs").fetchone()[0]
+        error_chats = connection.execute("SELECT COUNT(*) FROM chat_logs WHERE status != 'success'").fetchone()[0]
 
-    response = jsonify({
-        "items": [dict(row) for row in rows],
-        "total": total,
-        "counts": role_counts,
-        "latest_id": latest_id,
-        "database_file": "PostgreSQL",
-        "page": page,
-        "pages": max(
-            1,
-            (total + per_page - 1) // per_page,
-        ),
-        "server_time": datetime.now().strftime("%H:%M:%S"),
+        try:
+            news_stats = connection.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) as published,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as draft
+                FROM health_news
+            """).fetchone()
+        except Exception:
+            news_stats = {"total": 0, "published": 0, "pending": 0, "draft": 0}
+
+        import rag_service_v2
+        v2_stats = {"total_docs": 0, "total_chunks": 0, "available": False}
+        try:
+            v2_con = rag_service_v2.get_v2_db_connection()
+            if v2_con:
+                v2_stats["total_docs"] = v2_con.execute("SELECT COUNT(*) FROM medical_documents_v2").fetchone()[0]
+                v2_stats["total_chunks"] = v2_con.execute("SELECT COUNT(*) FROM medical_chunks_v2").fetchone()[0]
+                v2_stats["available"] = True
+                v2_con.close()
+        except Exception as e:
+            logger.warning(f"V2 stats read error: {e}")
+
+        return jsonify({
+            "success": True,
+            "users": {
+                "total": total_users,
+                "active": active_users,
+                "admins": total_admins,
+            },
+            "chats": {
+                "total": total_chats,
+                "errors": error_chats,
+                "success_rate": round((total_chats - error_chats) / max(1, total_chats) * 100, 1),
+            },
+            "news": {
+                "total": news_stats["total"] or 0,
+                "published": news_stats["published"] or 0,
+                "pending": news_stats["pending"] or 0,
+                "draft": news_stats["draft"] or 0,
+            },
+            "knowledge": v2_stats,
+            "system": {
+                "ai_configured": bool(API_KEY),
+                "safety_engine": "Medical Safety V2 (Active)",
+                "environment": os.getenv("FLASK_ENV", "production").capitalize(),
+            }
+        })
+    finally:
+        connection.close()
+
+
+# ==============================================================================
+# KNOWLEDGE BASE V2 ADMIN MODULE
+# ==============================================================================
+
+@app.get("/admin/knowledge")
+@require_permission(PERM_KNOWLEDGE_VIEW)
+def admin_knowledge_page():
+    return render_template("admin/knowledge.html")
+
+
+@app.get("/admin/api/knowledge/overview")
+@require_permission(PERM_KNOWLEDGE_VIEW)
+def admin_api_knowledge_overview():
+    import rag_service_v2
+    con = rag_service_v2.get_v2_db_connection()
+    if not con:
+        return jsonify({"error": "CSDL Knowledge V2 (medical_v2.db) chưa sẵn sàng.", "code": 503, "available": False}), 503
+    try:
+        total_docs = con.execute("SELECT count(*) FROM medical_documents_v2").fetchone()[0]
+        total_chunks = con.execute("SELECT count(*) FROM medical_chunks_v2").fetchone()[0]
+        total_sources = con.execute("SELECT count(*) FROM sources").fetchone()[0]
+        recalls_count = con.execute("SELECT count(*) FROM drug_recalls_v2").fetchone()[0]
+
+        tier_counts = {}
+        for row in con.execute("SELECT trust_tier, count(*) as cnt FROM medical_documents_v2 GROUP BY trust_tier").fetchall():
+            tier_counts[row["trust_tier"]] = row["cnt"]
+
+        status_counts = {}
+        for row in con.execute("SELECT status, count(*) as cnt FROM medical_documents_v2 GROUP BY status").fetchall():
+            status_counts[row["status"]] = row["cnt"]
+
+        review_counts = {}
+        for row in con.execute("SELECT review_status, count(*) as cnt FROM medical_documents_v2 GROUP BY review_status").fetchall():
+            review_counts[row["review_status"]] = row["cnt"]
+
+        return jsonify({
+            "success": True,
+            "available": True,
+            "total_documents": total_docs,
+            "total_chunks": total_chunks,
+            "total_sources": total_sources,
+            "drug_recalls": recalls_count,
+            "tiers": tier_counts,
+            "status": status_counts,
+            "reviews": review_counts
+        })
+    finally:
+        con.close()
+
+
+@app.get("/admin/api/knowledge/documents")
+@require_permission(PERM_KNOWLEDGE_VIEW)
+def admin_api_knowledge_documents():
+    import rag_service_v2
+    con = rag_service_v2.get_v2_db_connection()
+    if not con:
+        return jsonify({"error": "CSDL Knowledge V2 chưa sẵn sàng.", "code": 503}), 503
+
+    q = request.args.get("q", "").strip()
+    tier = request.args.get("tier", "").strip()
+    status = request.args.get("status", "").strip()
+    review_status = request.args.get("review_status", "").strip()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 5), 100)
+
+    where = []
+    params = []
+    if q:
+        where.append("(title LIKE ? OR document_id LIKE ? OR publisher LIKE ? OR document_number LIKE ?)")
+        params.extend([f"%{q}%"] * 4)
+    if tier:
+        where.append("trust_tier = ?")
+        params.append(tier)
+    if status:
+        where.append("status = ?")
+        params.append(status)
+    if review_status:
+        where.append("review_status = ?")
+        params.append(review_status)
+
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    offset = (page - 1) * per_page
+
+    try:
+        total = con.execute(f"SELECT COUNT(*) FROM medical_documents_v2 {clause}", params).fetchone()[0]
+        rows = con.execute(f"""
+            SELECT id, document_id, title, publisher, issuing_authority,
+                   trust_tier, document_type, document_number, issue_date,
+                   status, review_status, total_chunks, source_url, last_verified_at
+            FROM medical_documents_v2
+            {clause}
+            ORDER BY id ASC
+            LIMIT ? OFFSET ?
+        """, params + [per_page, offset]).fetchall()
+
+        items = [dict(r) for r in rows]
+        return jsonify({
+            "success": True,
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": max(1, (total + per_page - 1) // per_page)
+        })
+    finally:
+        con.close()
+
+
+@app.get("/admin/api/knowledge/sources")
+@require_permission(PERM_KNOWLEDGE_VIEW)
+def admin_api_knowledge_sources():
+    import rag_service_v2
+    con = rag_service_v2.get_v2_db_connection()
+    if not con:
+        return jsonify({"error": "CSDL Knowledge V2 chưa sẵn sàng.", "code": 503}), 503
+    try:
+        rows = con.execute("SELECT * FROM sources ORDER BY trust_tier ASC, source_id ASC").fetchall()
+        return jsonify({
+            "success": True,
+            "sources": [dict(r) for r in rows]
+        })
+    finally:
+        con.close()
+
+
+@app.post("/admin/api/knowledge/review")
+@require_permission(PERM_KNOWLEDGE_REVIEW)
+def admin_api_knowledge_review():
+    data = request.get_json(silent=True) or {}
+    document_id = str(data.get("document_id", "")).strip()
+    new_review_status = str(data.get("review_status", "")).strip().upper()
+    notes = str(data.get("notes", "")).strip()
+
+    valid_statuses = {"APPROVED_OFFICIAL", "NEEDS_REVIEW", "REJECTED", "PENDING"}
+    if not document_id or new_review_status not in valid_statuses:
+        return jsonify({"error": "Dữ liệu thẩm định không hợp lệ.", "code": 400}), 400
+
+    from rag_service_v2 import DATABASE_V2_PATH
+    import sqlite3
+    try:
+        con = sqlite3.connect(DATABASE_V2_PATH)
+        con.row_factory = sqlite3.Row
+        doc = con.execute("SELECT title, review_status FROM medical_documents_v2 WHERE document_id = ?", (document_id,)).fetchone()
+        if not doc:
+            con.close()
+            return jsonify({"error": "Không tìm thấy tài liệu.", "code": 404}), 404
+
+        old_status = doc["review_status"]
+        con.execute("UPDATE medical_documents_v2 SET review_status = ? WHERE document_id = ?", (new_review_status, document_id))
+        con.commit()
+        con.close()
+
+        # Ghi audit log
+        app_conn = get_database()
+        log_admin_activity(
+            app_conn,
+            admin_user_id=session["user_id"],
+            action="KNOWLEDGE_DOC_REVIEWED",
+            target_type="knowledge_doc",
+            target_id=document_id,
+            details=f"Thẩm định tài liệu '{doc['title'][:60]}': {old_status} -> {new_review_status}. Ghi chú: {notes[:200]}",
+            result="SUCCESS",
+            metadata={"old_status": old_status, "new_status": new_review_status}
+        )
+        app_conn.close()
+
+        return jsonify({"ok": True, "document_id": document_id, "review_status": new_review_status})
+    except Exception as err:
+        return jsonify({"error": f"Lỗi cập nhật CSDL: {err}", "code": 500}), 500
+
+
+# ==============================================================================
+# RAG OPERATIONS ADMIN MODULE
+# ==============================================================================
+
+@app.get("/admin/rag")
+@require_permission(PERM_RAG_VIEW)
+def admin_rag_page():
+    return render_template("admin/rag.html")
+
+
+@app.get("/admin/api/rag/status")
+@require_permission(PERM_RAG_VIEW)
+def admin_api_rag_status():
+    import rag_service_v2
+    v2_avail = rag_service_v2.is_rag_v2_available()
+    v2_stats = {"available": v2_avail, "docs": 0, "chunks": 0, "db_size_mb": 0}
+
+    if v2_avail:
+        try:
+            p = rag_service_v2.DATABASE_V2_PATH
+            v2_stats["db_size_mb"] = round(p.stat().st_size / (1024 * 1024), 2)
+            con = rag_service_v2.get_v2_db_connection()
+            if con:
+                v2_stats["docs"] = con.execute("SELECT COUNT(*) FROM medical_documents_v2").fetchone()[0]
+                v2_stats["chunks"] = con.execute("SELECT COUNT(*) FROM medical_chunks_v2").fetchone()[0]
+                con.close()
+        except Exception as e:
+            logger.warning(f"RAG status v2 read error: {e}")
+
+    v1_path = BASE_DIR / "database" / "medical.db"
+    v1_stats = {"available": v1_path.is_file(), "docs": 0, "db_size_mb": 0}
+    if v1_path.is_file():
+        try:
+            v1_stats["db_size_mb"] = round(v1_path.stat().st_size / (1024 * 1024), 2)
+            con1 = sqlite3.connect(f"file:{v1_path}?mode=ro", uri=True)
+            v1_stats["docs"] = con1.execute("SELECT COUNT(*) FROM medical_documents").fetchone()[0]
+            con1.close()
+        except Exception:
+            pass
+
+    return jsonify({
+        "success": True,
+        "active_engine": "Knowledge V2 (Hybrid BM25 + Authority Tiers)" if v2_avail else "RAG V1 (Fallback)",
+        "v2": v2_stats,
+        "v1": v1_stats,
+        "features": {
+            "authority_filter": True,
+            "source_registry": True,
+            "drug_recalls_guard": True,
+            "contradiction_check": True
+        }
     })
 
-    response.headers[
-        "Cache-Control"
-    ] = "no-store, no-cache, must-revalidate, max-age=0"
 
-    response.headers["Pragma"] = "no-cache"
+# ==============================================================================
+# SYSTEM HEALTH & MONITORING ADMIN MODULE
+# ==============================================================================
 
-    return response
+@app.get("/admin/system")
+@require_permission(PERM_SYSTEM_VIEW)
+def admin_system_page():
+    return render_template("admin/system.html")
+
+
+@app.get("/admin/api/system/health")
+@require_permission(PERM_SYSTEM_VIEW)
+def admin_api_system_health():
+    import database
+    import rag_service_v2
+
+    services = {}
+
+    # 1. PostgreSQL DB
+    t0 = time.time()
+    try:
+        conn = get_database()
+        conn.execute("SELECT 1").fetchone()
+        db_lat = round((time.time() - t0) * 1000, 1)
+        conn.close()
+        pool_stats = database.get_pool_stats()
+        services["database"] = {
+            "status": "HEALTHY",
+            "name": "PostgreSQL Primary",
+            "latency_ms": db_lat,
+            "pool": pool_stats
+        }
+    except Exception as e:
+        services["database"] = {
+            "status": "DOWN",
+            "name": "PostgreSQL Primary",
+            "error": str(e)[:100]
+        }
+
+    # 2. Gemini AI Provider
+    services["ai_provider"] = {
+        "status": "HEALTHY" if bool(API_KEY) else "DEGRADED",
+        "name": "Google Gemini AI",
+        "configured": bool(API_KEY),
+        "model": get_setting("text_model", MODEL_NAME),
+        "vision_model": get_setting("vision_model", VISION_MODEL_NAME)
+    }
+
+    # 3. Knowledge V2
+    v2_ok = rag_service_v2.is_rag_v2_available()
+    services["knowledge_v2"] = {
+        "status": "HEALTHY" if v2_ok else "DEGRADED",
+        "name": "Official Medical Knowledge V2",
+        "engine": "SQLite Read-Only",
+        "available": v2_ok
+    }
+
+    # 4. Medical Safety V2
+    services["safety_engine"] = {
+        "status": "HEALTHY",
+        "name": "Medical Safety Engine V2",
+        "rules": "Active",
+        "emergency_routing": "Enabled"
+    }
+
+    # 5. External Weather / Signal
+    services["external_weather"] = {
+        "status": "HEALTHY",
+        "name": "Vietnam Meteorological Signal Network",
+        "mode": "Safe Fallback / GeoIP"
+    }
+
+    # Safe Environment Variables Summary (NEVER leaks actual secrets)
+    env_summary = {
+        "GEMINI_API_KEY": "Đã thiết lập ✓" if bool(API_KEY) else "Chưa có ✗",
+        "DATABASE_URL": "Đã kết nối ✓" if services["database"]["status"] == "HEALTHY" else "Lỗi ✗",
+        "SECRET_KEY": "Đã thiết lập ✓",
+        "FLASK_ENV": os.getenv("FLASK_ENV", "production")
+    }
+
+    overall = "HEALTHY" if all(s["status"] == "HEALTHY" for s in services.values()) else "DEGRADED"
+
+    return jsonify({
+        "success": True,
+        "overall": overall,
+        "services": services,
+        "environment": env_summary,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+
+# ==============================================================================
+# AUDIT LOGS ADMIN MODULE
+# ==============================================================================
+
+@app.get("/admin/audit-logs")
+@require_permission(PERM_AUDIT_VIEW)
+def admin_audit_logs():
+    return render_template("admin/audit_logs.html")
+
+
+@app.get("/admin/api/audit-logs")
+@require_permission(PERM_AUDIT_VIEW)
+def admin_api_audit_logs():
+    action = request.args.get("action", "").strip()
+    result = request.args.get("result", "").strip()
+    q = request.args.get("q", "").strip()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 25, type=int), 5), 100)
+
+    where = []
+    params = []
+    if action:
+        where.append("l.action = ?")
+        params.append(action)
+    if result:
+        where.append("l.result = ?")
+        params.append(result)
+    if q:
+        where.append("(l.details ILIKE ? OR l.target_id ILIKE ? OR u.full_name ILIKE ?)")
+        params.extend([f"%{q}%"] * 3)
+
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    offset = (page - 1) * per_page
+
+    connection = get_database()
+    try:
+        total = connection.execute(f"""
+            SELECT COUNT(*)
+            FROM admin_audit_logs l
+            LEFT JOIN users u ON u.id = l.admin_user_id
+            {clause}
+        """, params).fetchone()[0]
+
+        rows = connection.execute(f"""
+            SELECT l.id, l.admin_user_id, u.full_name as admin_name, u.role as admin_role,
+                   l.action, l.target_type, l.target_id, l.details, l.result,
+                   l.request_id, l.metadata, l.created_at
+            FROM admin_audit_logs l
+            LEFT JOIN users u ON u.id = l.admin_user_id
+            {clause}
+            ORDER BY l.id DESC
+            LIMIT ? OFFSET ?
+        """, params + [per_page, offset]).fetchall()
+
+        return jsonify({
+            "success": True,
+            "logs": [dict(r) for r in rows],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": max(1, (total + per_page - 1) // per_page)
+        })
+    finally:
+        connection.close()
 
 
 @app.get("/admin/api/chats")

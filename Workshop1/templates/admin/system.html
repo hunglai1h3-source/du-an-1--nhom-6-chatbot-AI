@@ -1,0 +1,171 @@
+{% extends "admin/base.html" %}
+{% block title %}Trạng thái Hệ thống | MediCare AI Control Center{% endblock %}
+{% block page_title %}Giám sát & Trạng thái Dịch vụ{% endblock %}
+{% block page_subtitle %}Kiểm tra độ trễ, tính sẵn sàng và các biến môi trường an toàn theo thời gian thực{% endblock %}
+
+{% block content %}
+<!-- OVERALL HEALTH BAR -->
+<div class="overall-health-card" id="overallHealthCard">
+  <div class="health-meta">
+    <div class="pulse-indicator" id="overallPulse"></div>
+    <div>
+      <h3 class="overall-title" id="overallStatusText">Đang kiểm tra toàn bộ hệ thống...</h3>
+      <p class="overall-subtitle">Cập nhật lúc: <span id="systemTimestamp" class="font-mono">--:--:--</span></p>
+    </div>
+  </div>
+  <button type="button" class="btn btn-secondary" id="refreshSystemBtn">↻ Kiểm tra ngay</button>
+</div>
+
+<!-- SERVICE CARDS GRID -->
+<div class="system-grid-cards mt-4" id="servicesGrid">
+  <!-- DATABASE -->
+  <div class="service-card" id="svcDatabase">
+    <div class="service-card-head">
+      <div class="service-info">
+        <span class="service-icon">🐘</span>
+        <div>
+          <b>PostgreSQL Primary DB</b>
+          <small class="muted">Lưu trữ dữ liệu ứng dụng & tài khoản</small>
+        </div>
+      </div>
+      <span class="badge badge-neutral" id="dbStatusBadge">Đang kiểm tra</span>
+    </div>
+    <div class="service-metrics">
+      <div class="metric-row">
+        <span>Độ trễ truy vấn (Ping)</span>
+        <b class="font-mono" id="dbLatency">-- ms</b>
+      </div>
+      <div class="metric-row">
+        <span>Connection Pool Stats</span>
+        <span class="font-mono" id="dbPoolStats">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI PROVIDER -->
+  <div class="service-card" id="svcAi">
+    <div class="service-card-head">
+      <div class="service-info">
+        <span class="service-icon">✨</span>
+        <div>
+          <b>Google Gemini AI Provider</b>
+          <small class="muted">Mô hình ngôn ngữ & thị giác</small>
+        </div>
+      </div>
+      <span class="badge badge-neutral" id="aiStatusBadge">Đang kiểm tra</span>
+    </div>
+    <div class="service-metrics">
+      <div class="metric-row">
+        <span>Model văn bản đang chạy</span>
+        <b class="font-mono" id="aiTextModel">--</b>
+      </div>
+      <div class="metric-row">
+        <span>Model hình ảnh đang chạy</span>
+        <b class="font-mono" id="aiVisionModel">--</b>
+      </div>
+      <div class="metric-row">
+        <span>API Key</span>
+        <span id="aiKeyStatus" class="font-mono">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- KNOWLEDGE BASE V2 -->
+  <div class="service-card" id="svcKnowledge">
+    <div class="service-card-head">
+      <div class="service-info">
+        <span class="service-icon">📖</span>
+        <div>
+          <b>Official Medical Knowledge V2</b>
+          <small class="muted">CSDL Tri thức y tế thẩm quyền</small>
+        </div>
+      </div>
+      <span class="badge badge-neutral" id="knowledgeStatusBadge">Đang kiểm tra</span>
+    </div>
+    <div class="service-metrics">
+      <div class="metric-row">
+        <span>Cơ chế kết nối</span>
+        <b>SQLite Read-Only Isolation</b>
+      </div>
+      <div class="metric-row">
+        <span>Tính sẵn sàng</span>
+        <span id="knowledgeAvailText">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MEDICAL SAFETY V2 -->
+  <div class="service-card" id="svcSafety">
+    <div class="service-card-head">
+      <div class="service-info">
+        <span class="service-icon">🛡️</span>
+        <div>
+          <b>Medical Safety Engine V2</b>
+          <small class="muted">Bộ phân luồng cấp cứu & An toàn y khoa</small>
+        </div>
+      </div>
+      <span class="badge badge-success">HEALTHY</span>
+    </div>
+    <div class="service-metrics">
+      <div class="metric-row">
+        <span>Quy tắc cảnh báo khẩn cấp (Emergency)</span>
+        <span class="text-success font-bold">Kích hoạt (115)</span>
+      </div>
+      <div class="metric-row">
+        <span>Cơ chế phòng hộ thuốc</span>
+        <span class="text-success font-bold">Tự động đối chiếu</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SAFE ENVIRONMENT SUMMARY (NO SECRETS REVEALED) -->
+<div class="panel mt-4">
+  <div class="panel-head">
+    <div>
+      <h2 class="panel-title">Cấu hình Môi trường An toàn (Safe Environment)</h2>
+      <p class="panel-subtitle">Xác nhận trạng thái thiết lập các biến môi trường mà không làm lộ khóa bí mật</p>
+    </div>
+    <span class="badge badge-neutral">Bảo mật</span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Biến môi trường</th>
+          <th>Mục đích</th>
+          <th>Trạng thái hiện tại</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>GEMINI_API_KEY</code></td>
+          <td>Kết nối Google AI Studio / Gemini API</td>
+          <td id="envGeminiKey"><span class="badge badge-neutral">Đang đọc</span></td>
+        </tr>
+        <tr>
+          <td><code>DATABASE_URL</code></td>
+          <td>Đường dẫn kết nối PostgreSQL Primary</td>
+          <td id="envDatabaseUrl"><span class="badge badge-neutral">Đang đọc</span></td>
+        </tr>
+        <tr>
+          <td><code>SECRET_KEY</code></td>
+          <td>Ký mã hóa Session Cookie & CSRF</td>
+          <td id="envSecretKey"><span class="badge badge-neutral">Đang đọc</span></td>
+        </tr>
+        <tr>
+          <td><code>FLASK_ENV</code></td>
+          <td>Môi trường triển khai</td>
+          <td id="envFlaskEnv" class="font-mono">--</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.AdminPage = "system";
+</script>
+{% endblock %}

@@ -1,0 +1,198 @@
+{% extends "admin/base.html" %}
+{% block title %}Tri thức Y tế V2 | MediCare AI Control Center{% endblock %}
+{% block page_title %}Tri thức Y tế Chính thống (V2){% endblock %}
+{% block page_subtitle %}Quản lý và thẩm định kho dữ liệu y tế phân tầng theo thẩm quyền (Authority Tiers) và bảo vệ an toàn thuốc{% endblock %}
+
+{% block content %}
+<!-- STATS ROW -->
+<div class="stats-grid" id="knowledgeStatsGrid">
+  <article class="stat-card">
+    <div class="stat-icon-badge blue">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Tổng tài liệu y khoa</span>
+      <strong class="stat-value" id="kTotalDocs">0</strong>
+      <span class="stat-trend positive">Đã thẩm định & chỉ mục</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge emerald">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Tổng đoạn văn bản (Chunks)</span>
+      <strong class="stat-value" id="kTotalChunks">0</strong>
+      <span class="stat-trend neutral">BM25 + Semantic Indexing</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge cyan">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Nguồn tin cậy (Sources)</span>
+      <strong class="stat-value" id="kTotalSources">0</strong>
+      <span class="stat-trend positive">Bộ Y tế, WHO, BV Bạch Mai...</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge red">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Cảnh báo thu hồi thuốc</span>
+      <strong class="stat-value" id="kDrugRecalls">0</strong>
+      <span class="stat-trend negative">Thu hồi & Cảnh báo an toàn Dược</span>
+    </div>
+  </article>
+</div>
+
+<!-- SECTION TABS (DOCUMENTS vs SOURCES) -->
+<div class="account-tabs-wrapper">
+  <div class="account-tabs" id="knowledgeTabs" role="tablist">
+    <button type="button" class="account-tab active" data-tab="docs" role="tab">Tài liệu y tế chính thống</button>
+    <button type="button" class="account-tab" data-tab="sources" role="tab">Danh bạ nguồn tin cậy</button>
+  </div>
+</div>
+
+<!-- TAB 1: DOCUMENTS TABLE -->
+<div id="docsSection">
+  <!-- FILTER BAR -->
+  <form class="filter-bar" id="docFilters">
+    <div class="search-box">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input name="q" id="docQuery" placeholder="Tìm theo tiêu đề, số hiệu văn bản hoặc nhà xuất bản..." autocomplete="off">
+    </div>
+    <div class="filter-group">
+      <select name="tier" class="filter-select" id="docTier">
+        <option value="">Tất cả tầng tin cậy</option>
+        <option value="TIER_1">Tier 1: Bộ Y tế, WHO, Dược thư</option>
+        <option value="TIER_2">Tier 2: BV Bạch Mai, Chợ Rẫy, Đại học Y</option>
+        <option value="TIER_3">Tier 3: Tạp chí Y học, Hãng dược</option>
+        <option value="TIER_4">Tier 4: Tin tức & Giáo dục</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <select name="review_status" class="filter-select" id="docReviewStatus">
+        <option value="">Tất cả trạng thái thẩm định</option>
+        <option value="APPROVED_OFFICIAL">Đã duyệt chính thức</option>
+        <option value="NEEDS_REVIEW">Cần thẩm định</option>
+        <option value="PENDING">Chờ xử lý</option>
+        <option value="REJECTED">Đã từ chối</option>
+      </select>
+    </div>
+    <div class="filter-buttons">
+      <button class="btn btn-primary" type="submit">Lọc tài liệu</button>
+      <button class="btn btn-secondary" type="button" id="refreshDocs">↻ Làm mới</button>
+      <button class="btn btn-ghost" type="button" id="clearDocFilters">Xóa lọc</button>
+    </div>
+  </form>
+
+  <!-- TABLE -->
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Tài liệu y khoa đã thẩm định</h2>
+        <p class="panel-subtitle"><b id="docTotal">0</b> tài liệu · Phân tầng thẩm quyền theo chuẩn Y khoa V2</p>
+      </div>
+      <span class="badge badge-success">CSDL: medical_v2.db</span>
+    </div>
+
+    <div class="table-responsive">
+      <table class="data-table" id="docsTable">
+        <thead>
+          <tr>
+            <th>Mã / Tiêu đề tài liệu</th>
+            <th>Tầng tin cậy (Tier)</th>
+            <th>Cơ quan ban hành</th>
+            <th>Số hiệu / Ngày</th>
+            <th>Số đoạn</th>
+            <th>Trạng thái thẩm định</th>
+            <th class="text-right">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="docsBody">
+          <tr><td colspan="7" class="table-loading">Đang tải tài liệu...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination-footer">
+      <div class="pagination-info" id="docsPaginationInfo">Đang hiển thị...</div>
+      <div class="pagination" id="docsPagination"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: SOURCES TABLE -->
+<div id="sourcesSection" class="hidden">
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Danh bạ cơ quan và nguồn tin cậy</h2>
+        <p class="panel-subtitle">Quy định trọng số ưu tiên khi tổng hợp câu trả lời y tế</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table" id="sourcesTable">
+        <thead>
+          <tr>
+            <th>Mã nguồn</th>
+            <th>Tên cơ quan / Tổ chức</th>
+            <th>Tầng tin cậy</th>
+            <th>Trọng số tin cậy</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody id="sourcesBody">
+          <tr><td colspan="5" class="table-loading">Đang tải danh bạ nguồn...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEW MODAL -->
+<div class="modal-backdrop hidden" id="reviewModal" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title">Thẩm định Tài liệu Y tế</h3>
+        <p class="modal-subtitle" id="reviewDocTitle">--</p>
+      </div>
+      <button type="button" class="modal-close-btn" id="closeReviewModalBtn">✕</button>
+    </div>
+    <form id="reviewDocForm">
+      <input type="hidden" id="reviewDocId">
+      <div class="form-group">
+        <label for="reviewStatusSelect">Quyết định thẩm định</label>
+        <select id="reviewStatusSelect" class="filter-select w-full" required>
+          <option value="APPROVED_OFFICIAL">Phê duyệt chính thức (APPROVED_OFFICIAL)</option>
+          <option value="NEEDS_REVIEW">Yêu cầu bổ sung / Thẩm định lại (NEEDS_REVIEW)</option>
+          <option value="REJECTED">Từ chối đưa vào suy luận (REJECTED)</option>
+          <option value="PENDING">Chờ xử lý (PENDING)</option>
+        </select>
+      </div>
+      <div class="form-group mt-3">
+        <label for="reviewNotes">Ghi chú chuyên môn (Lưu vết vào Nhật ký kiểm toán)</label>
+        <textarea id="reviewNotes" class="form-textarea" rows="4" placeholder="Nhập căn cứ thẩm định hoặc lý do điều chỉnh..."></textarea>
+      </div>
+      <div class="modal-footer mt-4">
+        <button type="button" class="btn btn-secondary" id="cancelReviewBtn">Hủy</button>
+        <button type="submit" class="btn btn-primary" id="submitReviewBtn">Lưu quyết định thẩm định</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.AdminPage = "knowledge";
+  window.AdminPermissions = {{ permissions|tojson if permissions else '[]' }};
+</script>
+{% endblock %}

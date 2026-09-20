@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>403 — Từ chối truy cập | MediCare Admin</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(17, 24, 39, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-danger: #ef4444;
+      --accent-danger-glow: rgba(239, 68, 68, 0.15);
+      --btn-primary-bg: #0d9488;
+      --btn-primary-hover: #0f766e;
+      --btn-subtle-bg: rgba(255, 255, 255, 0.06);
+      --btn-subtle-hover: rgba(255, 255, 255, 0.1);
+    }
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --card-bg: rgba(255, 255, 255, 0.9);
+      --card-border: rgba(15, 23, 42, 0.1);
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --accent-danger: #dc2626;
+      --accent-danger-glow: rgba(220, 38, 38, 0.1);
+      --btn-primary-bg: #0d9488;
+      --btn-primary-hover: #0f766e;
+      --btn-subtle-bg: rgba(15, 23, 42, 0.05);
+      --btn-subtle-hover: rgba(15, 23, 42, 0.09);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    .error-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.35);
+      text-align: center;
+    }
+    .badge-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: var(--accent-danger-glow);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--accent-danger);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .badge-icon svg { width: 32px; height: 32px; }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    p.desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .role-box {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: left;
+      font-size: 13px;
+    }
+    .role-box strong { color: var(--text-main); }
+    .role-box small { color: var(--text-muted); display: block; margin-top: 4px; }
+    .perm-code {
+      font-family: monospace;
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--accent-danger);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 11px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: var(--btn-primary-bg);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--btn-primary-hover);
+    }
+    .btn-subtle {
+      background: var(--btn-subtle-bg);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+    .btn-subtle:hover {
+      background: var(--btn-subtle-hover);
+    }
+    .req-footer {
+      margin-top: 24px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="error-card">
+    <div class="badge-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+    <h1>403 — Từ chối truy cập</h1>
+    <p class="desc">Tài khoản của bạn không có đủ đặc quyền để thực hiện thao tác hoặc truy cập trang quản trị này.</p>
+
+    <div class="role-box">
+      <div>Vai trò hiện tại: <strong>{{ role_info.name if role_info else current_role }}</strong> (<code>{{ current_role }}</code>)</div>
+      <div>Quyền hạn yêu cầu: <span class="perm-code">{{ required_permission or 'admin.access' }}</span></div>
+      <small>{{ role_info.description if role_info else 'Liên hệ Quản trị viên cấp cao (Super Admin) nếu bạn cần cấp thêm đặc quyền.' }}</small>
+    </div>
+
+    <div class="actions">
+      <a href="/admin" class="btn btn-primary">Quay lại Dashboard Quản trị</a>
+      <a href="/" class="btn btn-subtle">Về Không gian Sức khỏe (Người dùng)</a>
+      <form action="{{ url_for('admin_logout') }}" method="post" style="width: 100%;">
+        <button type="submit" class="btn btn-subtle" style="width: 100%; color: var(--accent-danger);">Đăng xuất tài khoản</button>
+      </form>
+    </div>
+
+    {% if request_id %}
+    <div class="req-footer">Mã yêu cầu (Request ID): {{ request_id }}</div>
+    {% endif %}
+  </div>
+</body>
+</html>

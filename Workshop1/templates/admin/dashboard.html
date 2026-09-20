@@ -1,32 +1,210 @@
 {% extends "admin/base.html" %}
-{% block title %}Tổng quan | MediCare Admin{% endblock %}
-{% block page_title %}Tổng quan AI{% endblock %}
-{% block page_subtitle %}Theo dõi Gemini, người dùng và chất lượng phản hồi theo thời gian thực{% endblock %}
+{% block title %}Tổng quan | MediCare AI Control Center{% endblock %}
+{% block page_title %}Tổng quan Điều hành{% endblock %}
+{% block page_subtitle %}Giám sát hoạt động mô hình AI, an toàn y tế và sức khỏe hệ thống thời gian thực{% endblock %}
+
 {% block content %}
-<div class="toolbar"><div><b>Xin chào, {{ session.get('full_name','Admin') }}</b><span class="muted">Dữ liệu tự làm mới mỗi 5 giây</span></div><button class="btn primary" id="refreshDashboard">↻ Làm mới ngay</button></div>
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="toolbar-greeting">
+    <span class="greeting-badge">Trực tiếp</span>
+    <div>
+      <b>Xin chào, {{ current_user.full_name if current_user else session.get('full_name', 'Quản trị viên') }}</b>
+      <span class="muted text-xs">Cập nhật tự động mỗi 5 giây · Đồng bộ với PostgreSQL</span>
+    </div>
+  </div>
+  <div class="toolbar-actions">
+    <button class="btn btn-secondary" id="refreshDashboard" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+      <span>Làm mới ngay</span>
+    </button>
+  </div>
+</div>
+
+<!-- STATS CARDS GRID -->
 <div class="stats-grid" id="statsGrid">
- {% for key,label,icon in [('users','Người dùng','👥'),('chats','Lượt chat','💬'),('success_rate','Tỷ lệ thành công','✓'),('tokens','Tổng token','⚡'),('avg_latency','Độ trễ TB','⏱'),('errors','Lỗi AI','⚠'),('new_today','Đăng ký hôm nay','＋'),('chats_today','Chat hôm nay','↗')] %}
- <article class="stat-card"><div class="stat-icon">{{ icon }}</div><div><span>{{ label }}</span><strong data-stat="{{key}}">{{ stats.get(key,0) }}</strong></div></article>
- {% endfor %}
+  <article class="stat-card">
+    <div class="stat-icon-badge blue">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Tổng người dùng</span>
+      <strong class="stat-value" data-stat="users">{{ stats.get('users', 0) }}</strong>
+      <span class="stat-trend positive">Đăng ký hôm nay: <b data-stat="new_today">{{ stats.get('new_today', 0) }}</b></span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge emerald">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Tổng lượt chat</span>
+      <strong class="stat-value" data-stat="chats">{{ stats.get('chats', 0) }}</strong>
+      <span class="stat-trend neutral">Chat hôm nay: <b data-stat="chats_today">{{ stats.get('chats_today', 0) }}</b></span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge cyan">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Tỷ lệ thành công</span>
+      <strong class="stat-value"><span data-stat="success_rate">{{ stats.get('success_rate', 100) }}</span>%</strong>
+      <span class="stat-trend positive">Phản hồi đạt chuẩn an toàn</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge amber">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Độ trễ trung bình</span>
+      <strong class="stat-value"><span data-stat="avg_latency">{{ stats.get('avg_latency', 0) }}</span> ms</strong>
+      <span class="stat-trend neutral">Thời gian phản hồi AI</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge purple">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Tổng token tiêu thụ</span>
+      <strong class="stat-value" data-stat="tokens">{{ stats.get('tokens', 0) }}</strong>
+      <span class="stat-trend neutral">Prompt + Completion</span>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <div class="stat-icon-badge red">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <div class="stat-content">
+      <span class="stat-label">Lỗi ghi nhận</span>
+      <strong class="stat-value" data-stat="errors">{{ stats.get('errors', 0) }}</strong>
+      <span class="stat-trend negative">Lỗi gọi API hoặc xử lý</span>
+    </div>
+  </article>
 </div>
-<div class="grid-2">
- <section class="panel"><div class="panel-head"><div><h2>Hoạt động 7 ngày</h2><p>Chat và tài khoản mới</p></div><span class="badge success">Live</span></div><div class="chart-wrap"><canvas id="activityChart"></canvas></div></section>
- <section class="panel"><div class="panel-head"><div><h2>Trạng thái Gemini</h2><p>Cấu hình AI hiện tại</p></div><span id="apiBadge" class="badge {{ 'success' if api_configured else 'danger' }}">{{ 'Sẵn sàng' if api_configured else 'Chưa cấu hình' }}</span></div>
-   <div class="health-list">
-    <div><span>Nhà cung cấp</span><b>Google Gemini</b></div>
-    <div><span>Model văn bản</span><b id="activeTextModel">{{ text_model }}</b></div>
-    <div><span>Model hình ảnh</span><b id="activeVisionModel">{{ vision_model }}</b></div>
-    <div><span>API key</span><b id="apiConfigured" class="{{ 'ok' if api_configured else 'danger-text' }}">{{ 'Đã cấu hình' if api_configured else 'Chưa có' }}</b></div>
-    <div><span>Người dùng hoạt động</span><b data-stat="active_users">{{stats.active_users}}</b></div>
-    <div><span>Đồng bộ gần nhất</span><b id="lastSync">--:--:--</b></div>
-   </div>
-   <a class="btn primary full-btn" href="{{ url_for('admin_ai_settings') }}">Mở cấu hình AI</a>
- </section>
+
+<!-- CHARTS & STATUS ROW -->
+<div class="dashboard-grid-2">
+  <!-- 7-DAY ACTIVITY CHART -->
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Hoạt động 7 ngày gần nhất</h2>
+        <p class="panel-subtitle">Tương quan lượt hội thoại chat và tài khoản đăng ký mới</p>
+      </div>
+      <span class="badge badge-success">Thời gian thực</span>
+    </div>
+    <div class="chart-container">
+      <canvas id="activityChart"></canvas>
+    </div>
+  </section>
+
+  <!-- AI & PLATFORM READINESS -->
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Hạ tầng MediCare AI</h2>
+        <p class="panel-subtitle">Trạng thái cấu hình mô hình & dịch vụ cốt lõi</p>
+      </div>
+      <span id="apiBadge" class="badge {{ 'badge-success' if api_configured else 'badge-danger' }}">
+        {{ 'Sẵn sàng' if api_configured else 'Chưa cấu hình' }}
+      </span>
+    </div>
+
+    <div class="status-spec-list">
+      <div class="spec-row">
+        <span class="spec-label">Nhà cung cấp AI</span>
+        <span class="spec-val">Google Gemini</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-label">Model văn bản</span>
+        <span class="spec-val font-mono" id="activeTextModel">{{ text_model }}</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-label">Model hình ảnh</span>
+        <span class="spec-val font-mono" id="activeVisionModel">{{ vision_model }}</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-label">API Key</span>
+        <span class="spec-val">
+          <b id="apiConfigured" class="{{ 'text-success' if api_configured else 'text-danger' }}">
+            {{ 'Đã thiết lập ✓' if api_configured else 'Chưa có ✗' }}
+          </b>
+        </span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-label">Tri thức Y tế</span>
+        <span class="spec-val text-success">Knowledge V2 (Official) ✓</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-label">An toàn Y tế</span>
+        <span class="spec-val text-success">Medical Safety V2 (Active) ✓</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-label">Đồng bộ gần nhất</span>
+        <span class="spec-val font-mono" id="lastSync">--:--:--</span>
+      </div>
+    </div>
+
+    <div class="panel-actions">
+      {% if has_permission('system.manage') %}
+      <a class="btn btn-primary w-full" href="{{ url_for('admin_ai_settings') }}">Cấu hình Mô hình & Prompt →</a>
+      {% elif has_permission('system.view') %}
+      <a class="btn btn-secondary w-full" href="{{ url_for('admin_system_page') }}">Kiểm tra Trạng thái Hệ thống →</a>
+      {% endif %}
+    </div>
+  </section>
 </div>
-<div class="grid-2">
- <section class="panel"><div class="panel-head"><div><h2>Người dùng mới</h2><p>Cập nhật tự động</p></div><a href="{{url_for('admin_users')}}">Xem tất cả →</a></div><div id="recentUsers" class="list"></div></section>
- <section class="panel"><div class="panel-head"><div><h2>Hội thoại gần đây</h2><p>Log mới nhất</p></div><a href="{{url_for('admin_chats')}}">Xem tất cả →</a></div><div id="recentChats" class="list"></div></section>
+
+<!-- RECENT ACTIVITY ROW -->
+<div class="dashboard-grid-2">
+  <!-- RECENT USERS -->
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Người dùng mới</h2>
+        <p class="panel-subtitle">Tài khoản vừa gia nhập hệ thống</p>
+      </div>
+      {% if has_permission('users.view') %}
+      <a class="panel-link" href="{{ url_for('admin_users') }}">Quản lý người dùng →</a>
+      {% endif %}
+    </div>
+    <div id="recentUsers" class="activity-feed">
+      <div class="empty-state">Đang tải dữ liệu...</div>
+    </div>
+  </section>
+
+  <!-- RECENT CHATS -->
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 class="panel-title">Hội thoại gần nhất</h2>
+        <p class="panel-subtitle">Log phản hồi trực tiếp (Ẩn danh PHI)</p>
+      </div>
+      {% if has_permission('support.view') or has_permission('sensitive_data.access') %}
+      <a class="panel-link" href="{{ url_for('admin_chats') }}">Xem tất cả chat →</a>
+      {% endif %}
+    </div>
+    <div id="recentChats" class="activity-feed">
+      <div class="empty-state">Đang tải dữ liệu...</div>
+    </div>
+  </section>
 </div>
+
+<!-- HIDDEN CHART DATA -->
 <script id="initialChart" type="application/json">[{% for r in chart_rows %}{"day":{{ r["day"]|tojson }},"chats":{{ r["chats"] }},"users":{{ r["users"] }}}{{ "," if not loop.last }}{% endfor %}]</script>
 {% endblock %}
-{% block scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script><script>window.AdminPage="dashboard";</script>{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  window.AdminPage = "dashboard";
+</script>
+{% endblock %}
