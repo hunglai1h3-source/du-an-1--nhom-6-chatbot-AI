@@ -1246,6 +1246,10 @@
     $$('[data-action="toggle-theme"]').forEach((button) => button.addEventListener("click", toggleTheme));
     bindSettingsTriggers(document);
     initCommandPalette();
+    const accBtn = $("#accountButton");
+    if (accBtn) bindAccountButton(accBtn);
+    const sideBtn = $("#sidebarAuthButton");
+    if (sideBtn) bindAccountButton(sideBtn);
   });
 
   window.addEventListener("pageshow", (event) => {

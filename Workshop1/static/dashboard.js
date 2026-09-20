@@ -171,8 +171,7 @@
     if (heroCondition) heroCondition.textContent = selected?.condition || "Không ghi nhận";
     if (heroAllergy) heroAllergy.textContent = selected?.allergies || "Không ghi nhận";
 
-    const familyCountMini = $("#familyCountMini");
-    if (familyCountMini) familyCountMini.textContent = `${profiles.length} hồ sơ`;
+
 
     const editActiveBtn = $("#editActiveProfileBtn");
     if (editActiveBtn) {
