@@ -120,6 +120,11 @@ TABLES_WITH_AUTO_ID = {
     "symptom_logs",
     "health_metric_logs",
     "conversation_messages",
+    "health_episodes",
+    "health_episode_events",
+    "personal_baselines",
+    "personal_fact_states",
+    "adaptive_severity_logs",
 }
 
 

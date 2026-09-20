@@ -59,6 +59,51 @@ from conversation_memory import (
     MAX_RECENT_MESSAGES_FOR_PROMPT,
 )
 import rag_service
+
+# Phase 9: Personal Health Intelligence imports
+from personal_health_context import (
+    PersonalHealthContext,
+    build_personal_health_context,
+    format_personal_health_context_for_prompt,
+    detect_contradictions_and_corrections,
+)
+from personal_baseline_engine import (
+    get_personal_baselines,
+    evaluate_baseline_deviation,
+    format_baseline_for_prompt,
+)
+from health_episode_engine import (
+    HealthEpisode,
+    HealthEpisodeEvent,
+    EpisodeTrend,
+    EpisodeStatus,
+    EpisodeEventType,
+    EpisodeLinkingConfidence,
+    evaluate_episode_linking,
+    calculate_episode_trend,
+    get_active_or_recent_episodes,
+    get_episode_events,
+    save_or_update_health_episode,
+    format_episode_for_prompt,
+)
+from adaptive_severity_engine import (
+    EffectiveConcernLevel,
+    AdaptiveSeverityAssessment,
+    assess_adaptive_severity,
+    format_adaptive_severity_for_prompt,
+    log_adaptive_severity_assessment,
+)
+from next_best_question_engine import (
+    QuestionIntent,
+    NextBestQuestion,
+    determine_next_best_question,
+    format_next_best_question_directive_for_prompt,
+)
+
+PERSONAL_INTELLIGENCE_ENABLED = os.getenv("PERSONAL_INTELLIGENCE_ENABLED", "true").lower() in ("true", "1", "yes")
+ADAPTIVE_SEVERITY_ENABLED = os.getenv("ADAPTIVE_SEVERITY_ENABLED", "true").lower() in ("true", "1", "yes")
+EPISODE_ENGINE_ENABLED = os.getenv("EPISODE_ENGINE_ENABLED", "true").lower() in ("true", "1", "yes")
+
 from security_guard import (
     RateLimiter,
     BruteForceProtector,
@@ -1185,6 +1230,12 @@ def initialize_database():
             CREATE INDEX IF NOT EXISTS idx_conv_messages_client_dedup
             ON conversation_messages(conversation_id, client_message_id)
         """)
+
+        try:
+            from personal_intelligence_schema import init_personal_intelligence_schema
+            init_personal_intelligence_schema(connection)
+        except Exception as pi_err:
+            print("⚠️ [PHASE 9 INIT WARNING] Lỗi tạo bảng Personal Health Intelligence:", pi_err)
 
         connection.commit()
         print("✅ Đã khởi tạo các bảng PostgreSQL.")
@@ -4524,6 +4575,193 @@ def chat():
             else:
                 print("RAG không kích hoạt cho lượt này (theo RAG Activation Policy).")
 
+        # ----------------------------------------------------------------------
+        # PHASE 9: PERSONAL HEALTH INTELLIGENCE PIPELINE
+        # (PersonalHealthContext, EpisodeEngine, PersonalBaseline, AdaptiveSeverity, NextBestQuestion)
+        # ----------------------------------------------------------------------
+        p9_context = None
+        p9_episode = None
+        p9_trend = None
+        p9_baseline_dev = None
+        p9_adaptive_assessment = None
+        p9_nbq = None
+        p9_telemetry = None
+
+        if PERSONAL_INTELLIGENCE_ENABLED and user_message:
+            try:
+                prof_id_str = str((effective_profile or {}).get("client_profile_id") or (effective_profile or {}).get("id") or "self")
+                active_user_id = session.get("user_id")
+                is_self = str(prof_id_str).lower() in ("self", "me", "") or (effective_profile or {}).get("profile_type") == "self"
+
+                # 1. Personal Health Context Builder & Provenance
+                p9_context = build_personal_health_context(
+                    connection=conv_connection,
+                    user_id=active_user_id,
+                    profile_ref=prof_id_str,
+                    current_message=user_message,
+                    recent_history=effective_history,
+                    conv_slots=conv_state.slots.to_dict() if conv_state and conv_state.slots else None,
+                    client_profile_override=effective_profile,
+                )
+                p9_ctx_prompt = format_personal_health_context_for_prompt(p9_context)
+                if p9_ctx_prompt:
+                    messages.append({
+                        "role": "system",
+                        "content": p9_ctx_prompt,
+                    })
+
+                # 2. Health Episode Engine
+                if EPISODE_ENGINE_ENABLED and conv_connection and active_user_id is not None:
+                    active_episodes = get_active_or_recent_episodes(conv_connection, active_user_id, prof_id_str, limit=5)
+                    link_conf, linked_ep, link_reasons = evaluate_episode_linking(
+                        active_episodes=active_episodes,
+                        new_complaint=getattr(conv_state.slots, "chief_complaint", None) or user_message[:100],
+                        body_location=getattr(conv_state.slots, "symptom_location", None),
+                        user_message=user_message,
+                    )
+
+                    if link_conf in (EpisodeLinkingConfidence.SAME_EPISODE_HIGH, EpisodeLinkingConfidence.SAME_EPISODE_POSSIBLE) and linked_ep:
+                        p9_episode = linked_ep
+                    elif link_conf == EpisodeLinkingConfidence.RECURRENCE and linked_ep:
+                        p9_episode = HealthEpisode(
+                            profile_type="self" if is_self else "family",
+                            profile_ref=prof_id_str,
+                            user_id=active_user_id,
+                            chief_complaint=getattr(conv_state.slots, "chief_complaint", None) or user_message[:100],
+                            recurrence_of_episode_id=linked_ep.episode_id,
+                        )
+                    else:
+                        p9_episode = HealthEpisode(
+                            profile_type="self" if is_self else "family",
+                            profile_ref=prof_id_str,
+                            user_id=active_user_id,
+                            chief_complaint=getattr(conv_state.slots, "chief_complaint", None) or user_message[:100],
+                        )
+
+                    if conv_state and conv_state.slots:
+                        if conv_state.slots.pain_scale is not None:
+                            p9_episode.pain_scale = conv_state.slots.pain_scale
+                            p9_episode.severity_peak = max(p9_episode.severity_peak or 1, conv_state.slots.pain_scale)
+                        if conv_state.slots.fever is not None:
+                            p9_episode.fever = conv_state.slots.fever
+                        if conv_state.slots.associated_symptoms:
+                            p9_episode.associated_symptoms = list(set(p9_episode.associated_symptoms + conv_state.slots.associated_symptoms))
+
+                    ev = HealthEpisodeEvent(
+                        episode_id=p9_episode.episode_id,
+                        event_type=EpisodeEventType.USER_REPORT.value,
+                        conversation_id=effective_conv_id,
+                        client_message_id=client_message_id or "",
+                        event_data={
+                            "message": user_message[:300],
+                            "pain_scale": getattr(conv_state.slots, "pain_scale", None) if conv_state and conv_state.slots else None,
+                            "fever": getattr(conv_state.slots, "fever", None) if conv_state and conv_state.slots else None,
+                            "duration": getattr(conv_state.slots, "duration", None) if conv_state and conv_state.slots else None,
+                        }
+                    )
+                    save_or_update_health_episode(conv_connection, p9_episode, ev)
+
+                    ep_events = get_episode_events(conv_connection, p9_episode.episode_id)
+                    p9_trend, p9_trend_reasons = calculate_episode_trend(
+                        events=ep_events,
+                        current_pain=p9_episode.pain_scale,
+                        current_fever=p9_episode.fever,
+                        current_duration=getattr(conv_state.slots, "duration", None) if conv_state and conv_state.slots else None,
+                    )
+                    p9_episode.trend = p9_trend
+                    ep_prompt = format_episode_for_prompt(
+                        episode=p9_episode,
+                        trend=p9_trend,
+                        trend_reasons=p9_trend_reasons,
+                        linking_decision=link_conf,
+                    )
+                    if ep_prompt:
+                        messages.append({
+                            "role": "system",
+                            "content": ep_prompt,
+                        })
+
+                # 3. Personal Baseline Engine
+                if conv_connection and active_user_id is not None:
+                    baselines = get_personal_baselines(conv_connection, active_user_id, prof_id_str)
+                    p9_baseline_dev = evaluate_baseline_deviation(
+                        baselines=baselines,
+                        chief_complaint=p9_episode.chief_complaint if p9_episode else getattr(conv_state.slots, "chief_complaint", None),
+                        current_pain_scale=getattr(conv_state.slots, "pain_scale", None) if conv_state and conv_state.slots else None,
+                        current_severity=getattr(conv_state.slots, "severity", None) if conv_state and conv_state.slots else None,
+                        current_duration=getattr(conv_state.slots, "duration", None) if conv_state and conv_state.slots else None,
+                        fever=getattr(conv_state.slots, "fever", None) if conv_state and conv_state.slots else None,
+                        associated_symptoms=getattr(conv_state.slots, "associated_symptoms", []) if conv_state and conv_state.slots else [],
+                    )
+                    base_prompt = format_baseline_for_prompt(baselines, p9_baseline_dev)
+                    if base_prompt:
+                        messages.append({
+                            "role": "system",
+                            "content": base_prompt,
+                        })
+
+                # 4. Adaptive Severity Engine (Safety Always Wins)
+                if ADAPTIVE_SEVERITY_ENABLED:
+                    p9_adaptive_assessment = assess_adaptive_severity(
+                        safety_result=safety_result,
+                        personal_context=p9_context,
+                        baseline_deviation=p9_baseline_dev,
+                        current_episode=p9_episode,
+                        episode_trend=p9_trend,
+                        reported_severity=getattr(conv_state.slots, "pain_scale", None) if conv_state and conv_state.slots else None,
+                    )
+                    sev_prompt = format_adaptive_severity_for_prompt(p9_adaptive_assessment)
+                    if sev_prompt:
+                        messages.append({
+                            "role": "system",
+                            "content": sev_prompt,
+                        })
+                    if conv_connection:
+                        log_adaptive_severity_assessment(
+                            connection=conv_connection,
+                            user_id=active_user_id,
+                            profile_id=prof_id_str,
+                            conversation_id=effective_conv_id,
+                            assessment=p9_adaptive_assessment,
+                            client_message_id=client_message_id,
+                        )
+
+                # 5. Next-Best Question Engine (Single Question Invariant)
+                p9_nbq = determine_next_best_question(
+                    user_message=user_message,
+                    personal_context=p9_context,
+                    conv_state=conv_state,
+                    safety_result=safety_result,
+                    adaptive_assessment=p9_adaptive_assessment,
+                )
+                nbq_prompt = format_next_best_question_directive_for_prompt(p9_nbq)
+                if nbq_prompt:
+                    messages.append({
+                        "role": "system",
+                        "content": nbq_prompt,
+                    })
+
+                if p9_nbq.should_ask and p9_nbq.slot_to_ask:
+                    conv_state.last_question_slot = p9_nbq.slot_to_ask
+                    if p9_nbq.slot_to_ask not in conv_state.asked_slots:
+                        conv_state.asked_slots.append(p9_nbq.slot_to_ask)
+
+                # Telemetry dictionary
+                p9_telemetry = {
+                    "effective_concern_level": p9_adaptive_assessment.effective_concern_level.value if p9_adaptive_assessment else None,
+                    "adaptive_escalated": p9_adaptive_assessment.adaptive_escalation_applied if p9_adaptive_assessment else False,
+                    "downgrade_prevented": p9_adaptive_assessment.downgrade_prevented if p9_adaptive_assessment else False,
+                    "episode_id": p9_episode.episode_id if p9_episode else None,
+                    "episode_trend": p9_trend.value if p9_trend else None,
+                    "baseline_deviation": p9_baseline_dev.deviation_level if p9_baseline_dev else None,
+                    "next_best_question_slot": p9_nbq.slot_to_ask if p9_nbq else None,
+                    "should_ask_question": p9_nbq.should_ask if p9_nbq else False,
+                }
+
+            except Exception as p9_err:
+                print(f"[Phase 9 Personal Intelligence Fallback]: {p9_err}")
+                p9_telemetry = {"fallback_applied": True, "error": str(p9_err)}
+
         messages.extend(effective_history[-MAX_RECENT_MESSAGES_FOR_PROMPT:])
 
         # Đặt nhật ký diễn biến sau lịch sử hội thoại để AI luôn ưu tiên dữ liệu
@@ -4936,6 +5174,7 @@ Yêu cầu bổ sung:
             "conversation_stage": conv_state.stage,
             "next_action": conv_state.next_action,
             "conversation_id": effective_conv_id,
+            "personal_intelligence": p9_telemetry,
         })
 
     except ValueError as error:
